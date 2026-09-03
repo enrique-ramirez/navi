@@ -1,0 +1,13 @@
+# Secrets. Never commit these.
+.env
+*.env
+!.env.example
+
+# Runtime state lives in /srv/data on navi, never in the repo.
+# These patterns are belt-and-braces in case anything is copied here by mistake.
+*.db
+*.db-shm
+*.db-wal
+*.tar.gz
+data/
+backups/

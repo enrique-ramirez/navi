@@ -1,0 +1,6 @@
+[Unit]
+Description=Per-WAN end-to-end check -> Uptime Kuma push monitors
+After=network-online.target docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wan-check.sh

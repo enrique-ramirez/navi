@@ -1,0 +1,44 @@
+{
+	admin off
+	auto_https off   # .lan names can never get a public certificate
+}
+
+# The front door. Also answers on the bare IP, which matters: when Pi-hole is
+# down no .lan name resolves, including help.lan, so the runbook has to be
+# reachable at http://10.100.100.53 too.
+http://home.lan, http://help.lan, http://navi.lan, http://10.100.100.53 {
+	root * /srv/www
+	file_server
+}
+
+http://status.lan {
+	reverse_proxy 127.0.0.1:3001
+}
+
+http://dns.lan {
+	redir / /admin/ 302
+	reverse_proxy 127.0.0.1:8081
+}
+
+# Music. A transparent proxy, not a path rewrite, so Jean's asset and API paths
+# map 1:1 and nothing breaks. Backend moves to ocarina when the mini PC is
+# built; the name and every bookmark survive that.
+http://music.lan, http://ocarina.lan {
+	redir / /jean/ 302
+	reverse_proxy {$MUSIC_BACKEND}
+}
+
+# foo_jean's second port.
+#
+# Jean derives this address from window.location.hostname, so serving the UI at
+# music.lan makes the browser ask for music.lan:8881 rather than the player's
+# IP. Without this block foo_jean is unreachable and Jean shows NOT CONNECTED,
+# with streaming gone while the main UI looks perfectly healthy.
+#
+# flush_interval -1 turns off response buffering. GET /api/stream is a
+# long-lived audio stream and a buffering proxy stalls it.
+http://music.lan:8881, http://ocarina.lan:8881, http://10.100.100.53:8881 {
+	reverse_proxy {$MUSIC_FOOJEAN} {
+		flush_interval -1
+	}
+}

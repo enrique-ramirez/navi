@@ -1,0 +1,17 @@
+# Monitoring. The reason this box exists.
+#
+# Tag is `2`, deliberately not `latest`: on Docker Hub `latest` still points at
+# the abandoned 1.x line. Pinning the major means a deliberate `compose pull`
+# gets fixes but can never jump a major version unattended.
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - /srv/data/uptime-kuma:/app/data
+    environment:
+      TZ: ${TZ}
+    mem_limit: 512m

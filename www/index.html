@@ -1,0 +1,81 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>navi — home network</title>
+<style>
+:root{--bg:#faf9f7;--fg:#1a1a1a;--dim:#6b6b6b;--card:#fff;--line:#e4e2de;--accent:#2f6f4f;--warn:#8a4b2a}
+@media(prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e6e3;--dim:#9a9895;--card:#1e1e1e;--line:#2e2e2e;--accent:#7fc4a0;--warn:#d99b6c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:40px 22px 70px}
+h1{font-size:26px;margin:0 0 2px;letter-spacing:-.01em}
+h1 span{color:var(--dim);font-weight:400}
+.sub{color:var(--dim);font-size:13.5px;margin:0 0 30px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin:34px 0 12px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+a.card{display:block;padding:13px 15px;background:var(--card);border:1px solid var(--line);border-radius:9px;text-decoration:none;color:inherit}
+a.card:hover{border-color:var(--accent)}
+a.card b{display:block;font-size:14.5px;margin-bottom:2px}
+a.card small{color:var(--dim);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td,th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--line);padding:1.5px 5px;border-radius:4px}
+.note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:0 8px 8px 0;padding:13px 16px;font-size:13.5px;margin:14px 0}
+.note b{color:var(--warn)}
+ol{padding-left:20px;font-size:13.5px}ol li{margin:7px 0}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
+</style></head><body><div class="wrap">
+
+<h1>navi <span>— home network</span></h1>
+<p class="sub">Monitoring, DNS and ad-blocking for the flat. Raspberry Pi 4 · <code>10.100.100.53</code></p>
+
+<h2>Services</h2>
+<div class="grid">
+  <a class="card" href="http://status.lan"><b>status.lan</b><small>Uptime Kuma — is anything on fire</small></a>
+  <a class="card" href="http://dns.lan"><b>dns.lan</b><small>Pi-hole — blocking &amp; query log</small></a>
+  <a class="card" href="http://router.lan"><b>router.lan</b><small>ER605 — the gateway</small></a>
+  <a class="card" href="http://music.lan"><b>music.lan</b><small>Jean — foobar2000 remote</small></a>
+</div>
+
+<h2>If something is broken</h2>
+
+<div class="note">
+<b>This page cannot rescue you from DNS failure.</b> If Pi-hole is down, no
+<code>.lan</code> name resolves — including this one. Reach it directly at
+<code>http://10.100.100.53</code>. Write that address somewhere physical.
+</div>
+
+<ol>
+<li><b>"The internet is down."</b> Check <code>http://10.100.100.53:3001</code> first. If
+    <em>DNS · navi resolver</em> is red, it's name resolution, not the internet. There is
+    deliberately no secondary DNS, so a dead Pi-hole looks exactly like a dead internet.</li>
+<li><b>Need internet right now, bypassing navi.</b> Set your laptop's DNS manually to
+    <code>1.1.1.1</code>. You lose ad-blocking and <code>.lan</code> names; everything else works.</li>
+<li><b>One ISP is down.</b> The <em>LINE</em> monitors say which. The house keeps working on
+    the surviving line — that's the point of two. Nothing is urgent.</li>
+<li><b>"ROUTE BROKEN" alert.</b> The ER605 policy route for <code>.61</code>/<code>.62</code> stopped
+    working, so a per-WAN check is measuring the wrong line. Monitoring is degraded, the
+    network is fine.</li>
+<li><b>navi won't boot.</b> Pull the SSD and it falls back to the SD card
+    (<code>BOOT_ORDER=0xf14</code>). The card holds a complete working system.</li>
+</ol>
+
+<h2>Addresses</h2>
+<table>
+<tr><th>Address</th><th>Name</th><th>What</th></tr>
+<tr><td><code>10.100.100.1</code></td><td>gate</td><td>ER605 router</td></tr>
+<tr><td><code>10.100.100.20</code></td><td>—</td><td>Windows PC (music, for now)</td></tr>
+<tr><td><code>10.100.100.30/.31</code></td><td>—</td><td>PS5 / PS Portal</td></tr>
+<tr><td><code>10.100.100.50</code></td><td>ocarina</td><td>Mini PC — not yet built</td></tr>
+<tr><td><code>10.100.100.53</code></td><td>navi</td><td>This box</td></tr>
+<tr><td><code>10.100.100.54</code></td><td>tatl</td><td>Second Pi-hole — planned</td></tr>
+<tr><td><code>10.100.100.61/.62</code></td><td>—</td><td>Per-WAN probe sources (Telmex / Megacable)</td></tr>
+</table>
+
+<footer>
+Passwords live in 1Password, never here. Config, docs and the decision log are at
+<a href="https://github.com/enrique-ramirez/navi">github.com/enrique-ramirez/navi</a> —
+checked out on this box at <code>/srv/navi</code>.
+</footer>
+
+</div></body></html>

@@ -1,0 +1,26 @@
+# DNS and network-wide blocking.
+#
+# Web UI is on host :8081, not :80, because Caddy owns port 80 and fronts it
+# at dns.lan. State lives in /srv/data, outside the git checkout.
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:2026.07.2
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8081:80/tcp"
+    environment:
+      TZ: ${TZ}
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      FTLCONF_dns_listeningMode: 'ALL'
+      FTLCONF_dns_upstreams: ${PIHOLE_UPSTREAMS}
+      FTLCONF_dns_hosts: ${PIHOLE_HOSTS}
+    volumes:
+      - /srv/data/pihole/etc-pihole:/etc/pihole
+    cap_add:
+      - NET_ADMIN
+      - SYS_TIME
+      - SYS_NICE
+    mem_limit: 512m
