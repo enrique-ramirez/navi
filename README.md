@@ -38,6 +38,7 @@ pulls from it.
 ```sh
 # on your laptop
 edit, commit, push
+ssh enrique@navi.lan
 
 # on navi
 cd /srv/navi && git pull && sudo ./scripts/deploy.sh
