@@ -7,7 +7,17 @@
 #   3. the blocklist still being fresh
 #   4. whether a human needs to do something
 set -u
-source /srv/navi/.env
+
+# .env is data, not shell. Sourcing it would EXECUTE anything after a ";" and
+# PIHOLE_UPSTREAMS / PIHOLE_HOSTS legitimately contain semicolons and spaces,
+# because that's the format Pi-hole and docker compose want. Read only the keys
+# this script needs, matched against a whitelist, with no evaluation.
+while IFS='=' read -r k v; do
+    case "$k" in
+        WAN1_SRC|WAN1_EXPECT|WAN2_SRC|WAN2_EXPECT|KUMA_PUSH_*)
+            printf -v "$k" '%s' "$v" ;;
+    esac
+done < /srv/navi/.env
 
 KUMA="http://localhost:3001/api/push"
 
