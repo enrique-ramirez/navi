@@ -118,6 +118,30 @@ nothing, and that absence isn't evidence of anything.
 You can confirm the resize happened by comparing partition sizes. The image ships
 a 2.43 GB root partition; a booted card shows the full card size.
 
+## The ER605 checks Referer against Host
+
+Its web server 404s every `.js` and `.css` unless the request carries a `Referer`
+whose host matches the `Host` header. It doesn't care what that host is, only that
+they agree:
+
+| Host | Referer | Result |
+|---|---|---|
+| `10.100.100.1` | `10.100.100.1` | 200 |
+| `router.lan` | `router.lan` | 200 |
+| `10.100.100.1` | `router.lan` | **404** |
+| `router.lan` | `10.100.100.1` | **404** |
+
+So when proxying it, **don't rewrite the Host header.** Setting
+`header_up Host {upstream_hostport}` seems like the careful thing to do for an
+appliance and is exactly what breaks it: the browser keeps sending
+`Referer: router.lan`, the mismatch 404s every asset, the app falls through to
+`error.html`, and you get a blank page with sixty 404s in the network tab.
+
+Testing this with `curl` is misleading, because a bare `curl` sends no Referer and
+gets 404s whether it goes direct or through the proxy. That looks like the proxy
+being faithful when it's actually both paths failing for the same unrelated
+reason.
+
 ## Two ER605 UI quirks
 
 System Status shows only WAN interfaces. There's no LAN port status on that page,

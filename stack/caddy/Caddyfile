@@ -47,9 +47,13 @@ http://status.lan {
 # 10.100.100.1 still works directly. That's the escape hatch for when Caddy or
 # navi is the thing that's broken.
 http://router.lan, http://gate.lan {
-	reverse_proxy 10.100.100.1 {
-		header_up Host {upstream_hostport}
-	}
+	# Do NOT rewrite the Host header here. The ER605 gates its static assets on
+	# the Referer matching the Host: it doesn't care what the host is, only that
+	# the two agree. Setting Host to 10.100.100.1 while the browser sends
+	# Referer: router.lan makes every .js and .css 404, the app falls through to
+	# error.html, and you get a blank page. Caddy passes the original Host by
+	# default, so both are router.lan and they match.
+	reverse_proxy 10.100.100.1
 }
 
 http://dns.lan {
@@ -106,9 +110,13 @@ https://status.lan {
 
 https://router.lan, https://gate.lan {
 	tls internal
-	reverse_proxy 10.100.100.1 {
-		header_up Host {upstream_hostport}
-	}
+	# Do NOT rewrite the Host header here. The ER605 gates its static assets on
+	# the Referer matching the Host: it doesn't care what the host is, only that
+	# the two agree. Setting Host to 10.100.100.1 while the browser sends
+	# Referer: router.lan makes every .js and .css 404, the app falls through to
+	# error.html, and you get a blank page. Caddy passes the original Host by
+	# default, so both are router.lan and they match.
+	reverse_proxy 10.100.100.1
 }
 
 https://dns.lan {
