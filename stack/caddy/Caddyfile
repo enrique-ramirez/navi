@@ -33,18 +33,21 @@ http://status.lan {
 # browser that auto-upgrades to HTTPS lands on a warning every time. Fronting it
 # here means the browser sees a certificate from our own CA instead.
 #
-# Backend is the router's HTTPS, not its HTTP: skipping verification is fine for
-# a device on the same wire whose certificate can never be valid, and it keeps the
-# admin password encrypted on the navi-to-router hop rather than downgrading it.
+# Backend is the router's plain HTTP, and it has to be. Proxying to its HTTPS
+# fails with `remote error: tls: handshake failure`: the ER605's TLS stack dates
+# from 2018 and only offers cipher suites that Go's client refuses. curl connects
+# because it's more permissive. Caddy's http transport exposes no minimum-version
+# knob for upstreams, so there's no way to negotiate down.
+#
+# That leaves the navi-to-router hop in cleartext. It's one switched hop on the
+# same wire, and it's exactly what happens today when you browse to
+# http://10.100.100.1 directly. Browser-to-navi is now encrypted, which shrinks
+# the plaintext segment rather than growing it.
 #
 # 10.100.100.1 still works directly. That's the escape hatch for when Caddy or
 # navi is the thing that's broken.
 http://router.lan, http://gate.lan {
-	reverse_proxy https://10.100.100.1 {
-		transport http {
-			tls
-			tls_insecure_skip_verify
-		}
+	reverse_proxy 10.100.100.1 {
 		header_up Host {upstream_hostport}
 	}
 }
@@ -103,11 +106,7 @@ https://status.lan {
 
 https://router.lan, https://gate.lan {
 	tls internal
-	reverse_proxy https://10.100.100.1 {
-		transport http {
-			tls
-			tls_insecure_skip_verify
-		}
+	reverse_proxy 10.100.100.1 {
 		header_up Host {upstream_hostport}
 	}
 }

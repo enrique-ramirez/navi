@@ -134,10 +134,15 @@ The router answers on 443 with a certificate TP-Link generated in a factory in
 2018. Browsers that auto-upgrade to HTTPS find it and throw a full-page warning
 every time. Behind the proxy they see a certificate from navi's CA instead.
 
-Caddy talks to the router over its HTTPS with verification skipped, rather than
-dropping to plain HTTP. Skipping verification is reasonable for a device on the
-same wire whose certificate can never be valid, and it keeps the admin password
-encrypted on that hop.
+Caddy talks to the router over plain HTTP. Proxying to its HTTPS fails with
+`remote error: tls: handshake failure`, because the ER605 only offers cipher
+suites that Go's TLS client won't accept, and Caddy exposes no way to negotiate
+down. `curl` connects to it happily, which makes the failure look stranger than it
+is.
+
+So that hop is cleartext, one switched hop on the same wire. It's what already
+happened when you browsed to the router directly, and the browser-to-navi half is
+now encrypted, so there's less plaintext than before rather than more.
 
 `https://10.100.100.1` always works directly, which is what you want when navi is
 the thing that's broken.
