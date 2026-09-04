@@ -72,6 +72,7 @@ password or a token.
 |---|---|
 | [network.md](docs/network.md) | The house. Two ISPs, the router, addressing, naming |
 | [wifi.md](docs/wifi.md) | The Decos, roaming, and what's still unsolved |
+| [er605.md](docs/er605.md) | The router, written out so it can be rebuilt |
 | [navi.md](docs/navi.md) | The box. Hardware, boot, services, updates |
 | [monitoring.md](docs/monitoring.md) | What's watched, and why each check exists |
 | [runbook.md](docs/runbook.md) | When something breaks |
