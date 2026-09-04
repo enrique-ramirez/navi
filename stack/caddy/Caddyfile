@@ -27,6 +27,28 @@ http://status.lan {
 	reverse_proxy 127.0.0.1:3001
 }
 
+# The router, proxied rather than pointed at directly.
+#
+# The ER605 answers on 443 with a certificate TP-Link generated in 2018, so a
+# browser that auto-upgrades to HTTPS lands on a warning every time. Fronting it
+# here means the browser sees a certificate from our own CA instead.
+#
+# Backend is the router's HTTPS, not its HTTP: skipping verification is fine for
+# a device on the same wire whose certificate can never be valid, and it keeps the
+# admin password encrypted on the navi-to-router hop rather than downgrading it.
+#
+# 10.100.100.1 still works directly. That's the escape hatch for when Caddy or
+# navi is the thing that's broken.
+http://router.lan, http://gate.lan {
+	reverse_proxy https://10.100.100.1 {
+		transport http {
+			tls
+			tls_insecure_skip_verify
+		}
+		header_up Host {upstream_hostport}
+	}
+}
+
 http://dns.lan {
 	redir / /admin/ 302
 	reverse_proxy 127.0.0.1:8081
@@ -77,6 +99,17 @@ https://home.lan, https://help.lan, https://navi.lan {
 https://status.lan {
 	tls internal
 	reverse_proxy 127.0.0.1:3001
+}
+
+https://router.lan, https://gate.lan {
+	tls internal
+	reverse_proxy https://10.100.100.1 {
+		transport http {
+			tls
+			tls_insecure_skip_verify
+		}
+		header_up Host {upstream_hostport}
+	}
 }
 
 https://dns.lan {

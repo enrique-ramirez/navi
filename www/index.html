@@ -43,6 +43,31 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:v
   <a class="card" href="http://music.lan"><b>music.lan</b><small>Jean — foobar2000 remote</small></a>
 </div>
 
+<h2>HTTPS on this network</h2>
+
+<p style="font-size:13.5px;margin:0 0 12px">
+Services here are served over both <code>http://</code> and <code>https://</code>.
+The certificates come from this box's own authority, so a device has to trust it
+once. Install this, then <code>https://</code> works with no warning:
+</p>
+
+<div class="grid" style="margin-bottom:12px">
+  <a class="card" href="/navi-root.crt"><b>navi-root.crt</b><small>the root certificate &mdash; install once per device</small></a>
+</div>
+
+<p style="font-size:12.5px;color:var(--dim);margin:0 0 12px">
+Verify it's the right one before trusting it. SHA&#8209;256 fingerprint:<br>
+<code style="font-size:11.5px">97:34:12:56:8C:A2:F7:3D:E2:3E:72:31:57:0A:44:30:6D:9B:44:70:D9:E4:19:30:EE:07:81:74:12:86:81:E1</code>
+</p>
+
+<div class="note">
+<b>music.lan is HTTPS-only.</b> Jean needs a secure context for lock&#8209;screen
+controls and media keys, and its foo_jean component has to share the page's
+scheme, so there's no working plain&#8209;HTTP version. Without the certificate
+installed you'll get a warning. On a device that can't install it, go straight to
+the player at <code>http://10.100.100.20:8880/jean</code>.
+</div>
+
 <h2>If something is broken</h2>
 
 <div class="note">

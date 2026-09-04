@@ -81,6 +81,81 @@ No under-voltage flags at full load in either run means the CanaKit 3.5 A supply
 is comfortably adequate, which rules out the cause of most mysterious Pi
 corruption.
 
+## HTTPS and the internal CA
+
+Caddy runs its own certificate authority and issues certs for the `.lan` names.
+Install its root on a device and `https://help.lan` and friends load with no
+warning, and count as a **secure context**, which is the point: Jean needs one for
+`navigator.mediaSession` (lock screen and hardware media keys) and `Notification`.
+Neither works over plain HTTP, at all, ever.
+
+Leaf certificates last **12 hours** and renew themselves. The root lasts to 2036.
+
+```
+root      /srv/data/caddy/caddy/pki/authorities/local/root.crt
+copy      www/navi-root.crt in this repo, served at http://help.lan/navi-root.crt
+SHA-256   97:34:12:56:8C:A2:F7:3D:E2:3E:72:31:57:0A:44:30:6D:9B:44:70:D9:E4:19:30:EE:07:81:74:12:86:81:E1
+```
+
+Check that fingerprint before trusting it anywhere. Installing a root CA is
+handing something permission to impersonate any site to that device, so it's worth
+ten seconds:
+
+```sh
+openssl x509 -in navi-root.crt -noout -fingerprint -sha256
+```
+
+**macOS**
+
+```sh
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain navi-root.crt
+```
+
+**iOS / iPadOS.** Download it in Safari, then Settings → Profile Downloaded →
+Install. That isn't enough on its own: also go to Settings → General → About →
+Certificate Trust Settings and enable full trust for it. Skipping the second step
+is the usual reason it "doesn't work".
+
+**Android.** Settings → Security → Encryption & credentials → Install a
+certificate → CA certificate. Browsers will honour it. **Native apps won't** —
+since Android 7 they ignore user-installed CAs unless the app opts in. That
+matters if Jean ever gets wrapped as a native app: a WebView or Capacitor build
+can bundle this CA in its network security config, but a Trusted Web Activity
+can't, because TWA requires a publicly-trusted certificate.
+
+**Windows.** Double-click, Install Certificate, Local Machine, place in Trusted
+Root Certification Authorities.
+
+> ### Firefox-family browsers ignore the system store
+>
+> Firefox, Zen, LibreWolf and friends keep their **own** certificate store. A root
+> installed in the macOS keychain or the Windows store does nothing for them, and
+> no amount of refreshing helps. Safari and Chrome will already work at that point,
+> which makes it look like a per-site problem rather than a per-browser one.
+>
+> Import it directly: Settings → Privacy & Security → Certificates → View
+> Certificates → **Authorities** → Import → tick *"Trust this CA to identify
+> websites"*.
+>
+> Alternatively `about:config` → `security.enterprise_roots.enabled` → `true`, then
+> **fully quit and reopen** the browser. Firefox reads system roots once at
+> startup, so restarting is not optional. The direct import is more reliable.
+>
+> Quickest way to tell them apart: if it loads clean in Safari and warns in Zen,
+> the certificate is fine and it's the browser.
+
+**Smart TVs and consoles don't need any of this.** Secure context is a browser
+restriction; native apps have no such rule. A Jellyfin TV app talking to plain
+HTTP works and always will. Tizen and webOS don't expose a user certificate store
+anyway.
+
+### If the CA is ever regenerated
+
+Delete `/srv/data/caddy/caddy/pki` and Caddy makes a new one on next start. Every
+device then has to install the new root, and the old one should be removed. Not
+something to do casually.
+
 ## Access
 
 SSH is key-only. Password authentication is off, root login is off, both set in

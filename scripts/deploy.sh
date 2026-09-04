@@ -41,5 +41,22 @@ for s in pihole uptime-kuma caddy; do
     ( cd "$REPO/stack/$s" && docker compose --env-file "$REPO/.env" up -d )
 done
 
+# Caddy reads its config once at startup and the Caddyfile is a bind mount, so
+# `compose up -d` sees no change to the image or compose file and leaves the
+# container running the OLD config. The deploy reports success and applies
+# nothing. Restart it explicitly.
+#
+# Validate first, inside the running container so it sees the new file and the
+# compose environment. If the new config is broken, leave the working one
+# running rather than restarting into a failure.
+echo "==> caddy config"
+if docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+    docker restart caddy >/dev/null
+    echo "    valid, restarted"
+else
+    echo "    !! INVALID - not restarting, previous config still serving:"
+    docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | grep -i error | head -3 | sed 's/^/       /'
+fi
+
 echo "==> done"
 docker ps --format '    {{.Names}}  {{.Status}}'
