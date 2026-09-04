@@ -71,6 +71,7 @@ password or a token.
 | Doc | Covers |
 |---|---|
 | [network.md](docs/network.md) | The house. Two ISPs, the router, addressing, naming |
+| [wifi.md](docs/wifi.md) | The Decos, roaming, and what's still unsolved |
 | [navi.md](docs/navi.md) | The box. Hardware, boot, services, updates |
 | [monitoring.md](docs/monitoring.md) | What's watched, and why each check exists |
 | [runbook.md](docs/runbook.md) | When something breaks |

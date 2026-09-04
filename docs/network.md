@@ -18,6 +18,15 @@ Everything that needs to be always-on lives in the kitchen, because the modems
 are there and can't move. That includes navi, the future mini PC, and the UPS
 when it arrives.
 
+navi is wired directly to the ER605, not to a Deco. That's deliberate: a
+monitoring box sitting behind a wireless backhaul reports the hop's flakiness as
+ISP problems, and false alarms at 3am are how you teach yourself to ignore
+alerts.
+
+The router has five ports and they're spoken for. `WAN` and `WAN/LAN1` take the
+two ISPs, one LAN port feeds the main Deco, navi has one of the remaining two and
+ocarina will take the last. Anything after that needs a small switch.
+
 ## The two lines
 
 | | Telmex | Megacable |

@@ -1,35 +1,10 @@
 # What's next
 
-Roughly in order. The first three are small and unblock nothing; the rest are
-projects.
+Roughly in order. `tatl` and the Megacable call are small; the rest are projects.
 
-## Finish the case
-
-The P173's copper block isn't fitted yet, waiting on Arctic MX-4. Until it is,
-the Pi is cooling by convection and the aluminium case is decorative.
-
-Fit the block, put the lid on, then re-run the identical test:
-
-```sh
-stress-ng --cpu 4 --timeout 600s     # watch: vcgencmd measure_temp
-```
-
-Bare board peaked at 83.2 °C and throttled to 1677 MHz. That's the number to
-beat. Use paste on the joint the Geekworm diagram says to, and the supplied pads
-for the secondary chips where gaps vary. Never both in the same joint: a pad plus
-paste is thicker than either alone and usually performs worse than the pad by
-itself.
-
-## Confirm where navi is plugged in
-
-It was moved to the main Deco during debugging and may still be there. It belongs
-directly on an ER605 LAN port. A monitoring box behind a wireless backhaul reports
-the hop's flakiness as ISP problems, and false alarms at 3am are how you learn to
-ignore alerts.
-
-The ER605 has five ports: `WAN` and `WAN/LAN1` are the two ISPs, one LAN port goes
-to the main Deco, which leaves two. navi takes one, ocarina takes the other. The
-router is full after that; anything else needs a small switch.
+The case is done: fitted with the copper block and MX-4 on 2026-09-03, and it
+dropped peak load temperature from 83.2 °C to 51.1 °C with no throttling. Numbers
+are in [navi.md](navi.md).
 
 ## tatl, the second Pi-hole
 
@@ -69,7 +44,23 @@ symmetric cross-ISP monitoring.
 
 A KINGDEL N355 (Twin Lake, 8 cores, 32 GB DDR5, 1 TB NVMe, dual 2.5 GbE, Intel
 QuickSync). Intel rather than AMD specifically for QuickSync, which is what
-Jellyfin's own docs recommend; AMD's VAAPI path is the troublesome one.
+Jellyfin's own docs recommend; AMD's VAAPI path is the troublesome one, with worse
+quality, no AV1 decode and poor HDR tone mapping.
+
+N355 over the cheaper N100 for the headroom: 8 cores instead of 4, 32 EU instead
+of 24. That margin is for Immich's machine-learning container, which is the
+hungriest thing on the roadmap. The RAM is already maxed and there's no upgrade
+path, since the board has a single SODIMM slot capped at 32 GB.
+
+**One caveat to remember before blaming anything else.** The dual NICs are Intel
+i226-V, and early steppings had documented packet-drop and link-flap bugs,
+discussed at length in the pfSense and OPNsense communities. Later revisions fixed
+it and recent kernels are fine. If you ever see unexplained drops, disable Energy
+Efficient Ethernet before suspecting the switch or the cable:
+
+```sh
+sudo ethtool --set-eee enp1s0 eee off
+```
 
 Its only job at first is serving music, so the Windows PC can stop being a media
 server.
@@ -93,6 +84,15 @@ the Windows PC. It's x86, so the test is valid.
 If Wine fails, fall back to a Windows 11 VM under KVM, roughly 2 cores and 6 GB.
 Don't use a debloated ISO; unofficial builds with unclear provenance are a poor
 foundation for an always-on box holding your data.
+
+**Space budget.** The 1 TB NVMe gives about 930 GB usable. Reserve roughly 50 GB
+for Linux and Docker images and about 100 GB for databases and thumbnails in later
+phases, which leaves around 780 GB for music against a current library of 419 GB
+(349 GB sorted plus 70 GB unsorted). Comfortable, but the library is expected to
+grow fast now that adding to it is enjoyable. **Treat 600 GB as the trigger** to
+either fit a second NVMe (ask the seller whether the slot exists) or accelerate
+the NAS. Wire a disk-usage check into Uptime Kuma via a push monitor so that gets
+noticed rather than discovered.
 
 **Migrating the library.** 419 GB currently lives on an old, untrusted external
 drive. Three rules, all load-bearing. Check SMART before copying, because
@@ -140,6 +140,10 @@ Tailscale. No port forwarding, no DMZ, no DDNS, and it dissolves the
 Telmex-only-accepts-inbound asymmetry entirely, because nothing ever accepts
 inbound. It may also delete Navidrome from the plan: over Tailscale, Jean plus
 beefweb plus `foo_jean` is the remote music server.
+
+If browser access without installing a client is ever needed, Cloudflare Tunnel
+is the fallback. Read its free-tier terms first: section 2.8 prohibits streaming
+significant video, so it would cover photos and files but not Jellyfin.
 
 Standing rule regardless: never port-forward SSH, beefweb or `foo_jean` on the
 ER605. One of them has no authentication at all and the other rewrites files in

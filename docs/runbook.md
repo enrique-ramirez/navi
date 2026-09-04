@@ -2,9 +2,17 @@
 
 ## Read this first
 
-If Pi-hole is down, no `.lan` name resolves, including `help.lan`. Reach the
-landing page at `http://10.100.100.53` instead. That address is worth writing on
-a label and sticking to the Pi.
+If Pi-hole is down, no `.lan` name resolves, including `help.lan`. Two ways in
+that don't depend on it:
+
+`navi.local` works over mDNS, which is handled by avahi on the Pi and never
+touches Pi-hole. `ssh enrique@navi.local` and `http://navi.local` both work with
+DNS completely dead. This is the easy one, and it's why avahi is left running.
+It's reliable from macOS, Linux and iOS; Android's mDNS support is patchy, so
+don't count on it from the phone.
+
+`http://10.100.100.53` always works. Worth writing on a label and sticking to
+the Pi, for the case where you're on a device that can't do mDNS.
 
 If the network is down badly enough that you can't reach either, this file is on
 GitHub and on your laptop.
@@ -30,7 +38,7 @@ back.
 ## Pi-hole won't start / DNS is dead
 
 ```sh
-ssh enrique@10.100.100.53
+ssh enrique@navi.local          # mDNS, works with DNS dead
 docker ps -a | grep pihole
 docker logs pihole --tail 50
 cd /srv/navi/stack/pihole && docker compose --env-file /srv/navi/.env up -d

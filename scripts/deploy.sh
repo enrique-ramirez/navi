@@ -15,6 +15,7 @@ echo "==> scripts"
 install -m 700 "$REPO/scripts/wan-check.sh"   /usr/local/bin/wan-check.sh
 install -m 700 "$REPO/scripts/navi-backup.sh" /usr/local/bin/navi-backup.sh
 install -m 700 "$REPO/scripts/repo-status.sh"  /usr/local/bin/repo-status.sh
+install -m 755 "$REPO/scripts/thermal-test.sh" /usr/local/bin/thermal-test.sh
 
 echo "==> systemd units"
 changed=0

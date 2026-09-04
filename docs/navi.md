@@ -52,24 +52,34 @@ The Geekworm P173 is a passive aluminium case. It's in the kitchen, which is fin
 as long as it's nowhere near the hob: airborne grease is bad for a heatsink and
 worse for a fan.
 
-Bare board, lid off, no copper block fitted, running `stress-ng --cpu 4` for ten
-minutes:
+`stress-ng --cpu 4 --timeout 600s`, run twice: once bare with the lid off and no
+copper block, once fully assembled with the block and Arctic MX-4.
 
-| | |
-|---|---|
-| Idle | 47 °C |
-| Soft limit tripped | ~4 minutes |
-| Peak | 83.2 °C |
-| Clock | 1800 → 1677 MHz, throttling |
-| Under-voltage flags | none |
+| | Bare board | Assembled |
+|---|---|---|
+| Idle | 47.2 °C | **37.9 °C** |
+| Peak under load | 83.2 °C | **51.1 °C** |
+| Throttled | yes, from ~4 min | **never, 42/42 samples clean** |
+| Clock | 1800 → 1677 MHz | **1800 MHz throughout** |
+| Under-voltage flags | none | none |
 
-That's the number the assembled case has to beat. Re-run the same command once
-the copper block and thermal paste are fitted.
+32 °C cooler at peak. Assembled, it runs cooler under a fully saturated CPU than
+the bare board did sitting idle.
 
-Worth keeping in perspective: four cores pinned at 100% is a deliberate worst
-case. Pi-hole and Kuma idle around 50 °C and will never approach it. No
-under-voltage flags at full load also means the CanaKit 3.5 A supply is
-comfortably adequate, which rules out the cause of most mysterious Pi corruption.
+The shape matters as much as the number: temperature flattened at around 90
+seconds and drifted up only 5 °C across the following eight minutes. That's a
+case that's reached equilibrium, not one slowly losing to the load.
+
+This was run with everything live, not on an idle box. DNS, blocking and the
+landing page all kept working with all four cores pinned, which is worth knowing:
+Pi-hole needs so little CPU that saturating the machine doesn't touch it.
+
+Re-run it after any hardware change with `scripts/thermal-test.sh`. The header
+there explains how to wrap it in systemd so it can't outlive its welcome.
+
+No under-voltage flags at full load in either run means the CanaKit 3.5 A supply
+is comfortably adequate, which rules out the cause of most mysterious Pi
+corruption.
 
 ## Access
 
