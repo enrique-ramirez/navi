@@ -24,10 +24,16 @@ code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--li
 .note b{color:var(--warn)}
 ol{padding-left:20px;font-size:13.5px}ol li{margin:7px 0}
 footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
+#repo{display:none;margin:0 0 28px;padding:11px 15px;background:var(--card);border:1px solid var(--line);border-radius:9px;font-size:13px;line-height:1.5}
+#repo.warn{border-left:3px solid var(--warn);border-radius:0 8px 8px 0}
+#repo.ok{color:var(--dim)}
+#repo b{color:var(--warn)}
 </style></head><body><div class="wrap">
 
 <h1>navi <span>— home network</span></h1>
 <p class="sub">Monitoring, DNS and ad-blocking for the flat. Raspberry Pi 4 · <code>10.100.100.53</code></p>
+
+<div id="repo"></div>
 
 <h2>Services</h2>
 <div class="grid">
@@ -78,4 +84,39 @@ Passwords live in 1Password, never here. Config, docs and the decision log are a
 checked out on this box at <code>/srv/navi</code>.
 </footer>
 
-</div></body></html>
+</div>
+
+<script>
+// Reads a file written by repo-status.timer every 5 minutes. Deliberately has
+// no way to trigger a deploy: an endpoint that runs code as root, reachable by
+// anything on the LAN, is not worth saving one SSH command for.
+(function () {
+  var el = document.getElementById('repo');
+  var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; };
+  fetch('/status.json', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (d) {
+      var cls = 'ok', html;
+      if (!d.fetch_ok) {
+        cls = 'warn';
+        html = "<b>Couldn't reach GitHub.</b> Can't tell whether a deploy is pending. Running <code>" + esc(d.commit) + "</code>.";
+      } else if (d.behind > 0) {
+        cls = 'warn';
+        html = '<b>' + d.behind + ' commit' + (d.behind > 1 ? 's' : '') + ' behind origin.</b> Deploy pending:<br>' +
+               '<code>ssh enrique@10.100.100.53</code> then <code>cd /srv/navi &amp;&amp; git pull &amp;&amp; sudo ./scripts/deploy.sh</code>';
+      } else if (d.dirty > 0) {
+        cls = 'warn';
+        html = '<b>' + d.dirty + ' uncommitted change' + (d.dirty > 1 ? 's' : '') + ' on navi.</b> ' +
+               'Something was edited on the box instead of in the repo. It will be lost on the next pull.';
+      } else {
+        html = 'Config up to date · <code>' + esc(d.commit) + '</code> ' + esc(d.subject);
+      }
+      el.className = cls;
+      el.innerHTML = html;
+      el.style.display = 'block';
+    })
+    .catch(function () { /* status file missing: say nothing rather than lie */ });
+})();
+</script>
+
+</body></html>

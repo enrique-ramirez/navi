@@ -12,6 +12,7 @@ services:
       - /srv/navi/stack/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /srv/navi/www:/srv/www:ro
       - /srv/data/caddy:/data
+      - /srv/data/www:/srv/status:ro
     environment:
       TZ: ${TZ}
       MUSIC_BACKEND: ${MUSIC_BACKEND}

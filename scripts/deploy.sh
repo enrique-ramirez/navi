@@ -14,6 +14,7 @@ REPO=/srv/navi
 echo "==> scripts"
 install -m 700 "$REPO/scripts/wan-check.sh"   /usr/local/bin/wan-check.sh
 install -m 700 "$REPO/scripts/navi-backup.sh" /usr/local/bin/navi-backup.sh
+install -m 700 "$REPO/scripts/repo-status.sh"  /usr/local/bin/repo-status.sh
 
 echo "==> systemd units"
 changed=0
@@ -26,11 +27,11 @@ for u in "$REPO"/systemd/*; do
 done
 if [ "$changed" = 1 ]; then
     systemctl daemon-reload
-    systemctl enable --now wan-check.timer navi-backup.timer >/dev/null
+    systemctl enable --now wan-check.timer navi-backup.timer repo-status.timer >/dev/null
 fi
 
 echo "==> state directories"
-mkdir -p /srv/data/{pihole/etc-pihole,uptime-kuma,caddy} /srv/backup
+mkdir -p /srv/data/{pihole/etc-pihole,uptime-kuma,caddy,www} /srv/backup
 chmod 700 /srv/backup
 
 echo "==> compose stacks"

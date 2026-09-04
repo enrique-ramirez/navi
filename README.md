@@ -38,9 +38,10 @@ pulls from it.
 ```sh
 # on your laptop
 edit, commit, push
-ssh enrique@navi.lan
 
 # on navi
+ssh enrique@navi.lan          # or 10.100.100.53 if DNS is down, which is
+                              # exactly when you'll need to get in
 cd /srv/navi && git pull && sudo ./scripts/deploy.sh
 ```
 
