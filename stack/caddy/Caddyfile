@@ -20,18 +20,6 @@ http://home.lan, http://help.lan, http://navi.lan, http://10.100.100.53 {
 		root * /srv/status
 		file_server
 	}
-
-	# The "start Ocarina on TV" button. Everything else this box serves is a
-	# static file written by a timer; this is the one path that makes navi go
-	# and do something. tv-launcher.py argues the case for it and explains why
-	# the endpoint deliberately accepts no parameters.
-	#
-	# Localhost-only upstream, so this proxy is the only way to reach it.
-	@tv path /api/tv/*
-	handle @tv {
-		reverse_proxy 127.0.0.1:8090
-	}
-
 	handle {
 		root * /srv/www
 		file_server
@@ -115,15 +103,6 @@ https://home.lan, https://help.lan, https://navi.lan {
 		root * /srv/status
 		file_server
 	}
-
-	# Same trigger as the plain-HTTP block above. It has to exist on both,
-	# because the button lives on a page that is served on both schemes and
-	# fetches a same-origin relative path.
-	@tv path /api/tv/*
-	handle @tv {
-		reverse_proxy 127.0.0.1:8090
-	}
-
 	handle {
 		root * /srv/www
 		file_server
