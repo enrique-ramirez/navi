@@ -11,7 +11,7 @@
 #   docker images       re-pull
 #   anything in /srv/navi   it's in git
 #
-# CONTAINS SECRETS: .env holds the Pi-hole password and all five push tokens.
+# CONTAINS SECRETS: .env holds the Pi-hole password and all six push tokens.
 # Tarball is mode 600. Any copy inherits that.
 set -u
 OUT=/srv/backup/navi-state-$(date +%Y%m%d-%H%M).tar.gz

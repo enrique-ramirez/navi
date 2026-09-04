@@ -1,12 +1,18 @@
 #!/bin/bash
 # Pushes to Uptime Kuma's push monitors every 5 minutes via wan-check.timer.
 #
-# Covers the four things nothing else can see:
+# Covers the five things nothing else can see:
 #   1. each ISP line, end to end and independently
 #   2. Pi-hole actually blocking, not merely resolving
 #   3. the blocklist still being fresh
-#   4. whether a human needs to do something
+#   4. rejected SSH attempts, which on this LAN can't be you
+#   5. whether a human needs to do something
 set -u
+
+# Default empty so an .env written before this check existed simply disables the
+# SSH monitor, rather than tripping `set -u` and killing the script - which would
+# take all eleven other monitors down with it, silently, at the next timer tick.
+KUMA_PUSH_SSH=""
 
 # .env is data, not shell. Sourcing it would EXECUTE anything after a ";" and
 # PIHOLE_UPSTREAMS / PIHOLE_HOSTS legitimately contain semicolons and spaces,
@@ -102,6 +108,47 @@ else
     else
         push "$KUMA_PUSH_GRAVITY" up "$gct domains, updated ${age_d}d ago" "$age_d"
     fi
+fi
+
+# --- is anything trying to get in over SSH? ----------------------------------
+#
+# SSH is key-only and never port-forwarded, so the only clients that can reach
+# port 22 are already inside the flat. That makes a rejected attempt a statement
+# about the LAN rather than about the internet: a compromised IoT device, a
+# guest's laptop, something scanning. Rare enough to be worth an alarm.
+#
+# The pattern is deliberately narrow, and "Failed publickey" is deliberately NOT
+# in it. ssh clients offer every key they hold and each rejected offer logs that
+# line, so one perfectly normal login by you can produce two or three. Counting
+# them would fire this monitor every time you did maintenance, and an alarm that
+# cries wolf during routine work becomes wallpaper. What's counted is what can't
+# be you: usernames that don't exist, password auth that isn't even enabled, and
+# clients that burned through every attempt.
+#
+# Matched by syslog identifier, not by unit. Trixie socket-activates ssh into
+# per-connection units, and OpenSSH 9.8+ moved authentication into a separate
+# `sshd-session` binary, so `-u ssh` misses exactly the lines that matter.
+SSH_ALARM=5   # also in www/index.html, where the tile turns red on the same number
+SSH_STATE=/srv/data/ssh-fail
+ssh_re="Invalid user|Failed password|maximum authentication attempts exceeded"
+
+# Tell "nothing failed" apart from "we are reading the wrong place". If sshd has
+# never logged a line under either identifier then the query is wrong, and a
+# count of zero is a lie of exactly the shape this box was bought to catch.
+if journalctl -t sshd -t sshd-session -n 1 --no-pager 2>/dev/null | grep -q .; then
+    nfail=$(journalctl -t sshd -t sshd-session --since "24 hours ago" --no-pager 2>/dev/null | grep -c -E "$ssh_re")
+    nfail=${nfail:-0}
+    printf '%s\n' "$nfail" > "$SSH_STATE"
+    if [ -n "$KUMA_PUSH_SSH" ]; then
+        if [ "$nfail" -ge "$SSH_ALARM" ]; then
+            push "$KUMA_PUSH_SSH" down "$nfail rejected SSH attempts in 24h - something on the LAN is trying" "$nfail"
+        else
+            push "$KUMA_PUSH_SSH" up "$nfail rejected in 24h" "$nfail"
+        fi
+    fi
+else
+    printf 'unknown\n' > "$SSH_STATE"
+    [ -n "$KUMA_PUSH_SSH" ] && push "$KUMA_PUSH_SSH" down "cannot read the sshd journal - check the identifier" 0
 fi
 
 # --- does a human need to do something? --------------------------------------

@@ -65,8 +65,9 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:v
 <div id="hostnote"></div>
 <div id="hostgrid" class="stats"></div>
 <p style="font-size:12px;color:var(--dim);margin:10px 0 0">
-Sampled every minute by <code>host-status.timer</code>. This is a view, not an
-alarm &mdash; <code>status.lan</code> is what wakes you.
+Sampled every 28s by <code>host-status.timer</code>, re-read every 30s and
+whenever this tab regains focus. This is a view, not an alarm &mdash;
+<code>status.lan</code> is what wakes you.
 </p>
 </section>
 
@@ -197,6 +198,7 @@ checked out on this box at <code>/srv/navi</code>.
     return v >= 10 ? v.toFixed(0) : v.toFixed(v >= 1 ? 1 : 2);
   }
   function pick(v, warn, bad) { return v >= bad ? 'bad' : v >= warn ? 'warn' : ''; }
+  function ago(iso) { return dur(Math.max(0, (Date.now() - Date.parse(iso)) / 1000)); }
 
   // label, value, unit, note, class, optional 0-100 meter
   function tile(k, v, u, n, cls, pct) {
@@ -262,6 +264,22 @@ checked out on this box at <code>/srv/navi</code>.
         : 'all firing',
       bad.length ? 'bad' : ''));
 
+    // Not a security tile so much as a memory aid: read next to the repo banner
+    // it answers why the working tree is dirty. The count of rejected attempts
+    // comes from wan-check.sh, which is also what alarms on it.
+    var sh = d.ssh || {}, sf = sh.failed_24h, shn = [];
+    if (sh.last_user) shn.push(sh.last_user + (sh.last_from ? ' from ' + sh.last_from : ''));
+    if (sf == null) shn.push('attempt count unavailable');
+    else if (sf > 0) shn.push(sf + ' rejected in 24h');
+    t.push(tile('SSH',
+      sh.sessions > 0 ? sh.sessions + (sh.sessions > 1 ? ' sessions' : ' session')
+        : sh.last_at ? ago(sh.last_at) : 'no record',
+      sh.sessions > 0 ? 'open now' : sh.last_at ? 'ago' : '',
+      shn.join('  \u00b7  ') || 'no logins recorded',
+      // 5 is the number wan-check.sh alarms on. Unknown is amber rather than
+      // green: "can't read the journal" must never look like "nothing happened".
+      sf == null ? 'warn' : sf >= 5 ? 'bad' : ''));
+
     var b = d.backup, age = b && b.age_min;
     t.push(tile('Last backup', age == null ? 'never' : dur(age * 60), age == null ? '' : 'ago',
       age == null ? 'no tarball in /srv/backup'
@@ -274,7 +292,7 @@ checked out on this box at <code>/srv/navi</code>.
     // project exists to catch. If the timer stopped, say so above the tiles
     // rather than letting three-hour-old figures pass for current.
     var age_s = (Date.now() - Date.parse(d.checked)) / 1000;
-    note.innerHTML = age_s > 180
+    note.innerHTML = age_s > 120
       ? '<div class="stale"><b>These readings are ' + dur(age_s) + ' old.</b> ' +
         '<code>host-status.timer</code> has stopped sampling, so everything below is frozen. ' +
         'Check <code>systemctl status host-status.timer</code>.</div>'
@@ -288,8 +306,10 @@ checked out on this box at <code>/srv/navi</code>.
       .then(render)
       .catch(function () { /* not deployed yet, or unreadable: show nothing */ });
   }
+  // 30s against a writer running at 28s. The writer is deliberately the faster
+  // of the two so the offset precesses instead of locking; see host-status.timer.
   load();
-  setInterval(load, 60000);
+  setInterval(load, 30000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
 })();
 </script>

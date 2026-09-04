@@ -86,6 +86,30 @@ sudo systemctl reboot
 Reboots take about 40 seconds, during which the whole flat has no DNS. Do it when
 nobody's mid-call.
 
+## "navi · SSH attempts"
+
+Something inside the flat is trying to log into navi. Nothing outside can reach
+port 22, so this is a device on your own LAN, not the internet.
+
+Find out who:
+
+```sh
+journalctl -t sshd -t sshd-session --since "24 hours ago" \
+  | grep -E "Invalid user|Failed password|maximum authentication"
+```
+
+The source IP is in every line. Match it against the DHCP leases on
+`router.lan` to work out which device it is. A phone or laptop with a stale
+saved connection is the dull explanation and by far the likeliest; anything you
+can't account for deserves being taken off the network before you debug it.
+
+Your own logins do not trigger this. The check deliberately ignores
+`Failed publickey`, which ssh produces routinely while offering keys. See
+[monitoring.md](monitoring.md).
+
+If the message says it *cannot read the sshd journal*, the count is not zero,
+it's unknown - the syslog identifier has moved and the check needs updating.
+
 ## navi won't boot
 
 Pull the SSD. `BOOT_ORDER=0xf14` falls back to the SD card, which holds a
@@ -123,7 +147,7 @@ sudo smartctl -a -d sat /dev/sda    # note the -d sat
 5. Restore `.env` from 1Password or the latest state backup, `chmod 600`.
 6. `sudo ./scripts/deploy.sh`.
 7. Restore `kuma.db` into `/srv/data/uptime-kuma/` if you want the monitors and
-   their history back rather than rebuilding eleven monitors by hand.
+   their history back rather than rebuilding twelve monitors by hand.
 8. Re-add the two ER605 policy routes for `.61` and `.62` if the router was also
    rebuilt, then check `curl --interface 10.100.100.61 https://api.ipify.org`
    returns the Telmex address.

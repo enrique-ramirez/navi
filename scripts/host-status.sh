@@ -15,6 +15,11 @@
 #
 # Nothing here alerts. Uptime Kuma alerts. This is the page you read once
 # something already told you to look.
+#
+# Runs every 28s against a page that polls every 30s. The offset is deliberate
+# and host-status.timer explains it. Keep the two in step if you change either:
+# a writer slower than the reader is the one arrangement that makes the panel
+# consistently stale.
 set -u
 OUT=/srv/data/www/host.json
 mkdir -p "$(dirname "$OUT")"
@@ -99,11 +104,25 @@ oper=$(cat "/sys/class/net/$IF/operstate" 2>/dev/null || echo unknown)
 # RestartCount is the one worth having. A container that crashes and comes back
 # inside a minute leaves nothing behind except this number going up, and a
 # restarting Pi-hole is exactly the intermittent DNS nobody can reproduce.
+#
+# One `docker inspect` for all three rather than one call each. The docker CLI
+# is a large Go binary that has to start and connect to the daemon, and forking
+# it is most of what this script costs; at a 28-second cadence that is the
+# difference worth having. A container that doesn't exist is simply absent from
+# the output (the call still succeeds for the others), which is how it ends up
+# reported as missing rather than taking the whole block down with it.
+CONTAINERS="pihole uptime-kuma caddy"
+dockout=$(docker inspect --format '{{.Name}} {{.State.Status}} {{.RestartCount}}' \
+          $CONTAINERS 2>/dev/null)
+
 svcs=""
-for c in pihole uptime-kuma caddy; do
-    st=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)
-    rc=$(docker inspect -f '{{.RestartCount}}' "$c" 2>/dev/null || echo 0)
-    svcs="$svcs,{\"name\":\"$c\",\"state\":\"$(j "$st")\",\"restarts\":${rc:-0}}"
+for c in $CONTAINERS; do
+    state=missing; restarts=0
+    while read -r name st rc; do
+        [ "${name#/}" = "$c" ] || continue
+        state=$st; restarts=$rc; break
+    done <<< "$dockout"
+    svcs="$svcs,{\"name\":\"$c\",\"state\":\"$(j "$state")\",\"restarts\":${restarts:-0}}"
 done
 
 # --- timers ------------------------------------------------------------------
@@ -113,13 +132,56 @@ done
 units=""
 for u in wan-check navi-backup repo-status host-status; do
     active=$(systemctl is-active "$u.timer" 2>/dev/null || echo unknown)
-    result=$(systemctl show "$u.service" -p Result --value 2>/dev/null || echo unknown)
-    ts=$(systemctl show "$u.service" -p ExecMainExitTimestamp --value 2>/dev/null || echo "")
+    # Both properties in one call rather than two. Same parse-by-whitelist shape
+    # as the /proc/meminfo read above and the .env read in wan-check.sh.
+    result=unknown; ts=""
+    while IFS='=' read -r k v; do
+        case "$k" in Result) result=$v ;; ExecMainExitTimestamp) ts=$v ;; esac
+    done < <(systemctl show "$u.service" -p Result -p ExecMainExitTimestamp 2>/dev/null)
     iso=null
     [ -n "$ts" ] && iso="\"$(date -Is -d "$ts" 2>/dev/null || echo "")\""
     [ "$iso" = '""' ] && iso=null
     units="$units,{\"name\":\"$u\",\"timer\":\"$(j "$active")\",\"result\":\"$(j "${result:-unknown}")\",\"last\":$iso}"
 done
+
+# --- SSH ---------------------------------------------------------------------
+#
+# Not a security control by itself: SSH is key-only and unreachable from outside
+# the flat, so this is mostly a memory aid. Read next to the repo banner it
+# answers the question that banner raises - the working tree is dirty because
+# you were on the box on Tuesday and forgot.
+#
+# The rejected-attempt count is NOT computed here. wan-check.sh works it out
+# every 5 minutes and leaves it in a file. A journalctl call is by a wide margin
+# the most expensive thing this script could do, and a 24-hour count has no
+# business being recomputed every 28 seconds.
+sessions=$(who 2>/dev/null | wc -l); sessions=${sessions:-0}
+
+last_user=null; last_from=null; last_at=null
+line=$(last -w -n 20 --time-format=iso 2>/dev/null | grep -Ev '^(reboot|shutdown|wtmp|$)' | head -1)
+if [ -n "$line" ]; then
+    set -- $line
+    last_user="\"$(j "$1")\""
+    # A console login has no host column, so field 3 is the timestamp and every
+    # column after it shifts left. Detect that rather than reporting a date as
+    # the address someone connected from.
+    if [ "${3:-}" != "${3#20??-??-??T}" ]; then
+        last_from="\"console\""; last_at="\"$(j "${3:-}")\""
+    else
+        last_from="\"$(j "${3:-?}")\""; last_at="\"$(j "${4:-}")\""
+    fi
+fi
+[ "$last_at" = '""' ] && last_at=null
+
+# null, not 0, when the file is missing or stale. wan-check writes the literal
+# string "unknown" when it can't read the journal, and that has to survive as
+# "we don't know" rather than being rounded down to "nothing happened".
+sshfail=null
+SF=/srv/data/ssh-fail
+if [ -f "$SF" ] && [ $(( now - $(stat -c %Y "$SF") )) -lt 900 ]; then
+    v=$(cat "$SF" 2>/dev/null)
+    case "$v" in ''|*[!0-9]*) sshfail=null ;; *) sshfail=$v ;; esac
+fi
 
 # --- backup ------------------------------------------------------------------
 bage=null; bsize=0; bcount=0
@@ -143,6 +205,7 @@ cat > "$OUT.tmp" <<JSON
  "net":{"iface":"$(j "$IF")","state":"$(j "$oper")","link_mbit":${link:-0},"rx_bps":$rxbps,"tx_bps":$txbps},
  "services":[${svcs#,}],
  "units":[${units#,}],
+ "ssh":{"sessions":$sessions,"last_user":$last_user,"last_from":$last_from,"last_at":$last_at,"failed_24h":$sshfail},
  "backup":{"age_min":$bage,"size":$bsize,"count":$bcount}}
 JSON
 chmod 644 "$OUT.tmp"

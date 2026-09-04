@@ -1,7 +1,7 @@
 # Monitoring
 
-Eleven monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
-phone. Five of them Kuma can run by itself; the other six are pushed by
+Twelve monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
+phone. Six of them Kuma can run by itself; the other six are pushed by
 `wan-check.sh` every five minutes because Kuma can't see what they need to see.
 
 ## The monitors
@@ -19,6 +19,7 @@ phone. Five of them Kuma can run by itself; the other six are pushed by
 | 9 | Blocking active | push | Pi-hole resolving but no longer blocking |
 | 10 | Gravity freshness | push | blocklist quietly going stale |
 | 11 | Needs attention | push | pending reboot, full disk, updates gone quiet |
+| 12 | SSH attempts | push | something on the LAN trying to get into navi |
 
 ## Why the obvious checks aren't enough
 
@@ -87,10 +88,12 @@ error page.
 
 ## The status panel on help.lan
 
-Nine tiles on the landing page: temperature, uptime, load, memory, disk,
+Ten tiles on the landing page: temperature, uptime, load, memory, disk,
 network throughput, container states, timer health, and the age of the last
-backup. `host-status.timer` samples them every minute into
-`/srv/data/www/host.json` and the page reads that file.
+backup, and the last SSH login. `host-status.timer` samples them every 28
+seconds into
+`/srv/data/www/host.json`; the page re-reads that file every 30 seconds and
+whenever the tab regains focus, so it updates without a manual refresh.
 
 It is a **view, not an alarm**. Nothing here notifies. Kuma notifies. This is
 the page you open once something has already told you to look, or when someone
@@ -144,10 +147,74 @@ silent, and would stay silent until the day you needed a restore. The backup
 tile turns amber at 36 hours and red at three days. This is the single most
 useful thing on the panel and the reason it got built at all.
 
+## Monitor 12, and why it counts so little
+
+SSH here is key-only, root login is off, and it is never port-forwarded. Nothing
+outside the flat can reach port 22 at all, so this monitor is not about the
+internet. It's about the LAN: a rejected attempt means something already inside
+the house is trying doors, which is a compromised IoT device or a guest's laptop
+rather than a bot in another country.
+
+**It does not alarm on successful logins,** and that's deliberate. The only
+person who can log in is you, so an alert on every success would be you paging
+yourself during routine maintenance. Priority 5 is reserved for things that
+warrant waking you; an alert that fires whenever you work becomes wallpaper, and
+then so does everything next to it.
+
+**"Failed publickey" is deliberately not counted.** ssh clients offer every key
+they hold and each rejected offer logs that line, so one entirely normal login
+by you can produce two or three. A threshold over those would fire constantly.
+What's counted is what cannot be you: `Invalid user`, `Failed password` (which
+can't legitimately occur, since password auth is off), and clients that burned
+through `maximum authentication attempts exceeded`. On this network the normal
+reading is zero, so the alarm sits at five in 24 hours.
+
+**Matched by syslog identifier, not by unit.** Trixie socket-activates ssh into
+per-connection units, and OpenSSH 9.8+ moved authentication into a separate
+`sshd-session` binary, so a `journalctl -u ssh` version of this check would miss
+exactly the lines that matter and report a confident zero forever. Both `sshd`
+and `sshd-session` are matched, and the check first proves it can see *any* sshd
+line before believing a count of none. If it can't, it says so instead.
+
+Worth confirming on the box once: `journalctl -t sshd -t sshd-session -n 5`
+should return something. If it doesn't, the identifier has moved again.
+
+The count is computed here, on the five-minute timer, and left in
+`/srv/data/ssh-fail` for the panel to read. A `journalctl` call is by a wide
+margin the most expensive thing `host-status.sh` could do, and a 24-hour count
+has no business being recomputed every 28 seconds.
+
+This monitor becomes considerably more interesting the day Tailscale lands.
+Right now it watches a door that only opens from inside the flat.
+
+## Why the writer is faster than the reader
+
+28 seconds against a 30-second poll, and the mismatch is the point. Two clocks
+on the same period can settle into an unlucky phase and stay there, every read
+landing just before a write, so you permanently look at numbers a full period
+old. A writer that runs slightly faster makes the offset precess instead: the
+age of what's on screen sweeps the range rather than sticking at the worst end.
+
+What is *not* being compensated for is the 2 seconds the script spends sampling
+network counters. `OnUnitActiveSec=` measures from activation, not completion,
+so runtime sits inside the period rather than adding to it.
+
+`AccuracySec=1s` is the load-bearing part. The default is a minute, and even 10
+seconds would let systemd defer the timer into a 29-39 second swing, which is
+worse than having no offset at all. The cost is a few timer wakeups an hour
+that can't be batched with anything else, on a box that didn't flinch with all
+four cores pinned.
+
+Change one of the two numbers and change the other. A writer slower than the
+reader is the single arrangement that makes the panel consistently stale.
+
 ## The staleness banner
 
-If `host.json` is more than three minutes old the panel says so, in red, above
+If `host.json` is more than two minutes old the panel says so, in red, above
 the tiles. This matters more than any individual number on it.
+
+Two minutes is about four missed samples: enough that a single skipped run or a
+slow tick can't cry wolf, little enough to notice within a couple of minutes.
 
 A status display whose data source has died shows its last good reading forever,
 and a frozen 38 °C looks exactly like a healthy 38 °C. That's the silent-failure

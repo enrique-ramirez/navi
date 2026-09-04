@@ -1,12 +1,22 @@
 [Unit]
-Description=Sample navi's vitals every minute
+Description=Sample navi's vitals every 28 seconds
 [Timer]
-# A minute, not five. This is the panel you stare at while something is
-# actively wrong, and a temperature from four minutes ago is no use during a
-# thermal event. The script samples network counters for 2s and touches
-# nothing expensive, so the cost of the shorter interval is nil.
+# 28s against the page's 30s poll, deliberately. Two clocks on the same period
+# can lock into an unlucky phase and stay there, so every read lands just
+# *before* a write and you permanently look at 30-second-old numbers. A writer
+# that's slightly faster makes the offset precess instead, so the age of what
+# you see sweeps the range rather than sticking at the worst end.
+#
+# The 2s the script spends sampling network counters is NOT what's being
+# compensated for here. OnUnitActiveSec measures from activation, not from
+# completion, so runtime sits inside the period rather than adding to it.
+#
+# AccuracySec is what actually needs the margin. The default is 1min and even
+# 10s would let systemd defer this into a 29-39s swing, which is worse than no
+# offset at all. 1s costs a few unbatched wakeups an hour, which on a box that
+# didn't flinch with all four cores pinned is not a real cost.
 OnBootSec=90s
-OnUnitActiveSec=1min
-AccuracySec=10s
+OnUnitActiveSec=28s
+AccuracySec=1s
 [Install]
 WantedBy=timers.target
