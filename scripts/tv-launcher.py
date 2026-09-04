@@ -204,7 +204,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if not TV_HOST:
-        sys.exit("TV_HOST is unset. Add it to /srv/navi/.env")
+        # 78 is EX_CONFIG, and tv-launcher.service names it in
+        # RestartPreventExitStatus. Without that pairing this exits 1, systemd
+        # restarts it five seconds later, it exits 1 again, and because
+        # RestartSec is longer than the default start-limit window it never
+        # trips the limit either: it just loops forever, filling the journal,
+        # while `systemctl is-active` cheerfully reports "activating".
+        # A missing key in .env is never going to fix itself on retry, so say so
+        # once and stay down where it's visible.
+        sys.stderr.write("tv-launcher: TV_HOST is unset. Add the TV_* block "
+                         "from .env.example to /srv/navi/.env\n")
+        sys.exit(78)
     server = http.server.ThreadingHTTPServer(("127.0.0.1", LISTEN_PORT), Handler)
     sys.stderr.write("tv-launcher: 127.0.0.1:%d -> %s opens %s (paired: %s)\n"
                      % (LISTEN_PORT, TV_HOST, TV_URL, _read_token() is not None))

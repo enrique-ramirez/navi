@@ -17,6 +17,11 @@ EnvironmentFile=/srv/navi/.env
 ExecStart=/usr/local/bin/tv-launcher.py
 Restart=on-failure
 RestartSec=5s
+# 78 is EX_CONFIG: a missing key in .env. Retrying that forever achieves
+# nothing except a journal full of the same line and a unit stuck reporting
+# "activating", which is how this service spent its first sixteen restarts.
+# Config errors should stay down and be obvious.
+RestartPreventExitStatus=78
 
 # The token is the only thing this service writes, and /srv/data/tv is the only
 # place it may write it. ProtectSystem=strict makes the entire filesystem

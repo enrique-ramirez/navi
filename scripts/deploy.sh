@@ -34,6 +34,20 @@ if ! id navi-tv >/dev/null 2>&1; then
     useradd --system --no-create-home --shell /usr/sbin/nologin navi-tv
     echo "    created user navi-tv"
 fi
+
+# .env is gitignored, so `git pull` can add a key to .env.example and NEVER add
+# it to the real file. Any service that needs a new key therefore deploys
+# "successfully" onto a box where it cannot start. Check the keys this one
+# needs, by name, before installing a unit that would crash-loop without them.
+# Worth repeating for the next service that grows a config key.
+for k in TV_HOST TV_URL; do
+    grep -qE "^${k}=." "$REPO/.env" || {
+        echo "    !! $k is missing from $REPO/.env"
+        echo "       .env is gitignored, so the pull could not add it for you."
+        echo "       Copy the TV_* block out of .env.example, then re-run."
+        exit 1
+    }
+done
 # Created here rather than with the other state directories below, because
 # ProtectSystem=strict + ReadWritePaths means the unit refuses to start if this
 # path doesn't already exist, and the unit is started before that block runs.
@@ -61,6 +75,14 @@ fi
 # and its .env once at startup, so it keeps serving the OLD version until told
 # otherwise. Same trap as the Caddyfile bind mount further down.
 systemctl restart tv-launcher.service
+# And then actually look. A deploy that prints "done" while a service it just
+# started is dead is worse than one that fails, because you go and press the
+# button and blame the TV.
+sleep 1
+if ! systemctl is-active --quiet tv-launcher.service; then
+    echo "    !! tv-launcher is not running:"
+    journalctl -u tv-launcher.service -n 5 --no-pager | sed 's/^/       /'
+fi
 
 
 echo "==> state directories"

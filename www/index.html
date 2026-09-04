@@ -188,21 +188,32 @@ checked out on this box at <code>/srv/navi</code>.
     }, 4000);
 
     fetch('/api/tv/ocarina', { method: 'POST', cache: 'no-store' })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      // Read as text and parse by hand. When tv-launcher is down Caddy answers
+      // 502 with an empty body, and calling r.json() on that throws — which
+      // lands in .catch() and reports a network failure for what is actually a
+      // dead service on this box. Two different problems, two different fixes.
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var d = null; try { d = JSON.parse(t); } catch (e) { /* not ours */ }
+          return { status: r.status, ok: r.ok, d: d };
+        });
+      })
       .then(function (res) {
         clearTimeout(nudge);
-        if (res.ok && res.d.ok) {
+        if (res.ok && res.d && res.d.ok) {
           btn.className = 'card ok';
           msg.textContent = 'Sent. Press play on the TV.';
-        } else {
-          btn.className = 'card bad';
-          msg.textContent = res.d.detail || 'The TV did not answer.';
+          return;
         }
+        btn.className = 'card bad';
+        if (res.d && res.d.detail) msg.textContent = res.d.detail;
+        else if (res.status === 502) msg.textContent = 'tv-launcher is not running. On navi: systemctl status tv-launcher';
+        else msg.textContent = 'Unexpected answer from navi (HTTP ' + res.status + ').';
       })
       .catch(function () {
         clearTimeout(nudge);
         btn.className = 'card bad';
-        msg.textContent = 'tv-launcher is not responding on this box.';
+        msg.textContent = 'Could not reach navi at all. Is this page stale?';
       })
       .then(function () {
         btn.disabled = false;
