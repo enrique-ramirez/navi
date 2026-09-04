@@ -92,11 +92,33 @@ sudo smartctl -a -d sat /dev/sda    # note the -d sat
 1. Image Raspberry Pi OS Lite 64-bit. Put an empty file named `ssh` and a
    `userconf.txt` containing `username:hash` on the boot partition. Do not use
    `custom.toml`; see [gotchas.md](gotchas.md).
-2. Install Docker, clone this repo to `/srv/navi`.
-3. Restore `.env` from 1Password or the latest state backup.
-4. `sudo ./scripts/deploy.sh`.
-5. Restore `kuma.db` into `/srv/data/uptime-kuma/` if you want the monitors and
+2. Install Docker.
+3. Generate a fresh deploy key and add it to the repo on GitHub as read-only.
+   The old one isn't backed up anywhere on purpose, because regenerating it is
+   quicker than keeping another copy of a private key:
+
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/navi_deploy -N "" -C "navi deploy key"
+   cat ~/.ssh/navi_deploy.pub    # paste into Settings -> Deploy keys
+   ```
+
+   Then point ssh at it in `~/.ssh/config`:
+
+   ```
+   Host github.com
+       HostName github.com
+       User git
+       IdentityFile ~/.ssh/navi_deploy
+       IdentitiesOnly yes
+   ```
+4. Clone this repo to `/srv/navi`, owned by your user rather than root.
+5. Restore `.env` from 1Password or the latest state backup, `chmod 600`.
+6. `sudo ./scripts/deploy.sh`.
+7. Restore `kuma.db` into `/srv/data/uptime-kuma/` if you want the monitors and
    their history back rather than rebuilding eleven monitors by hand.
+8. Re-add the two ER605 policy routes for `.61` and `.62` if the router was also
+   rebuilt, then check `curl --interface 10.100.100.61 https://api.ipify.org`
+   returns the Telmex address.
 
 The state backups are in `/srv/backup` on navi and whatever copy you last pulled
 to the laptop. They hold `.env`, `kuma.db`, the blocklist sources, package
