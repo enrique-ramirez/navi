@@ -1,0 +1,49 @@
+[Unit]
+Description=Open Jean on the living room TV, on request from the landing page
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The first endpoint on this box. host-status.sh explains why that rule existed;
+# tv-launcher.py explains why this one is narrow enough to be worth the
+# exception. The sandboxing below is the other half of that argument.
+#
+# Not root, and not a login user: navi-tv is created by deploy.sh with
+# --system --no-create-home --shell /usr/sbin/nologin.
+User=navi-tv
+Group=navi-tv
+
+EnvironmentFile=/srv/navi/.env
+ExecStart=/usr/local/bin/tv-launcher.py
+Restart=on-failure
+RestartSec=5s
+
+# The token is the only thing this service writes, and /srv/data/tv is the only
+# place it may write it. ProtectSystem=strict makes the entire filesystem
+# read-only, then ReadWritePaths punches the one hole back.
+ProtectSystem=strict
+ReadWritePaths=/srv/data/tv
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# It talks to exactly two things: a TV over TLS and a loopback socket. It has no
+# business anywhere else, and this is the cheapest way to say so.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressAllow=127.0.0.1/32 10.100.100.0/24
+IPAddressDeny=any
+
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

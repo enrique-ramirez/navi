@@ -11,3 +11,6 @@
 *.tar.gz
 data/
 backups/
+
+# py_compile leaves these next to scripts/
+__pycache__/
