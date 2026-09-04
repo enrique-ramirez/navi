@@ -17,6 +17,21 @@ was bought to fix.
 
 And the Pi was already paid for. Consolidating recovers nothing.
 
+## i3-N305 instead of the N355 that was ordered
+
+The N355 was out of stock. The seller offered an i3-N305 in the same chassis at
+the same price with 500 MXN back, and that was accepted rather than restarting
+the search, because DDR5 prices in late 2026 made the bundled 32 GB most of the
+value of the order.
+
+It is close to a lateral move. Same 8 Gracemont cores, same 32 EU, same 15 W,
+same media engine, roughly 3% of CPU clock and 8% of GPU clock given up. The
+argument for buying above an N100 was cores and execution units for Immich, and
+the N305 has all of them. Details in [future-plans.md](future-plans.md).
+
+Two things this leaves open, both tracked there: confirm the BIOS actually sees
+32 GB when the box arrives, and confirm the 500 MXN refund lands after delivery.
+
 ## Pi-hole, not AdGuard Home
 
 AdGuard is easier to run. Pi-hole has a bigger community, more knobs, and there's

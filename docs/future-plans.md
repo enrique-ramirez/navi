@@ -42,15 +42,48 @@ symmetric cross-ISP monitoring.
 
 ## ocarina, the mini PC
 
-A KINGDEL N355 (Twin Lake, 8 cores, 32 GB DDR5, 1 TB NVMe, dual 2.5 GbE, Intel
-QuickSync). Intel rather than AMD specifically for QuickSync, which is what
-Jellyfin's own docs recommend; AMD's VAAPI path is the troublesome one, with worse
-quality, no AV1 decode and poor HDR tone mapping.
+A KINGDEL K12 with an Intel i3-N305 (Alder Lake-N, 8 cores, 32 GB DDR5, 1 TB
+NVMe, dual 2.5 GbE, Intel QuickSync). Ordered 2026-09-02 as an N355; the seller
+was out of stock and offered the i3-N305 in the same chassis at the same price,
+plus 500 MXN refunded after delivery. Accepted 2026-09-03.
 
-N355 over the cheaper N100 for the headroom: 8 cores instead of 4, 32 EU instead
-of 24. That margin is for Immich's machine-learning container, which is the
-hungriest thing on the roadmap. The RAM is already maxed and there's no upgrade
-path, since the board has a single SODIMM slot capped at 32 GB.
+Intel rather than AMD specifically for QuickSync, which is what Jellyfin's own
+docs recommend; AMD's VAAPI path is the troublesome one, with worse quality, no
+AV1 decode and poor HDR tone mapping.
+
+**The substitution costs almost nothing.** Both parts are 8-core, 8-thread
+Gracemont on Intel 7, 6 MB L3, 15 W, 32 EU of graphics, single-channel memory.
+The N355 turbos to 3.9 GHz against 3.8, and its iGPU clocks 1.35 GHz against
+1.25: about 3% of CPU and 8% of GPU. Twin Lake is a refresh of Alder Lake-N
+rather than a new architecture, so the media engine is the same one and the
+QuickSync argument is untouched.
+
+More to the point, the reason for buying up from the N100 survives intact. That
+reason was 8 cores instead of 4 and 32 EU instead of 24, for Immich's
+machine-learning container, which is the hungriest thing on the roadmap, and the
+N305 delivers both. Being the older part it also has three more years of kernel
+and driver history behind it, which for a Linux box is a mild point in its
+favour.
+
+**Verify the 32 GB on arrival, inside the return window.** Intel specifies both
+chips at 16 GB maximum. That number is a validation limit rather than a hard
+controller ceiling, and 32 GB SODIMMs are widely reported working on Alder
+Lake-N boards, but it is not universal. The seller stated in writing on the
+Amazon message thread that 32 GB is recognised and that other customers run this
+configuration; keep that thread, because it is the only thing backing the claim.
+Check the BIOS and `free -h` before anything else gets installed. Either way the
+RAM is maxed: one SODIMM slot, single channel, no upgrade path.
+
+**There is no second NVMe slot.** The board has two M.2 sockets, but the seller
+confirmed the second one is the E-key WiFi socket, not a drive socket. E-key is
+physically keyed differently from the M-key an NVMe needs, it carries a single
+PCIe lane rather than four, and its 2230 standoff leaves nowhere to anchor a
+2280 drive. Adapters exist; none of them are worth doing inside a chassis this
+size. Storage growth here is external, or the NAS.
+
+One question still worth asking the seller: some boxes in this class have a SATA
+header and room for a 2.5" drive. If this one does, that is the cheap expansion
+path.
 
 **One caveat to remember before blaming anything else.** The dual NICs are Intel
 i226-V, and early steppings had documented packet-drop and link-flap bugs,
@@ -90,8 +123,8 @@ for Linux and Docker images and about 100 GB for databases and thumbnails in lat
 phases, which leaves around 780 GB for music against a current library of 419 GB
 (349 GB sorted plus 70 GB unsorted). Comfortable, but the library is expected to
 grow fast now that adding to it is enjoyable. **Treat 600 GB as the trigger** to
-either fit a second NVMe (ask the seller whether the slot exists) or accelerate
-the NAS. Wire a disk-usage check into Uptime Kuma via a push monitor so that gets
+accelerate the NAS. The second-NVMe option is gone; the board's other M.2 socket
+is E-key WiFi. Wire a disk-usage check into Uptime Kuma via a push monitor so that gets
 noticed rather than discovered.
 
 **Migrating the library.** 419 GB currently lives on an old, untrusted external
