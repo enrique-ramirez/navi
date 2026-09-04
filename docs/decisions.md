@@ -134,6 +134,22 @@ every container.
 Reboots never happen automatically. This box is the flat's DNS and doesn't get to
 choose when it disappears. Monitor 11 asks you instead.
 
+## The status panel shows, it doesn't tell
+
+The vitals on `help.lan` are a static JSON written by a timer, not an endpoint.
+`host-status.sh` runs as root, and the gap between "a page showing root's view
+of the box" and "a page letting the LAN ask root questions" is the whole
+security model. Same rule that keeps a deploy button off that page.
+
+It also doesn't alert, and doesn't tail the journal. Kuma alerts; duplicating
+that would mean two systems with two opinions about what's wrong. A log tail
+would be an information-disclosure surface that grows every time some service
+logs a token, in exchange for a worse version of `journalctl -u`. What's shown
+instead is derived unit state, which can't leak a secret.
+
+The one thing it does that nothing else did: notice that `navi-backup.timer`
+has stopped running. Full reasoning in [monitoring.md](monitoring.md).
+
 ## Backup is config-only
 
 `/srv/stack` was 29 MB, but 12 MB of that is a regenerable blocklist and most of

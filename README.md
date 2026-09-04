@@ -17,7 +17,8 @@ spare. Nothing in the house could tell you that had happened. Now something can.
 | Uptime Kuma | `status.lan` | 11 monitors, alerts to ntfy on the phone |
 | Caddy | port 80 | reverse proxy, so everything has a name instead of a port |
 | `wan-check.timer` | every 5 min | the checks Kuma can't make itself |
-| landing page | `help.lan` | links and the runbook, also on the bare IP |
+| `host-status.timer` | every minute | samples this box's own vitals for the page |
+| landing page | `help.lan` | links, runbook and navi's vitals, also on the bare IP |
 
 ## Repo layout
 

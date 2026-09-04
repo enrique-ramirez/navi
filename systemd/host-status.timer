@@ -1,0 +1,12 @@
+[Unit]
+Description=Sample navi's vitals every minute
+[Timer]
+# A minute, not five. This is the panel you stare at while something is
+# actively wrong, and a temperature from four minutes ago is no use during a
+# thermal event. The script samples network counters for 2s and touches
+# nothing expensive, so the cost of the shorter interval is nil.
+OnBootSec=90s
+OnUnitActiveSec=1min
+AccuracySec=10s
+[Install]
+WantedBy=timers.target

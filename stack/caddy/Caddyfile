@@ -13,7 +13,10 @@
 # For devices that can't trust the internal CA, and as the always-works path.
 
 http://home.lan, http://help.lan, http://navi.lan, http://10.100.100.53 {
-	handle /status.json {
+	# Two files written by timers into /srv/data/www: repo-vs-origin state and
+	# this box's own vitals. Named matcher because `handle` takes one path.
+	@state path /status.json /host.json
+	handle @state {
 		root * /srv/status
 		file_server
 	}
@@ -93,7 +96,10 @@ http://music.lan, http://ocarina.lan {
 
 https://home.lan, https://help.lan, https://navi.lan {
 	tls internal
-	handle /status.json {
+	# Two files written by timers into /srv/data/www: repo-vs-origin state and
+	# this box's own vitals. Named matcher because `handle` takes one path.
+	@state path /status.json /host.json
+	handle @state {
 		root * /srv/status
 		file_server
 	}

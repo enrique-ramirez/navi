@@ -1,0 +1,5 @@
+[Unit]
+Description=Write navi's own vitals for the landing page
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/host-status.sh

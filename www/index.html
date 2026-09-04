@@ -2,8 +2,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>navi — home network</title>
 <style>
-:root{--bg:#faf9f7;--fg:#1a1a1a;--dim:#6b6b6b;--card:#fff;--line:#e4e2de;--accent:#2f6f4f;--warn:#8a4b2a}
-@media(prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e6e3;--dim:#9a9895;--card:#1e1e1e;--line:#2e2e2e;--accent:#7fc4a0;--warn:#d99b6c}}
+:root{--bg:#faf9f7;--fg:#1a1a1a;--dim:#6b6b6b;--card:#fff;--line:#e4e2de;--accent:#2f6f4f;--warn:#8a4b2a;--bad:#a33a2e}
+@media(prefers-color-scheme:dark){:root{--bg:#141414;--fg:#e8e6e3;--dim:#9a9895;--card:#1e1e1e;--line:#2e2e2e;--accent:#7fc4a0;--warn:#d99b6c;--bad:#e08b7f}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:820px;margin:0 auto;padding:40px 22px 70px}
@@ -16,6 +16,23 @@ a.card{display:block;padding:13px 15px;background:var(--card);border:1px solid v
 a.card:hover{border-color:var(--accent)}
 a.card b{display:block;font-size:14.5px;margin-bottom:2px}
 a.card small{color:var(--dim);font-size:12.5px}
+#host{display:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:10px}
+.stat{padding:11px 13px;background:var(--card);border:1px solid var(--line);border-radius:9px}
+.stat .k{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.stat .v{font-size:19px;font-weight:600;letter-spacing:-.015em;line-height:1.1}
+.stat .v i{font-size:12.5px;font-weight:400;font-style:normal;color:var(--dim);margin-left:3px}
+.stat .n{display:block;color:var(--dim);font-size:12px;margin-top:4px;line-height:1.35}
+.stat.warn{border-left:3px solid var(--warn);border-radius:0 8px 8px 0}
+.stat.warn .n{color:var(--warn)}
+.stat.bad{border-left:3px solid var(--bad);border-radius:0 8px 8px 0}
+.stat.bad .n{color:var(--bad)}
+.meter{display:block;height:3px;background:var(--line);border-radius:2px;margin-top:8px;overflow:hidden}
+.meter b{display:block;height:100%;background:var(--accent);border-radius:2px}
+.stat.warn .meter b{background:var(--warn)}
+.stat.bad .meter b{background:var(--bad)}
+.stale{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--bad);border-radius:0 8px 8px 0;padding:11px 15px;font-size:13px;margin:0 0 10px}
+.stale b{color:var(--bad)}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 td,th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
@@ -42,6 +59,16 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:v
   <a class="card" href="http://router.lan"><b>router.lan</b><small>ER605 — the gateway</small></a>
   <a class="card" href="http://music.lan"><b>music.lan</b><small>Jean — foobar2000 remote</small></a>
 </div>
+
+<section id="host">
+<h2>This box</h2>
+<div id="hostnote"></div>
+<div id="hostgrid" class="stats"></div>
+<p style="font-size:12px;color:var(--dim);margin:10px 0 0">
+Sampled every minute by <code>host-status.timer</code>. This is a view, not an
+alarm &mdash; <code>status.lan</code> is what wakes you.
+</p>
+</section>
 
 <h2>HTTPS on this network</h2>
 
@@ -142,6 +169,128 @@ checked out on this box at <code>/srv/navi</code>.
       el.style.display = 'block';
     })
     .catch(function () { /* status file missing: say nothing rather than lie */ });
+})();
+
+// Renders host.json, written by host-status.timer every minute.
+//
+// Every degraded tile carries a word as well as a colour. Colour alone is no
+// use to a third of the men who might read this over your shoulder, and it's no
+// use at all in the situation this panel is for, which is squinting at a phone
+// in a dark kitchen deciding whether to care.
+(function () {
+  var sect = document.getElementById('host'),
+      grid = document.getElementById('hostgrid'),
+      note = document.getElementById('hostnote');
+  if (!sect) return;
+
+  var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; };
+
+  function dur(s) {
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    if (d) return d + 'd ' + h + 'h';
+    if (h) return h + 'h ' + m + 'm';
+    return m + 'm';
+  }
+  function gb(kb) { var v = kb / 1048576; return v >= 100 ? v.toFixed(0) : v.toFixed(1); }
+  function mb(bytes) {
+    var v = bytes * 8 / 1e6;          // counters are bytes, links are quoted in bits
+    return v >= 10 ? v.toFixed(0) : v.toFixed(v >= 1 ? 1 : 2);
+  }
+  function pick(v, warn, bad) { return v >= bad ? 'bad' : v >= warn ? 'warn' : ''; }
+
+  // label, value, unit, note, class, optional 0-100 meter
+  function tile(k, v, u, n, cls, pct) {
+    return '<div class="stat ' + cls + '"><span class="k">' + esc(k) + '</span>' +
+      '<span class="v">' + esc(v) + (u ? '<i>' + esc(u) + '</i>' : '') + '</span>' +
+      (pct == null ? '' : '<span class="meter"><b style="width:' + Math.max(1, Math.min(100, pct)) + '%"></b></span>') +
+      '<span class="n">' + esc(n) + '</span></div>';
+  }
+
+  function render(d) {
+    var t = [];
+
+    // Temperature. The throttle word matters more than the number: bits 16-19
+    // are a record that it happened while nobody was watching.
+    var tc = d.throttled_now || [], te = d.throttled_ever || [];
+    t.push(tile('Temperature', d.temp_c, '\u00b0C',
+      tc.length ? 'now: ' + tc.join(', ')
+        : te.length ? 'since boot: ' + te.join(', ')
+        : 'no throttling',
+      tc.length ? 'bad' : te.length ? 'warn' : ''));
+
+    t.push(tile('Uptime', dur(d.uptime_s), '',
+      d.uptime_s < 3600 ? 'rebooted within the hour'
+        : 'since ' + new Date(d.booted).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+      d.uptime_s < 3600 ? 'warn' : ''));
+
+    var l1 = d.load[0], cores = d.cores || 1;
+    t.push(tile('Load', l1.toFixed(2), '',
+      d.load.join(' / ') + '  \u00b7  ' + cores + ' cores',
+      pick(l1 / cores, 1, 2), l1 / cores * 100));
+
+    var mUsed = d.mem_total_kb - d.mem_avail_kb, mPct = Math.round(mUsed / d.mem_total_kb * 100);
+    t.push(tile('Memory', gb(mUsed) + ' / ' + gb(d.mem_total_kb), 'GB',
+      mPct + '% used', pick(mPct, 85, 95), mPct));
+
+    // 85 is the same threshold wan-check.sh alerts on. Two numbers for one
+    // condition is how you end up trusting neither.
+    t.push(tile('Disk', gb(d.disk_used_kb) + ' / ' + gb(d.disk_total_kb), 'GB',
+      d.disk_pct + '% used', pick(d.disk_pct, 85, 95), d.disk_pct));
+
+    var n = d.net, linkBad = n.state !== 'up', linkSlow = n.link_mbit > 0 && n.link_mbit < 1000;
+    t.push(tile('Network', '\u2193' + mb(n.rx_bps) + '  \u2191' + mb(n.tx_bps), 'Mb/s',
+      linkBad ? n.iface + ' is ' + n.state
+        : linkSlow ? n.iface + ' negotiated ' + n.link_mbit + ' Mb/s, not 1000'
+        : n.iface + ' \u00b7 ' + (n.link_mbit || '?') + ' Mb/s link',
+      linkBad ? 'bad' : linkSlow ? 'warn' : ''));
+
+    var svc = d.services || [],
+        down = svc.filter(function (c) { return c.state !== 'running'; }),
+        rs = svc.filter(function (c) { return c.restarts > 0; });
+    t.push(tile('Containers', (svc.length - down.length) + ' / ' + svc.length, 'up',
+      down.length ? down.map(function (c) { return c.name + ' ' + c.state; }).join(', ')
+        : rs.length ? rs.map(function (c) { return c.name + ' restarted ' + c.restarts + '\u00d7'; }).join(', ')
+        : 'all running',
+      down.length ? 'bad' : rs.length ? 'warn' : ''));
+
+    // wan-check dying is loud, because Kuma's push monitors go stale. The other
+    // three are silent, and this tile is the only thing that notices.
+    var un = d.units || [],
+        bad = un.filter(function (u) { return u.timer !== 'active' || (u.result && u.result !== 'success'); });
+    t.push(tile('Timers', (un.length - bad.length) + ' / ' + un.length, 'ok',
+      bad.length ? bad.map(function (u) { return u.name + ': ' + (u.timer !== 'active' ? u.timer : u.result); }).join(', ')
+        : 'all firing',
+      bad.length ? 'bad' : ''));
+
+    var b = d.backup, age = b && b.age_min;
+    t.push(tile('Last backup', age == null ? 'never' : dur(age * 60), age == null ? '' : 'ago',
+      age == null ? 'no tarball in /srv/backup'
+        : b.count + ' kept \u00b7 ' + Math.round(b.size / 1024) + ' KB',
+      age == null || age > 4320 ? 'bad' : age > 2160 ? 'warn' : ''));
+
+    grid.innerHTML = t.join('');
+
+    // A frozen number that still looks live is the exact failure this whole
+    // project exists to catch. If the timer stopped, say so above the tiles
+    // rather than letting three-hour-old figures pass for current.
+    var age_s = (Date.now() - Date.parse(d.checked)) / 1000;
+    note.innerHTML = age_s > 180
+      ? '<div class="stale"><b>These readings are ' + dur(age_s) + ' old.</b> ' +
+        '<code>host-status.timer</code> has stopped sampling, so everything below is frozen. ' +
+        'Check <code>systemctl status host-status.timer</code>.</div>'
+      : '';
+    sect.style.display = 'block';
+  }
+
+  function load() {
+    fetch('/host.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(render)
+      .catch(function () { /* not deployed yet, or unreadable: show nothing */ });
+  }
+  load();
+  setInterval(load, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
 })();
 </script>
 

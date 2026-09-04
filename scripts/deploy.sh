@@ -15,6 +15,7 @@ echo "==> scripts"
 install -m 700 "$REPO/scripts/wan-check.sh"   /usr/local/bin/wan-check.sh
 install -m 700 "$REPO/scripts/navi-backup.sh" /usr/local/bin/navi-backup.sh
 install -m 700 "$REPO/scripts/repo-status.sh"  /usr/local/bin/repo-status.sh
+install -m 700 "$REPO/scripts/host-status.sh"  /usr/local/bin/host-status.sh
 install -m 755 "$REPO/scripts/thermal-test.sh" /usr/local/bin/thermal-test.sh
 
 echo "==> systemd units"
@@ -28,7 +29,7 @@ for u in "$REPO"/systemd/*; do
 done
 if [ "$changed" = 1 ]; then
     systemctl daemon-reload
-    systemctl enable --now wan-check.timer navi-backup.timer repo-status.timer >/dev/null
+    systemctl enable --now wan-check.timer navi-backup.timer repo-status.timer host-status.timer >/dev/null
 fi
 
 echo "==> state directories"

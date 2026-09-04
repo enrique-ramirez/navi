@@ -85,6 +85,75 @@ The threshold is 10 days, so one missed run is tolerated and two aren't, plus a
 floor on the domain count to catch an "update" that successfully downloaded an
 error page.
 
+## The status panel on help.lan
+
+Nine tiles on the landing page: temperature, uptime, load, memory, disk,
+network throughput, container states, timer health, and the age of the last
+backup. `host-status.timer` samples them every minute into
+`/srv/data/www/host.json` and the page reads that file.
+
+It is a **view, not an alarm**. Nothing here notifies. Kuma notifies. This is
+the page you open once something has already told you to look, or when someone
+in the flat says the internet feels slow and you want to know within five
+seconds whether navi is the reason.
+
+Same architecture as the repo-status banner, for the same reason: a timer writes
+a static file, Caddy serves it, the browser reads it. There is no endpoint.
+`host-status.sh` runs as root, and the distance between "a page that shows you
+root's view of the box" and "a page that lets the LAN ask root questions" is the
+entire security model.
+
+## What the panel deliberately doesn't have
+
+**No log tail.** It's the obvious next feature and it's a bad one. A journal
+excerpt on an unauthenticated page reachable by everything on the LAN is an
+information-disclosure surface that grows every time some service decides to log
+a token, and it isn't how debugging actually works: you SSH in and read the
+whole unit with context. What's on the panel instead is the derived half - is
+the timer active, did the last run succeed, when did it finish - which is the
+part you want at a glance and which cannot leak a secret.
+
+**No speed test.** "Network speeds" sounds like it should mean a throughput
+test, and a throughput test on a timer would saturate the line it's measuring,
+every minute, forever. The tile shows interface counters sampled two seconds
+apart, which is what navi is actually moving right now. The ISP lines are
+already measured end to end by monitors 6 and 7; nothing else in the house could
+tell you navi itself is the bottleneck.
+
+**No SMART.** The SSD's health is worth watching and doesn't belong here.
+Reallocated sectors move on a scale of months, `smartctl` on this enclosure
+needs `-d sat` (see [navi.md](navi.md)), and a value that changes four times a
+year has no business being re-read sixty times an hour. It belongs in a daily
+check that can push to Kuma. Not built yet.
+
+**No thresholds that disagree with wan-check.** The disk tile turns amber at
+85%, which is the number `wan-check.sh` already alerts on. Two different
+thresholds for one condition is how you end up trusting neither.
+
+## Two things the panel notices that nothing else does
+
+**Throttling since boot.** `vcgencmd get_throttled` bits 16-19 record that
+under-voltage or thermal throttling happened at some point, even if conditions
+are fine by the time you look. After the case and copper block that word should
+read `no throttling` forever, so if it ever doesn't, the cooling has regressed
+or the PSU has started sagging. Nothing else in the house keeps that record.
+
+**A backup that stopped happening.** `wan-check.timer` dying is loud: six push
+monitors go stale and Kuma shouts. `navi-backup.timer` dying is completely
+silent, and would stay silent until the day you needed a restore. The backup
+tile turns amber at 36 hours and red at three days. This is the single most
+useful thing on the panel and the reason it got built at all.
+
+## The staleness banner
+
+If `host.json` is more than three minutes old the panel says so, in red, above
+the tiles. This matters more than any individual number on it.
+
+A status display whose data source has died shows its last good reading forever,
+and a frozen 38 °C looks exactly like a healthy 38 °C. That's the silent-failure
+bug this entire project exists to fix, and building a new instance of it on the
+front page would be a poor joke. The panel would rather tell you it doesn't know.
+
 ## Testing
 
 Every alert path here has been fired deliberately, not assumed.
