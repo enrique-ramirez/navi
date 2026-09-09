@@ -215,12 +215,17 @@ checked out on this box at <code>/srv/navi</code>.
 
     // Temperature. The throttle word matters more than the number: bits 16-19
     // are a record that it happened while nobody was watching.
+    //
+    // 65 and 75 are the numbers wan-check.sh alerts on, and normal peak under
+    // four pinned cores is 51. Colouring the tile on anything else would mean
+    // the page and the phone disagreeing about the same reading.
     var tc = d.throttled_now || [], te = d.throttled_ever || [];
     t.push(tile('Temperature', d.temp_c, '\u00b0C',
       tc.length ? 'now: ' + tc.join(', ')
         : te.length ? 'since boot: ' + te.join(', ')
+        : d.temp_c >= 65 ? 'warm, normal peak is 51'
         : 'no throttling',
-      tc.length ? 'bad' : te.length ? 'warn' : ''));
+      tc.length ? 'bad' : pick(d.temp_c, 65, 75) || (te.length ? 'warn' : '')));
 
     t.push(tile('Uptime', dur(d.uptime_s), '',
       d.uptime_s < 3600 ? 'rebooted within the hour'

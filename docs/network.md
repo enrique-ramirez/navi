@@ -33,17 +33,70 @@ ocarina will take the last. Anything after that needs a small switch.
 |---|---|---|
 | Speed | 500/500 | 750/750 |
 | ER605 port | `WAN` | `WAN/LAN1` |
-| ER605 gets | `192.168.30.200` | `192.168.1.5` |
-| Public IP | `187.211.43.253` | `189.196.218.19` |
+| ER605 gets | `192.168.30.200` | `192.168.1.2` |
+| Public IP | dynamic, `prod-infinitum.com.mx` | dynamic, `megared.net.mx` |
 | Inbound | yes, ONT has a DMZ to the ER605 | no, modem is ISP-locked |
 
 Load balancing is bandwidth-weighted 500:750 with Application Optimized Routing
 on. Link Backup is deliberately empty.
 
-Megacable's public address is a real routable one, not carrier-grade NAT, which
-means asking them for bridge mode would probably get a public IP straight onto
-the ER605's WAN2. That would kill the double NAT and free the PS5 from being
-pinned to Telmex. Worth a phone call, not yet made.
+**Neither address is static.** Both changed after the cables were unplugged on
+2026-09-04, which is what broke monitors 6 and 7 and got them rewritten to match
+the ISP's reverse DNS instead of a literal address. Nothing else in the flat
+depends on the public IP - no port forwarding, no DDNS - so this costs nothing
+today, but it's the first thing to check against any future plan that assumes an
+address stays put.
+
+Asking Megacable for bridge mode would kill the double NAT and free the PS5 from
+being pinned to Telmex. Worth a phone call, still not made. **Probed on
+2026-09-07 and still unresolved** - [future-plans.md](future-plans.md) has the
+test that would settle it and what to ask.
+
+The evidence is genuinely split. `189.196.217.197` resolves to
+`customer-GDL-CGN-217-197.megared.net.mx`, and `CGN` in an ISP's own hostname
+usually means carrier-grade NAT. But a TCP traceroute from `.62` finds no
+`100.64/10` anywhere, which is the one unambiguous marker, and the HSI connection
+is native dual-stack rather than DS-Lite, which would have been carrier NAT by
+construction. Hops 3 to 8 are all RFC1918 `10.x`, and that proves nothing in
+either direction: carriers number access networks in `10.x` routinely, some run
+CGNAT out of `10/8` instead of the reserved range, and a traceroute cannot show
+where translation happens - it shows the interfaces that answered, not the
+boundary.
+
+The ZTE's WAN status page confirms `NAT: On` and a seven-day DHCP lease, but
+**does not show the WAN address**. Those fields exist in ZTE's firmware; the
+`Mega_FA86` customer login doesn't render them. Not being able to read your own
+WAN address is the reason this is still open.
+
+## IPv6
+
+Both lines deliver it. Neither delivers it anywhere useful yet.
+
+| | ER605 WAN address |
+|---|---|
+| Telmex | `2806:102e:29:7d23:c206:c3ff:fef0:5841/64` |
+| Megacable | `2806:261:482:112:c206:c3ff:fef0:5842/64` |
+
+`2806::/16` is LACNIC space, so those are real global addresses, not ULA. The
+host halves are EUI-64 derived from the WAN MACs - `C0-06-C3-F0-58-41` becomes
+`c206:c3ff:fef0:5841` once you flip the universal bit and insert `FF:FE` - which
+tells you the mechanism is SLAAC.
+
+That distinction is the whole story. SLAAC gives the ER605 one address for its
+own WAN interface. It is not a delegated prefix, and only a delegated prefix
+gives the router something to hand out. So navi has nothing but `fe80::`,
+`curl -6` has no route to try and exits 7, and IPv6 stops dead at the router.
+
+Worth fixing if Tailscale ends up relaying, because IPv6 has no carrier NAT and a
+global address at both ends deletes the traversal problem rather than working
+around it. Two things would have to be true and neither is confirmed: the
+upstream box has to do DHCPv6-PD rather than just advertising its own /64, and
+the ER605 has to request it.
+
+If it is fixable, delegate from Telmex only. IPv6 has no NAT, so two prefixes on
+one LAN means clients choose source addresses themselves and no policy route can
+make that choice match the WAN you wanted. Dual-WAN IPv6 is a different and worse
+problem than dual-WAN IPv4, not the same one again.
 
 ## Addressing
 
@@ -103,6 +156,21 @@ wireless.
 
 There's no bufferbloat. 698 Mbps down, 612 Mbps up, added latency under 1 ms. Don't
 propose QoS shaping to fix a problem that isn't there.
+
+**The two lines are not interchangeable for latency.** TCP traceroute to
+`1.1.1.1` from `.61` and `.62`, 2026-09-07:
+
+| | to `1.1.1.1` | Path |
+|---|---|---|
+| Telmex | 9.3 ms | public at hop 3, straight into Uninet |
+| Megacable | 46.7 ms | six RFC1918 hops, 33 ms of it before leaving Megacable |
+
+Megacable exits via Transtelco near the Juárez border rather than peering in
+Guadalajara, and has already burned 33 ms inside its own network by hop 5. Both
+figures are TCP, so neither is subject to the ICMP problem in
+[gotchas.md](gotchas.md). Prefer Telmex for anything latency-sensitive, and treat
+any unpinned measurement of "the internet" from here as a coin flip between the
+two.
 
 The Decos are app-only. No usable web UI, no SNMP, no API. Anything you want to
 know about the mesh, you get from the phone app or not at all.

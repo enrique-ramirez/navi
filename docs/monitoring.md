@@ -1,7 +1,7 @@
 # Monitoring
 
-Twelve monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
-phone. Six of them Kuma can run by itself; the other six are pushed by
+Thirteen monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
+phone. Six of them Kuma can run by itself; the other seven are pushed by
 `wan-check.sh` every five minutes because Kuma can't see what they need to see.
 
 ## The monitors
@@ -20,6 +20,7 @@ phone. Six of them Kuma can run by itself; the other six are pushed by
 | 10 | Gravity freshness | push | blocklist quietly going stale |
 | 11 | Needs attention | push | pending reboot, full disk, updates gone quiet |
 | 12 | SSH attempts | push | something on the LAN trying to get into navi |
+| 13 | Temperature | push | cooling regressing, or the PSU sagging |
 
 ## Why the obvious checks aren't enough
 
@@ -38,19 +39,66 @@ Monitors 6 and 7 are the ones that matter. Everything else is context.
 
 `navi` has two extra IPs on `eth0`. ER605 policy routes pin `.61` to Telmex and
 `.62` to Megacable. Every five minutes, `wan-check.sh` fetches the egress public
-IP from each source address and compares it to what it should be.
+IP from each source address and confirms it belongs to the ISP that line is
+supposed to use.
 
-That comparison is the interesting part. The check proves its own path on every
-run. If a policy route breaks, the monitor goes down with `ROUTE BROKEN - egress
-X expected Y` rather than quietly re-testing the surviving line and staying
-green. A monitor that can't tell you it's measuring the wrong thing is worse than
-no monitor.
+That confirmation is the interesting part. The check proves its own path on every
+run. If a policy route breaks, the monitor goes down with `WRONG LINE` rather
+than quietly re-testing the surviving line and staying green. A monitor that
+can't tell you it's measuring the wrong thing is worse than no monitor.
 
 It's HTTP rather than ping, and that isn't a preference. The ER605 only applies
 policy routing to tracked TCP sessions; UDP and ICMP fall back to load balancing
 even with Service Type set to ALL. A `ping -I` version of this check would sit
 green while testing whichever line the router felt like. Details in
 [gotchas.md](gotchas.md).
+
+## Why the check matches the ISP and not the address
+
+It used to compare against a literal public IP per line, held in `WAN1_EXPECT`
+and `WAN2_EXPECT`. That was wrong, and it took a power cycle to find out: the
+cables were unplugged for tidying on 2026-09-04, both lines came back on new
+addresses, and both monitors went red over a network that was working perfectly.
+
+Neither ISP gives us a static address. Nothing in the house had noticed because
+nothing depends on the public IP - no port forwarding, no DDNS - so the first
+thing to care was the monitor, and what it reported was a lie in the most
+expensive direction. A monitor that cries wolf after every power cut is one you
+learn to dismiss, and the whole point of this box is a monitor you believe.
+
+What is stable is the ISP. Both put their own domain in the reverse DNS and kept
+it across the lease change:
+
+| | before | after |
+|---|---|---|
+| Telmex | `187.211.43.253` | `187.213.253.225` |
+| | `dsl-…-dynamic.prod-infinitum.com.mx` | same suffix |
+| Megacable | `189.196.218.19` | `189.196.217.197` |
+| | `customer-GDL-CGN-….megared.net.mx` | same suffix |
+
+So `WAN1_ISP` and `WAN2_ISP` hold a PTR substring instead, and the check asks
+"did this leave by Telmex" rather than "did this leave from one exact address".
+
+**This is more informative than what it replaced, not just more durable.**
+`egress X expected Y` said exactly the same thing whether the lease had renewed
+or the line had died, which meant it couldn't distinguish the harmless case from
+the one the box exists for. A PTR belonging to the *other* ISP can only mean
+traffic pinned to this line is leaving by the other one, and that is the router
+having failed over - the silent ISP death, caught and named.
+
+**When the PTR can't be read it degrades instead of going red.** If the lookup
+fails, or `.env` hasn't been given the domains yet, the check falls back to a
+weaker invariant: two different ISPs cannot hand out the same public address, so
+if both source aliases egress the same one, policy routing has stopped
+separating them. That still catches a collapsed route. It cannot catch the two
+lines being swapped, so the message says `ISP unverified` rather than implying a
+confidence it doesn't have.
+
+**A changed public IP is not itself an alert.** It's in the message on every
+push, so Kuma's history has it, but nothing in the flat depends on that address
+and paging you about a DHCP renewal is how monitors become wallpaper. If
+anything ever does depend on it - a Tailscale exit node, a port forward - that
+changes and it becomes worth its own monitor.
 
 ## Alerting
 
@@ -187,6 +235,38 @@ has no business being recomputed every 28 seconds.
 This monitor becomes considerably more interesting the day Tailscale lands.
 Right now it watches a door that only opens from inside the flat.
 
+## Monitor 13, the one the panel couldn't make
+
+Temperature has been on the landing page since day one, and the page is a view.
+Nobody watches a view. The copper block working loose, a summer afternoon in a
+kitchen, dust in a passive case: all of them arrive as a number nobody is
+looking at, and the first symptom you'd actually notice is the box throttling
+and the flat saying the internet feels slow.
+
+**75 °C, not the SoC's 80 °C cap.** Assembled, navi peaks at 51.1 °C with all
+four cores pinned ([navi.md](navi.md)), so anything near 75 is the cooling
+having regressed rather than the box being busy. An alarm set at the cap fires
+after the throttling it was meant to prevent; this one has 24 °C of headroom
+over the worst load this machine has ever seen and still leaves 5 °C before the
+firmware does anything.
+
+**The since-boot throttle bits are deliberately not an alarm condition.** They
+never clear until a reboot, so a monitor that went down on them would sit red
+for a fortnight over one bad afternoon and be ignored by the end of the first
+day. They ride along in the message instead, which is where the panel already
+puts them. What does alarm is the "right now" half of the word: currently
+throttling, or currently under-voltage - and the message says which, because
+under-voltage is the power supply sagging and sends you to a different shelf
+than a heat problem does.
+
+**An unreadable thermal zone is not 0 °C.** It pushes down with `cannot read the
+thermal zone`, for the same reason the SSH check proves it can see the journal
+before believing a count of none. A comfortable zero from a sensor that has
+stopped answering is exactly the failure shape this box was bought to catch.
+
+The tile on `help.lan` turns amber at 65 and red at 75, the same two numbers.
+Two thresholds for one condition is how you end up trusting neither.
+
 ## Why the writer is faster than the reader
 
 28 seconds against a 30-second poll, and the mismatch is the point. Two clocks
@@ -228,6 +308,19 @@ Every alert path here has been fired deliberately, not assumed.
 Removing the `.61` alias produced `PENDING → DOWN` on the Telmex monitor while
 Megacable stayed up, then clean recovery. Dropping the gravity threshold to -1 day
 fired the staleness alert and recovered. Both reached the phone.
+
+The two newest paths, to fire the same way:
+
+```sh
+# WRONG LINE: point one line at the other ISP's domain and wait a tick
+sudo sed -i 's/^WAN1_ISP=.*/WAN1_ISP=megared.net.mx/' /srv/navi/.env
+# temperature: drop the alarm to below idle
+sudo sed -i 's/^TEMP_ALARM=75/TEMP_ALARM=30/' /usr/local/bin/wan-check.sh
+```
+
+Put both back afterwards. `TEMP_ALARM` lives in the deployed copy of the script,
+so `deploy.sh` will overwrite that edit on the next run anyway, which is the
+right way round.
 
 Do this after any change to the alerting path. An alarm that has never fired isn't
 an alarm, it's a decoration.

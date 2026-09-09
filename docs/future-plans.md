@@ -28,17 +28,47 @@ lying.
 
 ## Call Megacable about bridge mode
 
-Their public address is a real routable one, not carrier-grade NAT, so bridge mode
-would probably put a public IP straight onto the ER605's WAN2.
+**Lower the expectations, but the case is no longer closed.** The premise used to
+be that their public address is a real routable one rather than carrier-grade NAT,
+and the reverse DNS argued otherwise: `customer-GDL-CGN-217-197.megared.net.mx`,
+with `CGN` in an ISP's own hostname usually meaning what it looks like.
 
-Ask specifically: bridge mode (modo puente), whether you get a routable public
-address or CGNAT, whether it becomes DHCP or PPPoE, and whether it costs extra. If
-the answer is CGNAT, it's not worth doing.
+An afternoon of probing on 2026-09-07 failed to confirm that. No `100.64/10`
+appears anywhere in a TCP traceroute from `.62`, which is the one unambiguous
+CGNAT marker, and the HSI connection is native dual-stack rather than DS-Lite,
+which would have been carrier NAT by construction. The RFC1918 hops in between
+prove nothing either way. Evidence in [network.md](network.md).
+
+**Settle it before calling, with this test.** Plug a laptop into a spare LAN port
+on the ZTE, run `python3 -m http.server 8080`, forward TCP 8080 to it in the
+ZTE's UI, then open `http://189.196.217.197:8080` from a phone on LTE with Wi-Fi
+off. It touches no ER605 config, so both lines stay up and nothing in Kuma goes
+red, and it tests the thing you actually care about - inbound reachability -
+instead of inferring it from an address. Loads, and there's a routable address
+and the call is worth making. Times out, and it's CGNAT or their forwarding UI is
+decorative; either way it isn't.
+
+If you do call, ask functionally, because the frontline rep will not know the
+phrase CGNAT. In order, hanging up on the first bad answer: is the public IP
+exclusively mine or shared between customers, can I receive inbound connections
+at all, and only then bridge mode (modo puente), whether it becomes DHCP or
+PPPoE, and whether it costs extra.
+
+Add a smaller request to the same call: the modem's admin account. The ZTE's WAN
+status page has IPv4 address, gateway and DNS fields in firmware and the
+`Mega_FA86` customer login doesn't render them. Not being able to read your own
+WAN address is what left this unresolved.
+
+Worth knowing either way: the address is dynamic, confirmed on 2026-09-04 when a
+power cycle changed both lines' public IPs. But the DHCP lease is seven days and
+it came back as the same `189.196.217.197`, so it's stickier than "dynamic"
+implies. Don't build on it staying put; don't expect it to move often either.
 
 Take an ER605 config backup first. The dual-WAN setup took an evening to get right.
 
 What it buys: no more double NAT, the PS5 freed from being pinned to Telmex, and
-symmetric cross-ISP monitoring.
+symmetric cross-ISP monitoring. **Not** remote access - Tailscale gives you that
+regardless of the answer, so don't sequence one behind the other.
 
 ## ocarina, the mini PC
 
@@ -171,8 +201,49 @@ kind of stack.
 
 Tailscale. No port forwarding, no DMZ, no DDNS, and it dissolves the
 Telmex-only-accepts-inbound asymmetry entirely, because nothing ever accepts
-inbound. It may also delete Navidrome from the plan: over Tailscale, Jean plus
-beefweb plus `foo_jean` is the remote music server.
+inbound. It works behind CGNAT and double NAT, so none of it is blocked on the
+Megacable question above. It may also delete Navidrome from the plan: over
+Tailscale, Jean plus beefweb plus `foo_jean` is the remote music server.
+
+The step-by-step procedure is in [tailscale.md](tailscale.md), written to be
+stopped and resumed at any point. The rest of this section is why it's shaped
+that way.
+
+**Install it and run `tailscale netcheck` before designing anything around it.**
+That one command reports the mapped addresses, whether the mapping varies, the
+nearest DERP and whether UDP works at all - which is most of what an afternoon of
+ISP archaeology was trying to infer. It changes no router config and forwards no
+ports, so it is cheap to try and trivial to undo.
+
+**The dual-WAN problem to look for.** Tailscale's data plane is UDP, and
+[gotchas.md](gotchas.md) records that ER605 policy routing is TCP only. So the
+`.61`/`.62` trick cannot pin Tailscale to a line: its STUN probes leave by both
+WANs and come back with two different mapped addresses, which Tailscale reads as
+a hard NAT and answers by falling back to a DERP relay. The 9.3 ms versus 46.7 ms
+gap between the lines makes it worse - an unpinned tunnel has erratic latency
+even when it does connect directly.
+
+If `netcheck` confirms it, the options in preference order: check whether current
+ER605 firmware fixes the Service-Type-ALL bug (running 1.3.2 Build 20251030 as of
+2026-09-07); get IPv6 delegated to the LAN, which deletes NAT traversal from the
+problem rather than working around it; or fill in Link Backup with Telmex primary
+and give up the aggregate bandwidth. This is the first thing that has made Link
+Backup's deliberate emptiness worth revisiting.
+
+**Test from a phone on LTE with Wi-Fi off, never from the flat's Wi-Fi.** Two
+Tailscale nodes on the same LAN find each other locally and connect direct, so a
+test run from inside the house is green and meaningless - the same failure mode
+as the per-WAN ping monitors in gotchas.
+
+Three things will break before reachability does. `.lan` names only resolve
+remotely if Pi-hole is pushed as the tailnet's DNS with a split-DNS route, which
+means Pi-hole listening on `tailscale0` and accepting queries from
+`100.64.0.0/10`; its default interface setting refuses that, and this is the
+likeliest failure of the lot. Advertising `10.100.100.0/24` as a subnet route is
+convenient but re-exposes everything the standing rule below exists to protect,
+so per-host installs are the narrower answer. And the Caddy root is already on
+the MacBook, so HTTPS will look fine there while telling you nothing about a
+device that doesn't have it - test from the phone.
 
 If browser access without installing a client is ever needed, Cloudflare Tunnel
 is the fallback. Read its free-tier terms first: section 2.8 prohibits streaming
@@ -180,7 +251,9 @@ significant video, so it would cover photos and files but not Jellyfin.
 
 Standing rule regardless: never port-forward SSH, beefweb or `foo_jean` on the
 ER605. One of them has no authentication at all and the other rewrites files in
-the library.
+the library. Tailnet ACLs are that same rule in a different place, so write them
+before the first remote connection - "everyone on the tailnet" includes every
+phone you will ever lose.
 
 ## NAS, eventually
 

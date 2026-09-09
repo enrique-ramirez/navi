@@ -59,20 +59,62 @@ If it turns out to be a whole category of breakage, the blocklist choice is in
 [decisions.md](decisions.md); dropping back to a lighter HaGeZi tier is a one-word
 change in `.env`.
 
-## "ROUTE BROKEN" alert
+## "WRONG LINE" alert
 
-The ER605 policy route for `.61` or `.62` stopped working, so a per-WAN check is
-measuring the wrong line. Monitoring is degraded, the network is fine.
+Traffic from `.61` or `.62` left by the other ISP. Either that line is down and
+the router failed it over, or its policy route stopped applying.
 
-Check the rules under Transmission → Routing → Policy Routing, then verify:
+The message names the ISP it actually left by. Check which case you're in:
 
 ```sh
-curl -s --interface 10.100.100.61 https://api.ipify.org   # expect 187.211.43.253
-curl -s --interface 10.100.100.62 https://api.ipify.org   # expect 189.196.218.19
+for src in 10.100.100.61 10.100.100.62; do
+  ip=$(curl -s --interface $src https://api.ipify.org)
+  echo "$src -> $ip  $(dig +short -x $ip)"
+done
 ```
 
-If the aliases are missing entirely, `ip -br addr show eth0` will show it. They're
-persisted in NetworkManager on the `Wired connection 1` profile.
+`.61` should come back `prod-infinitum.com.mx` and `.62` `megared.net.mx`. The
+addresses themselves change on any power cut and mean nothing on their own; the
+domain is the part that matters.
+
+If both come back the same ISP, that line is genuinely down - check the modem's
+own lights before touching the router. If they come back swapped or one fails
+entirely, it's the policy route: Transmission → Routing → Policy Routing. If the
+source aliases are missing altogether, `ip -br addr show eth0` will show it;
+they're persisted in NetworkManager on the `Wired connection 1` profile.
+
+## "ROUTE BROKEN - both lines egress ..." alert
+
+The fallback check fired: reverse DNS couldn't be read, so the monitor fell back
+to proving the two lines are at least distinct, and they weren't. Both source
+aliases are leaving by the same line, so policy routing has collapsed entirely.
+
+Same place to look as above. If the monitors also say `ISP unverified`, the PTR
+lookups are failing too, which usually means Pi-hole rather than the router -
+check monitor 8 before blaming the ER605.
+
+## "navi · temperature"
+
+Assembled, this box peaks at 51 °C with all four cores pinned. 75 means
+something about the cooling has changed.
+
+```sh
+vcgencmd measure_temp
+vcgencmd get_throttled     # 0x0 is what you want
+uptime                     # is something actually pegging the CPU?
+```
+
+In rough order of likelihood: something is spinning at 100% and shouldn't be
+(check `top`), the case has ended up somewhere with no airflow or next to the
+hob, or the copper block has worked loose and needs reseating with fresh MX-4.
+
+If the message says **UNDER-VOLTAGE**, it is not a heat problem at all. The
+CanaKit 3.5 A supply was clean through a full `stress-ng` run, so a sagging rail
+means the supply or its cable has degraded. Swap it before debugging anything
+else; under-voltage is the cause of most mysterious Pi corruption.
+
+`scripts/thermal-test.sh` re-runs the full load test if you want numbers to
+compare against the ones in [navi.md](navi.md).
 
 ## "navi · needs attention"
 
@@ -147,10 +189,11 @@ sudo smartctl -a -d sat /dev/sda    # note the -d sat
 5. Restore `.env` from 1Password or the latest state backup, `chmod 600`.
 6. `sudo ./scripts/deploy.sh`.
 7. Restore `kuma.db` into `/srv/data/uptime-kuma/` if you want the monitors and
-   their history back rather than rebuilding twelve monitors by hand.
+   their history back rather than rebuilding thirteen monitors by hand.
 8. Re-add the two ER605 policy routes for `.61` and `.62` if the router was also
-   rebuilt, then check `curl --interface 10.100.100.61 https://api.ipify.org`
-   returns the Telmex address.
+   rebuilt, then check that `.61` leaves by Telmex:
+   `ip=$(curl -s --interface 10.100.100.61 https://api.ipify.org); dig +short -x $ip`
+   should end in `prod-infinitum.com.mx`.
 
 The state backups are in `/srv/backup` on navi and whatever copy you last pulled
 to the laptop. They hold `.env`, `kuma.db`, the blocklist sources, package

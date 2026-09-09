@@ -14,7 +14,7 @@ spare. Nothing in the house could tell you that had happened. Now something can.
 | Service | Reachable at | Does |
 |---|---|---|
 | Pi-hole | `dns.lan` | DNS for the flat, ad blocking, local names |
-| Uptime Kuma | `status.lan` | 12 monitors, alerts to ntfy on the phone |
+| Uptime Kuma | `status.lan` | 13 monitors, alerts to ntfy on the phone |
 | Caddy | port 80 | reverse proxy, so everything has a name instead of a port |
 | `wan-check.timer` | every 5 min | the checks Kuma can't make itself |
 | `host-status.timer` | every 28 sec | samples this box's own vitals for the page |
@@ -81,4 +81,5 @@ password or a token.
 | [decisions.md](docs/decisions.md) | Why it's built this way |
 | [gotchas.md](docs/gotchas.md) | The things that cost hours |
 | [future-plans.md](docs/future-plans.md) | What's next, including the mini PC |
+| [tailscale.md](docs/tailscale.md) | Remote access, the procedure, not yet run |
 | [hosting.md](docs/hosting.md) | Domains, email, the public sites, the offsite copy |

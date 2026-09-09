@@ -70,6 +70,18 @@ Cloudflare is the fastest resolver here by a clear margin. The Kuma ping monitor
 later showed the same address at 10.2 ms after the load balancer reshuffled, so
 even the ping number wasn't stable. Don't pick resolvers by ping.
 
+**Update 2026-09-07: the old note was right and the reasoning here was wrong.**
+TCP traceroute per line puts Megacable at 46.7 ms to `1.1.1.1` against Telmex's
+9.3 ms - which is the 55-versus-11 split the old notes described, near enough.
+Cloudflare does deprioritise ICMP; that true fact was deployed as a wrong
+explanation. The two measurements disagreed because they left by different WANs,
+and the load balancer decides that, not you.
+
+The conclusion survives, Cloudflare is still the right resolver, but the lesson
+generalises well past resolvers: **any unpinned measurement of "the internet"
+from this network measures whichever line the load balancer happened to pick.**
+Pin the source to `.61` or `.62` and use TCP, or don't quote the number.
+
 ## Two ways to misread whether a domain is blocked
 
 Both were made during the HaGeZi switch, in opposite directions, and both produced
