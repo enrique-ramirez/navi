@@ -80,6 +80,6 @@ password or a token.
 | [runbook.md](docs/runbook.md) | When something breaks |
 | [decisions.md](docs/decisions.md) | Why it's built this way |
 | [gotchas.md](docs/gotchas.md) | The things that cost hours |
-| [future-plans.md](docs/future-plans.md) | What's next, including the mini PC |
+| [future-plans.md](docs/future-plans.md) | What's next: the mini PC, the staged storage buy, the NAS |
 | [tailscale.md](docs/tailscale.md) | Remote access, the procedure, not yet run |
 | [hosting.md](docs/hosting.md) | Domains, email, the public sites, the offsite copy |

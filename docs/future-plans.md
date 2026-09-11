@@ -157,6 +157,12 @@ accelerate the NAS. The second-NVMe option is gone; the board's other M.2 socket
 is E-key WiFi. Wire a disk-usage check into Uptime Kuma via a push monitor so that gets
 noticed rather than discovered.
 
+In practice the answer to this arrived early. The staged storage plan below puts
+a 16 TB disk on ocarina in October 2026, so the music never lives on the NVMe and
+the NVMe holds only the OS, containers and databases. Keep the trigger anyway: it
+is now the number that says the USB disk has become the bottleneck rather than
+the NAS.
+
 **Migrating the library.** 419 GB currently lives on an old, untrusted external
 drive. Three rules, all load-bearing. Check SMART before copying, because
 reallocated or pending sectors mean `ddrescue` is a better tool than a plain copy.
@@ -179,10 +185,13 @@ ln -s /srv/music ~/fb2k/dosdevices/f:
 
 Get that wrong and 30,441 tracks come up dead.
 
-**Start offsite backup when the music lands, not when the NAS arrives.** Every
-album added after the migration exists exactly once, on a consumer NVMe, in a
-flat. 419 GB on Backblaze B2 is about $2.50/month, and `restic` or `rclone` on a
+**Start offsite backup when the music lands, not when the NAS arrives.** That is
+October 2026 under the staged plan below. Every album added after the migration
+exists exactly once, on a single consumer drive in a USB enclosure, in a flat.
+419 GB on Backblaze B2 is about $2.50/month, and `restic` or `rclone` on a
 schedule gives a real three-copies-two-media-one-offsite position immediately.
+Seeding 419 GB up a residential Mexican line is a multi-day job, so start it the
+same week rather than treating it as a follow-up task.
 
 **What changes on navi when it lands:** two values in `.env`, `MUSIC_BACKEND` and
 `MUSIC_FOOJEAN`, from `10.100.100.20` to `10.100.100.50`. Both listeners need
@@ -196,6 +205,105 @@ transcoding). Immich (hardest; Google Takeout is genuinely painful and the ML
 container is the RAM-hungriest thing on the roadmap). Files, where Syncthing is
 the simpler answer and Nextcloud is the most commonly regretted piece of this
 kind of stack.
+
+## Storage, staged from October to December 2026
+
+Storage is the expensive part of everything left on this list. Rather than wait
+to afford a populated NAS in one purchase, it comes in three monthly pieces, and
+the first drive does real work from the day it arrives instead of sitting in a
+box waiting for the others.
+
+**October 2026: the first 16 TB drive, hanging off ocarina over USB.** A UGREEN
+3.5" USB 3.0 enclosure, about 650 MXN, with its own 12 V brick rather than bus
+power, which a 3.5" drive needs. The music migration lands here instead of on the
+NVMe. Offsite backup starts the same week.
+
+**November 2026: the second 16 TB drive.** It does nothing but burn-in until
+December, and burning it in now rather than then is the whole point.
+
+**December 2026: the NAS.** Both drives move inside it and the enclosure is
+demoted to the burn-in rig for every disk bought after.
+
+**USB is not a compromise at this scale.** A 16 TB 7200 RPM drive does about
+260 MB/s sequential and USB 3.0 gives roughly 400 MB/s in practice, so the bridge
+is not the bottleneck even during the 419 GB copy. Jean streams Opus at 256 kbps.
+There are four orders of magnitude of headroom. What matters is the bridge chip,
+not the speed, and that is a different question entirely - see
+[decisions.md](decisions.md) for why the same reasoning does not extend to a
+four-bay USB enclosure as the permanent answer.
+
+navi already paid for the bridge lesson: its enclosure claimed an ASM1153E and is
+actually a Realtek `0bda:9201`. So run `lsusb` on arrival and believe it over the
+listing. A JMicron JMS578 needs `usb-storage.quirks=VID:PID:u`; Realtek and
+ASMedia need nothing. SMART needs `-d sat` either way, exactly as in
+[navi.md](navi.md), and a health check that forgets the flag reports success
+while measuring nothing.
+
+**Mount it at `/srv/music` and never move that path.** The Wine prefix maps drive
+F to `/srv/music` and the portable foobar2000 config's `F:\` paths resolve
+through it. If the USB drive is `/srv/music` in October and the NFS share is
+`/srv/music` in December, foobar2000 never learns the NAS arrived. Move the path
+instead and it is the same 30,441-dead-tracks failure described above.
+
+Two guards, because a USB dropout is the realistic failure here and it should
+fail loudly rather than destructively. `nofail` in fstab, so a missing drive
+can't block boot. And `RequiresMountsFor=/srv/music` on the foobar2000 unit, so
+it can't start against an empty directory and rescan the library into nothing.
+
+**Watch heat and head parking.** The enclosure is sealed passive plastic with no
+fan, holding an enterprise 7200 RPM drive 24/7, which is a warmer combination
+than these cases are usually sold for. Stand it upright, keep it off the top of
+ocarina, and put SMART attribute 194 on the same Kuma push monitor as the
+disk-usage check. Sustained above about 50 °C, add a fan. Separately, enclosures
+in this class spin down on idle and usually don't pass `hdparm -B`/`-S` through
+the bridge, so read `Load_Cycle_Count` after the first week and extrapolate
+against the drive's 600k rating.
+
+**Burn in every drive the week it arrives, not the week it gets used.** A SMART
+long test plus a `badblocks -wsv` write-verify pass is 24 to 48 hours on a 16 TB
+drive. Left until December, the November drive's 30-day return window closes
+before it is ever powered on, which is how you find a DOA disk with no recourse.
+The enclosure exists partly for this.
+
+**The December assembly, in order, never below two copies.** Second drive into
+the NAS, create the pool single-disk, copy from the first drive over USB, verify
+with checksums, pull the first drive out of the enclosure, `zpool attach` to make
+it a mirror. The old external drive stays untouched as the third copy until the
+mirror has resilvered and scrubbed clean.
+
+**One IronWolf Pro and one Red Pro, not two of either**, with the IronWolf Pro
+bought first. Reasoning in [decisions.md](decisions.md).
+
+**Check the price before committing.** A 16 TB IronWolf Pro listed at 19,422 MXN
+on Amazon MX in September 2026, against roughly €495 in Europe for the same model,
+which is a wider gap than normal import markup. Cyberpuerta is in Guadalajara and
+worth comparing. On Amazon, check who the seller actually is, because bare-drive
+FFP listings from third parties are a known relabel route. Compare MXN per
+terabyte across 12, 14 and 18 TB while you are there; drive prices are broadly
+elevated in late 2026 and 16 TB may not be the sweet spot.
+
+## The NAS itself
+
+A UGREEN NASync DXP4800 Plus, wiped and running TrueNAS SCALE. Four bays, all
+HDD, 2× 16 TB mirrored to start and a second mirror vdev added later. SSDs buy
+nothing for the bulk pool: media is large sequential reads, an HDD already does
+more than 2.5 GbE carries, and 16 TB SSDs are enterprise parts at ten times the
+price per terabyte. The M.2 slots take a small NVMe for databases and metadata,
+where SSD speed is real and costs $60 rather than $3,000. Why this box and not a
+Synology, a QNAP or a USB enclosure is in [decisions.md](decisions.md), as is
+TrueNAS over Unraid.
+
+It is a disk shelf and nothing else. ocarina keeps every service - foobar2000,
+Jellyfin, Immich, all of it - and the NAS runs TrueNAS alone. That is the same
+separation [decisions.md](decisions.md) already requires of navi and ocarina,
+applied a third time.
+
+One hard rule when it arrives: databases and caches stay local, bulk media goes to
+the NAS. Immich explicitly warns against its Postgres living on a network share,
+and it will corrupt.
+
+Two drives in one chassis is not a backup. Tier by replaceability: pay to back up
+photos, documents and music, don't pay to back up a film library you can re-rip.
 
 ## Remote access, when it's wanted
 
@@ -255,29 +363,16 @@ the library. Tailnet ACLs are that same rule in a different place, so write them
 before the first remote connection - "everyone on the tailnet" includes every
 phone you will ever lose.
 
-## NAS, eventually
-
-Four bays, all HDD, starting with 2× 16 TB mirrored and a second pair added later.
-SSDs buy nothing here: media is large sequential reads, an HDD already does more
-than 2.5 GbE carries, and 16 TB SSDs are enterprise parts at ten times the price
-per terabyte. Put a small NVMe in for databases and metadata, where SSD speed is
-real and costs $60 rather than $3,000.
-
-DIY with TrueNAS SCALE or Unraid rather than Synology, which has turned hostile
-with drive lock-in and escalating software restrictions.
-
-One hard rule when it arrives: databases and caches stay local, bulk media goes to
-the NAS. Immich explicitly warns against its Postgres living on a network share,
-and it will corrupt.
-
-Two drives in one chassis is not a backup. Tier by replaceability: pay to back up
-photos, documents and music, don't pay to back up a film library you can re-rip.
-
 ## UPS and graceful shutdown
 
 CyberPower CP1500PFCLCD, chosen for pure sine wave output. ATX supplies with
-active PFC (which a DIY NAS will likely have) can cut out or buzz on the stepped
-sine that cheaper units produce.
+active PFC can cut out or buzz on the stepped sine that cheaper units produce.
+
+That premise weakened when the NAS stopped being a DIY ATX build: the UGREEN, the
+mini PC and navi all run from external DC bricks, which are switch-mode and far
+more tolerant of a stepped waveform. Keep the pure sine unit anyway. It costs
+little more, it removes a whole class of thing to debug at 3am, and it leaves
+room for a future ATX machine without revisiting the decision.
 
 NUT for graceful shutdown, with navi as the master: always on, 5 W, never touched,
 and already the monitoring box, so Kuma can alert on power events. That requires

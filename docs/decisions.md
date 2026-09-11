@@ -32,6 +32,72 @@ the N305 has all of them. Details in [future-plans.md](future-plans.md).
 Two things this leaves open, both tracked there: confirm the BIOS actually sees
 32 GB when the box arrives, and confirm the 500 MXN refund lands after delivery.
 
+## TrueNAS SCALE, not Unraid
+
+Unraid is the obvious fit for buying disks one at a time, which is exactly what
+the staged plan in [future-plans.md](future-plans.md) does. That argument lost
+anyway.
+
+The target layout is 2× 16 TB mirrored, then a second mirror vdev. ZFS does that
+cleanly and it needs none of Unraid's incremental flexibility, so the flexibility
+would be paid for and not used.
+
+What decides it is the failure this whole project keeps circling: a failing drive
+returning silently corrupted data on a read, discovered years later. ZFS
+checksums every block and scrubs on a schedule, so the corruption surfaces while
+there is still a good copy to repair from. Unraid's default parity detects
+nothing until asked. TrueNAS is also free where Unraid is a paid licence.
+
+## UGREEN running TrueNAS, not Synology, QNAP, or a USB enclosure
+
+Synology is out on exit cost, not feature bloat. Declining to install Synology
+Photos costs nothing; drive lock-in on recent models and a track record of
+removing features from hardware people already own is the real problem, and it is
+the same test [hosting.md](hosting.md) applies to every other vendor here. QNAP
+is out on security, having been the target of repeated ransomware campaigns
+against internet-facing units.
+
+The UGREEN NASync DXP4800 Plus is an x86 machine: four bays, dual 2.5 GbE, M.2
+slots, and a vendor that supports installing another OS rather than fighting it.
+Its own software is irrelevant because it gets wiped on day one, so the bet is
+only on the sheet metal and the PSU, which is the right size of bet for a new
+entrant. DIY with a Jonsbo N4 and an ITX board is cheaper and more repairable,
+and was rejected because the interesting work here is software and four
+migrations are already queued behind this one.
+
+A multi-bay USB enclosure is the tempting cheap answer, around 4,000 MXN against
+16,000, and it is the wrong one. The price gap is honest: it buys sheet metal, a
+PSU and one USB-to-SATA bridge with a port multiplier, where the UGREEN buys a
+CPU, RAM, networking and direct SATA access. Three things follow. Its RAID modes
+live in the bridge in a proprietary on-disk format, so the array is readable only
+by an identical enclosure, which is unrecoverable lock-in in the one layer that
+cannot afford any. Every bay shares a single 5 Gbps link, which is fine for
+streaming and bad during a resilver. And USB bridges reset, dropping a disk off
+the bus long enough for ZFS to suspend the pool - an acceptable, reversible risk
+on one disk for three months, not the permanent home for irreplaceable photos.
+
+There is no third option. ocarina has no PCIe slot and its second M.2 is E-key
+WiFi, so a real HBA cannot be added. It is USB or a separate machine.
+
+## One IronWolf Pro and one Red Pro, not two of either
+
+On paper they are the same drive: 7200 RPM, CMR, helium-sealed, 550 TB/year
+rated, five-year warranty. Backblaze's figures put both vendors' modern 16 TB
+helium drives under 1% AFR, and the WD SMR affair was Red non-Pro at 2-6 TB,
+which has nothing to do with either of these.
+
+Buying one of each decorrelates firmware bugs and batch defects, which is the
+failure a mirror cannot survive: two identical disks under identical load dying
+days apart. ZFS does not care that the halves are different models as long as the
+capacities match. Buying them a month apart, which the staged plan does for cash
+flow reasons, decorrelates manufacturing batches on top of that.
+
+The IronWolf Pro is bought first because it includes three years of Seagate
+Rescue data recovery and WD offers no equivalent, and the first drive is the one
+that spends October to December 2026 in a passive plastic enclosure holding the
+only fast copy of the library. The cost is a few watts, a few degrees and some
+noise, in a flat. That is the trade.
+
 ## Pi-hole, not AdGuard Home
 
 AdGuard is easier to run. Pi-hole has a bigger community, more knobs, and there's
