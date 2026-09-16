@@ -225,3 +225,26 @@ rather than approximate.
 
 Two copies for two failure modes. The daily local snapshot covers a bad edit,
 which is much the likelier failure. The copy on the laptop covers the SSD dying.
+
+The 90 days of vitals history in `/srv/data/history` are deliberately left out
+too. It's up to 22 MB against a backup measured in KB, and losing it costs a
+chart, not a rebuild.
+
+## Vitals history as files, not a metrics stack
+
+Each tile on the panel opens 24 hours, 7 days or 90 days of history. That is
+the textbook job for Prometheus and Grafana, or Netdata, and each of those is a
+resident service with its own dashboard, its own port and its own memory
+footprint, on the box whose whole job is not falling over.
+
+What was built instead is the panel's existing shape stretched over time.
+`host-status.sh` already had every number; it appends them as one CSV line per
+sample to a file per day. `host-history.sh` runs every 5 minutes, rolls those
+up into three static JSON files, and deletes days past 90. The page draws them
+as plain SVG. No daemon, no database, no endpoint, and retention is `rm`.
+
+Two things the off-the-shelf tools would have got wrong for this box. Buckets
+keep their max next to their average, because an hourly average hides the
+temperature spike you opened the chart to find. And downtime comes from the
+samples, not from a scraper noticing a target vanish: the scraper lives on the
+same box, so it can't tell you navi was off.

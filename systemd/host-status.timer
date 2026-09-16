@@ -7,9 +7,9 @@ Description=Sample navi's vitals every 28 seconds
 # that's slightly faster makes the offset precess instead, so the age of what
 # you see sweeps the range rather than sticking at the worst end.
 #
-# The 2s the script spends sampling network counters is NOT what's being
-# compensated for here. OnUnitActiveSec measures from activation, not from
-# completion, so runtime sits inside the period rather than adding to it.
+# The script's own runtime is NOT what's being compensated for here.
+# OnUnitActiveSec measures from activation, not from completion, so runtime
+# sits inside the period rather than adding to it.
 #
 # AccuracySec is what actually needs the margin. The default is 1min and even
 # 10s would let systemd defer this into a 29-39s swing, which is worse than no

@@ -137,7 +137,7 @@ error page.
 ## The status panel on help.lan
 
 Ten tiles on the landing page: temperature, uptime, load, memory, disk,
-network throughput, container states, timer health, and the age of the last
+network throughput, container states, timer health, the age of the last
 backup, and the last SSH login. `host-status.timer` samples them every 28
 seconds into
 `/srv/data/www/host.json`; the page re-reads that file every 30 seconds and
@@ -166,8 +166,8 @@ part you want at a glance and which cannot leak a secret.
 
 **No speed test.** "Network speeds" sounds like it should mean a throughput
 test, and a throughput test on a timer would saturate the line it's measuring,
-every minute, forever. The tile shows interface counters sampled two seconds
-apart, which is what navi is actually moving right now. The ISP lines are
+every minute, forever. The tile shows the interface counters' movement since the
+previous sample, which is what navi is actually moving. The ISP lines are
 already measured end to end by monitors 6 and 7; nothing else in the house could
 tell you navi itself is the bottleneck.
 
@@ -275,9 +275,9 @@ landing just before a write, so you permanently look at numbers a full period
 old. A writer that runs slightly faster makes the offset precess instead: the
 age of what's on screen sweeps the range rather than sticking at the worst end.
 
-What is *not* being compensated for is the 2 seconds the script spends sampling
-network counters. `OnUnitActiveSec=` measures from activation, not completion,
-so runtime sits inside the period rather than adding to it.
+What is *not* being compensated for is the script's own runtime.
+`OnUnitActiveSec=` measures from activation, not completion, so runtime sits
+inside the period rather than adding to it.
 
 `AccuracySec=1s` is the load-bearing part. The default is a minute, and even 10
 seconds would let systemd defer the timer into a 29-39 second swing, which is
@@ -287,6 +287,58 @@ four cores pinned.
 
 Change one of the two numbers and change the other. A writer slower than the
 reader is the single arrangement that makes the panel consistently stale.
+
+## History behind the tiles
+
+Every tile except the backup opens its last 24 hours, 7 days or 90 days. Why
+this is files and not a metrics stack is in [decisions.md](decisions.md).
+
+**Where it lives.** Each `host-status.sh` run appends one CSV line to
+`/srv/data/history/YYYY-MM-DD.csv`, about 250 KB a day. `host-history.timer`
+rolls those into `/srv/data/www/history/{day,week,quarter}.json` every 5 minutes
+and deletes day files past 90 days. The 90-day file is rebuilt hourly, since
+that's its bucket size. The raw CSVs are not served; only the rollups are.
+
+| View | Resolution | Rebuilt |
+|---|---|---|
+| 24h | every sample | every 5 min |
+| 7d | 5-minute buckets | every 5 min |
+| 90d | 1-hour buckets | hourly |
+
+**Peaks survive the averaging.** Each bucket stores its max alongside its
+average, and the chart shades the spread between them. The "Highest readings"
+table under each chart lists the top five, with peaks less than a few buckets
+apart counted once.
+
+**Network is measured run to run.** It used to be two counter reads 2 seconds
+apart, which saw 7% of the traffic and missed nearly every burst. Now each
+sample is the counters' movement since the previous run, so every byte lands
+in some sample. The 2-second read survives only as the fallback on the first
+run after boot.
+
+**Downtime is read from the samples.** Uptime going backwards means navi
+rebooted: it was down from the last sample before to the moment it booted,
+which catches a power cut where the journal has no clean shutdown to show. A gap
+of more than two minutes *without* a reboot is reported as "not sampled"
+instead: navi was up, `host-status.timer` wasn't. Those send you to different
+places, so they're never merged. Kuma can't do this for navi; it runs on navi.
+
+**Containers and timers are event lists**, derived from consecutive samples:
+a container changing state, its restart count going up, a timer going inactive,
+a run failing and recovering.
+
+**Samples from a wrong clock are dropped.** A Pi has no real-time clock. After a
+power cut it boots on fake-hwclock's last save, up to an hour behind, until NTP
+answers. `host-status.sh` only appends when time has moved past the last line it
+wrote, so those minutes are skipped rather than filed under the wrong day.
+
+**A stale history says so.** If a rollup is older than 15 minutes (two hours for
+90d), the panel says `host-history.timer` has stopped, in red, the same rule as
+the staleness banner below.
+
+**The CSV only grows at the end.** Columns are read by position, and 90 days of
+old files keep their old width. New columns go last. The column list is at the
+bottom of `host-status.sh`.
 
 ## The staleness banner
 

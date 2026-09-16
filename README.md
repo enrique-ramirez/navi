@@ -18,6 +18,7 @@ spare. Nothing in the house could tell you that had happened. Now something can.
 | Caddy | port 80 | reverse proxy, so everything has a name instead of a port |
 | `wan-check.timer` | every 5 min | the checks Kuma can't make itself |
 | `host-status.timer` | every 28 sec | samples this box's own vitals for the page |
+| `host-history.timer` | every 5 min | rolls those samples into 24h / 7d / 90d charts |
 | landing page | `help.lan` | links, runbook and navi's vitals, also on the bare IP |
 
 ## Repo layout
@@ -57,7 +58,7 @@ is worse than a config that's a few hours stale. A human runs the deploy.
 ## Config vs. state
 
 Config lives here. State lives in `/srv/data` on navi and never enters the repo:
-Pi-hole's databases, Kuma's history, Caddy's data directory. That split means
+Pi-hole's databases, Kuma's history, Caddy's data directory, 90 days of vitals. That split means
 `git clean` can't eat your query history, and the repo stays a few hundred KB
 instead of 30 MB.
 

@@ -28,6 +28,9 @@ mkdir -p "$(dirname "$OUT")"
 # repo-status.sh; nothing in here is attacker-controlled, this is for the
 # docker status strings that occasionally contain punctuation.
 j() { printf '%s' "${1:-}" | tr -d '"\\' | cut -c1-120; }
+# Same idea for the history CSV, where the separators are , | and : instead.
+# Pure expansion, no forks: it runs eight times a sample.
+h() { local v=${1:-}; v=${v//[^a-zA-Z0-9_.-]/_}; printf '%s' "${v:0:40}"; }
 
 now=$(date +%s)
 
@@ -79,23 +82,48 @@ read -r dtotal dused dpct < <(df -Pk / | awk 'NR==2{print $2, $3, $5+0}')
 
 # --- network throughput ------------------------------------------------------
 #
-# Interface counters sampled twice, not a speed test. A speed test on a timer
-# would saturate the line it's measuring, every few minutes, forever, and the
-# two ISP lines are already checked end to end by monitors 6 and 7. What isn't
-# visible anywhere else is what this box is actually moving right now, which is
-# the number that tells you whether "the internet is slow" is navi's doing.
+# Interface counters, not a speed test. A speed test on a timer would saturate
+# the line it's measuring, every few minutes, forever, and the two ISP lines are
+# already checked end to end by monitors 6 and 7. What isn't visible anywhere
+# else is what this box is actually moving, which is the number that tells you
+# whether "the internet is slow" is navi's doing.
+#
+# The rate is measured from the previous run's counters, not from two reads a
+# couple of seconds apart. A 2-second window every 28 seconds sees 7% of the
+# traffic and misses almost every burst, which was tolerable for a live tile and
+# is useless for a history chart: the peaks are the part you wanted. Measured
+# run to run, every byte lands in some sample.
+#
+# The 2-second read survives only as the fallback for the first run after a
+# boot, or when the state is missing, stale, or from a counter that reset. A
+# false zero on the page would look like navi went quiet.
 IF=$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')
 IF=${IF:-eth0}
 S=/sys/class/net/$IF/statistics
-rx1=$(cat "$S/rx_bytes" 2>/dev/null || echo 0)
-tx1=$(cat "$S/tx_bytes" 2>/dev/null || echo 0)
-sleep 2
+NETSTATE=/srv/data/host-net.state
+# Milliseconds, from bash's own clock rather than a `date` fork. At a 28-second
+# period, whole seconds would put up to 7% of jitter into every rate.
+ms() { local t=${EPOCHREALTIME/[.,]/}; echo $(( t / 1000 )); }
+t2=$(ms)
 rx2=$(cat "$S/rx_bytes" 2>/dev/null || echo 0)
 tx2=$(cat "$S/tx_bytes" 2>/dev/null || echo 0)
-# Clamp: counters reset when an interface bounces, and a negative rate rendered
-# as a download speed looks like corruption rather than the reboot it was.
-rxbps=$(( (rx2 - rx1) / 2 )); [ "$rxbps" -lt 0 ] && rxbps=0
-txbps=$(( (tx2 - tx1) / 2 )); [ "$txbps" -lt 0 ] && txbps=0
+pif=""; t1=0; rx1=0; tx1=0
+[ -f "$NETSTATE" ] && read -r pif t1 rx1 tx1 < "$NETSTATE"
+dt=$(( t2 - ${t1:-0} ))
+if [ "$pif" != "$IF" ] || [ "$dt" -le 0 ] || [ "$dt" -gt 120000 ] \
+   || [ "$rx2" -lt "${rx1:-0}" ] || [ "$tx2" -lt "${tx1:-0}" ]; then
+    rx1=$rx2; tx1=$tx2; t1=$t2
+    sleep 2
+    t2=$(ms)
+    rx2=$(cat "$S/rx_bytes" 2>/dev/null || echo 0)
+    tx2=$(cat "$S/tx_bytes" 2>/dev/null || echo 0)
+    dt=$(( t2 - t1 )); [ "$dt" -le 0 ] && dt=1
+fi
+printf '%s %s %s %s\n' "$IF" "$t2" "$rx2" "$tx2" > "$NETSTATE"
+# Clamp anyway: a counter can still reset between the check and the read, and a
+# negative rate rendered as a download speed looks like corruption.
+rxbps=$(( (rx2 - rx1) * 1000 / dt )); [ "$rxbps" -lt 0 ] && rxbps=0
+txbps=$(( (tx2 - tx1) * 1000 / dt )); [ "$txbps" -lt 0 ] && txbps=0
 link=$(cat "/sys/class/net/$IF/speed" 2>/dev/null || echo 0)
 [ "${link:-0}" -lt 0 ] 2>/dev/null && link=0
 oper=$(cat "/sys/class/net/$IF/operstate" 2>/dev/null || echo unknown)
@@ -115,7 +143,7 @@ CONTAINERS="pihole uptime-kuma caddy"
 dockout=$(docker inspect --format '{{.Name}} {{.State.Status}} {{.RestartCount}}' \
           $CONTAINERS 2>/dev/null)
 
-svcs=""
+svcs=""; hsvcs=""
 for c in $CONTAINERS; do
     state=missing; restarts=0
     while read -r name st rc; do
@@ -123,14 +151,15 @@ for c in $CONTAINERS; do
         state=$st; restarts=$rc; break
     done <<< "$dockout"
     svcs="$svcs,{\"name\":\"$c\",\"state\":\"$(j "$state")\",\"restarts\":${restarts:-0}}"
+    hsvcs="$hsvcs|$c:$(h "$state"):${restarts:-0}"
 done
 
 # --- timers ------------------------------------------------------------------
 # wan-check dying is loud, because six push monitors go stale and Kuma shouts.
 # The other two are silent: nothing anywhere notices if the nightly backup has
 # been failing for a month. That gap is most of the reason this file exists.
-units=""
-for u in wan-check navi-backup repo-status host-status; do
+units=""; hunits=""
+for u in wan-check navi-backup repo-status host-status host-history; do
     active=$(systemctl is-active "$u.timer" 2>/dev/null || echo unknown)
     # Both properties in one call rather than two. Same parse-by-whitelist shape
     # as the /proc/meminfo read above and the .env read in wan-check.sh.
@@ -142,6 +171,7 @@ for u in wan-check navi-backup repo-status host-status; do
     [ -n "$ts" ] && iso="\"$(date -Is -d "$ts" 2>/dev/null || echo "")\""
     [ "$iso" = '""' ] && iso=null
     units="$units,{\"name\":\"$u\",\"timer\":\"$(j "$active")\",\"result\":\"$(j "${result:-unknown}")\",\"last\":$iso}"
+    hunits="$hunits|$u:$(h "$active"):$(h "${result:-unknown}")"
 done
 
 # --- SSH ---------------------------------------------------------------------
@@ -210,3 +240,52 @@ cat > "$OUT.tmp" <<JSON
 JSON
 chmod 644 "$OUT.tmp"
 mv "$OUT.tmp" "$OUT"
+
+# --- history -----------------------------------------------------------------
+#
+# The same sample, appended as one CSV line to a file per day. host-history.sh
+# rolls these up into the charts behind each tile and deletes days past 90.
+#
+# A file per day rather than one growing file, so retention is deleting old
+# files instead of rewriting a live one, and a torn write at power loss costs
+# at most one line of one day. Roughly 250 KB a day, 22 MB for the full 90.
+#
+# Deliberately not in /srv/data/www. The page gets the rollups, not the raw log.
+#
+# Columns, in order. Append new ones at the END only: host-history.sh reads by
+# position, and 90 days of old files will still have the old width.
+#   1 epoch s    2 temp C (empty = unreadable)     3 throttle word (decimal)  4-6 load 1/5/15
+#   7 cores      8 mem used kB  9 mem total kB  10 disk %  11 rx B/s  12 tx B/s
+#   13 uptime s  14 containers name:state:restarts|...
+#   15 timers name:timer:result|...   16 rejected SSH in 24h (empty = unknown)
+#
+# Time only moves forward in here. A Pi has no real-time clock: after a power
+# cut it boots on fake-hwclock's last save, up to an hour in the past, and stays
+# there until NTP answers - which, after a power cut, can be a while, since the
+# modems boot slower than navi does. Samples stamped in that window would land
+# in the wrong day's file and make the rollup see time run backwards. Dropping
+# them costs a couple of minutes of history right after a boot that's already
+# being recorded as downtime.
+HIST=/srv/data/history
+LAST=/srv/data/host-history.last
+mkdir -p "$HIST"
+prev=$(cat "$LAST" 2>/dev/null); case "$prev" in ''|*[!0-9]*) prev=0 ;; esac
+# fake-hwclock is never days behind. If the stored mark is, the mark is what's
+# wrong (a clock that once jumped forward), and honouring it would stop history
+# silently until real time caught up.
+[ $(( prev - now )) -gt 172800 ] && prev=0
+if [ "$now" -gt "$prev" ]; then
+    sf=$sshfail; [ "$sf" = null ] && sf=""
+    # The page's tile shows 0 for an unreadable sensor; a chart would draw that
+    # as a plunge to 0 °C. Empty means unknown, and the chart leaves a gap.
+    ht=$temp; [ -r /sys/class/thermal/thermal_zone0/temp ] || ht=""
+    day="$HIST/$(date -d "@$now" +%F).csv"
+    # A power cut mid-write leaves a line with no newline, and this sample would
+    # be glued onto it. Finish the torn line first; the rollup skips it as short.
+    [ -s "$day" ] && [ -n "$(tail -c1 "$day")" ] && echo >> "$day"
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$now" "$ht" "$tv" "$l1" "$l5" "$l15" "$cores" "$(( mt - ma ))" "$mt" "${dpct:-0}" \
+        "$rxbps" "$txbps" "$up" "${hsvcs#|}" "${hunits#|}" "$sf" \
+        >> "$day"
+    echo "$now" > "$LAST"
+fi

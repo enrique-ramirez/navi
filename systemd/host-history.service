@@ -1,0 +1,9 @@
+[Unit]
+Description=Roll navi's vitals history up into charts for the landing page
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/host-history.sh
+# A rollup is the least urgent thing this box does. Never let a 90-day rebuild
+# compete with Pi-hole for a core.
+Nice=15
+IOSchedulingClass=idle
