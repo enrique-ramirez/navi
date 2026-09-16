@@ -60,5 +60,12 @@ else
     docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | grep -i error | head -3 | sed 's/^/       /'
 fi
 
+# Both of these otherwise wait for their timers, and both are wrong until they
+# run: the banner keeps saying "behind origin" for up to 5 minutes about the
+# pull you just made, and the history charts keep whatever they last built.
+echo "==> page status"
+/usr/local/bin/repo-status.sh  || echo "    !! repo-status.sh failed"
+/usr/local/bin/host-history.sh || echo "    !! host-history.sh failed"
+
 echo "==> done"
 docker ps --format '    {{.Names}}  {{.Status}}'

@@ -160,7 +160,10 @@ rollup() {
 rollup day 86400 1
 rollup week $(( 7 * 86400 )) 300
 
+# Also rebuilt whenever it holds no samples at all, or the first build after a
+# deploy - which ran before there was anything to read - would leave the 90-day
+# view saying "no samples" for its first hour.
 q="$OUT/quarter.json"
-if [ ! -f "$q" ] || [ $(( now - $(stat -c %Y "$q") )) -ge 3300 ]; then
+if [ ! -f "$q" ] || [ $(( now - $(stat -c %Y "$q") )) -ge 3300 ] || grep -q '^"t":\[\],$' "$q"; then
     rollup quarter $(( KEEP_DAYS * 86400 )) 3600
 fi
