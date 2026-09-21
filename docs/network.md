@@ -10,13 +10,13 @@ mode, so the Decos are dumb radios and the ER605 makes every decision.
 Telmex 500/500 ──┐
                  ├── ER605 ──┬── Deco Kitchen (main, wired) ── Deco Office   (wireless backhaul)
 Megacable 750/750┘           │                                └ Deco Bedroom (wireless backhaul)
-                             ├── navi        10.100.100.53
-                             └── ocarina     10.100.100.50   (not built yet)
+                             ├── navi           10.100.100.53
+                             └── hyrule-castle  10.100.100.50
 ```
 
 Everything that needs to be always-on lives in the kitchen, because the modems
-are there and can't move. That includes navi, the future mini PC, and the UPS
-when it arrives.
+are there and can't move. That includes navi, hyrule-castle, and the UPS when it
+arrives.
 
 navi is wired directly to the ER605, not to a Deco. That's deliberate: a
 monitoring box sitting behind a wireless backhaul reports the hop's flakiness as
@@ -25,7 +25,7 @@ alerts.
 
 The router has five ports and they're spoken for. `WAN` and `WAN/LAN1` take the
 two ISPs, one LAN port feeds the main Deco, navi has one of the remaining two and
-ocarina will take the last. Anything after that needs a small switch.
+hyrule-castle takes the last. Anything after that needs a small switch.
 
 ## The two lines
 
@@ -108,7 +108,8 @@ is static or reserved, so there's no chance of collision.
 | `.1` | `gate` | ER605 |
 | `.20` | | Windows PC. Runs the music stack for now |
 | `.30` / `.31` | | PS5 / PS Portal, pinned to Telmex by policy route |
-| `.50` | `ocarina` | Mini PC, not built yet |
+| `.50` | `hyrule-castle` | Mini PC. Holds the services |
+| `.51` | | hyrule-castle's WiFi, recovery path only |
 | `.53` | `navi` | This box. Mnemonic: DNS |
 | `.54` | `tatl` | Second Pi-hole, planned |
 | `.61` / `.62` | | Probe sources for the per-WAN checks |
@@ -123,8 +124,9 @@ Two layers, and the split matters.
 
 Machines get Zelda names. `navi` shouts "Hey! Listen!" when something needs
 attention, which is exactly what a monitoring box does. `tatl` is the other
-fairy, which is why it's the second Pi-hole. `ocarina` plays the music. `chest`
-will hold the NAS. `gate` is the drawbridge everything leaves through.
+fairy, which is why it's the second Pi-hole. `hyrule-castle` holds things, which
+is what a box running every service does. `chest` will hold the NAS. `gate` is the
+drawbridge everything leaves through.
 
 Functions get names so dull you can guess them at 2am with a dead network:
 `help.lan`, `status.lan`, `dns.lan`, `router.lan`, `music.lan`. You shouldn't
@@ -132,6 +134,13 @@ have to remember which fairy was the router while you're trying to fix it, and
 anyone else in the flat can find things without being taught the joke.
 
 Both resolve. `music.lan` and `ocarina.lan` reach the same place.
+
+`ocarina` is the one name that sits on the function side rather than the machine
+side. It was originally meant to be the mini PC, and stopped fitting once that box
+grew a film library and a photo library - a castle holds things, an ocarina plays
+music. So the machine is `hyrule-castle` and `ocarina.lan` survives as an alias of
+`music.lan`, which is what it always described anyway. Nothing pointing at
+`ocarina.lan` had to change.
 
 The local domain is `.lan`. ICANN reserved `.internal` for private use in 2024
 and it's arguably more correct, but it's longer and buys nothing here.
@@ -156,6 +165,12 @@ wireless.
 
 There's no bufferbloat. 698 Mbps down, 612 Mbps up, added latency under 1 ms. Don't
 propose QoS shaping to fix a problem that isn't there.
+
+**Gigabit is the LAN ceiling and nothing on the shopping list changes that.** The
+ER605's LAN ports are 1 GbE. hyrule-castle has dual 2.5 GbE and the Deco XE75 Pro
+has 2.5 GbE ports, so it is tempting to think there is headroom to unlock by
+choosing the right jack. There isn't: every path between two machines here crosses
+the ER605 or a Deco uplink to it. The dual 2.5 GbE on the mini PC is decorative.
 
 **The two lines are not interchangeable for latency.** TCP traceroute to
 `1.1.1.1` from `.61` and `.62`, 2026-09-07:

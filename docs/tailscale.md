@@ -220,7 +220,7 @@ only with Phase D done first.
 
 Default tailnet policy is allow-all between your own devices. That's fine while
 the tailnet is navi plus your own phone and laptop. It stops being fine the
-moment a subnet route lands, ocarina joins with the music stack on it, or you
+moment a subnet route lands, hyrule-castle joins with the music stack on it, or you
 share a node with anyone.
 
 The rule from [future-plans.md](future-plans.md) transfers directly: never expose
@@ -229,7 +229,7 @@ that same rule in a different place, and "everyone on the tailnet" includes ever
 phone you will ever lose.
 
 Write the policy in the admin console before the first remote connection that
-could reach the music stack. Tag navi and ocarina as servers, tag your personal
+could reach the music stack. Tag navi and hyrule-castle as servers, tag your personal
 devices, and grant explicitly rather than relying on the default.
 
 ---

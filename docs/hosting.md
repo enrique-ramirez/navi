@@ -118,8 +118,8 @@ The footprint is smaller than it looks, because the replaceability tiering in
 film library doesn't. Call it 600-800 GB, so roughly $4-5/month.
 
 Timing is unchanged from `future-plans.md`. This starts when the music lands on
-ocarina, not when the NAS arrives, because that's the window where 419 GB exists
-exactly once on a consumer NVMe in a flat.
+hyrule-castle, not when the NAS arrives, because that's the window where 419 GB
+exists exactly once on a consumer NVMe in a flat.
 
 The eventual friend-to-friend sync is a third copy and a good one, but it's
 best-effort and it doesn't get to be the only offsite.

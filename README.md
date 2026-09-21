@@ -76,11 +76,12 @@ password or a token.
 | [wifi.md](docs/wifi.md) | The Decos, roaming, and what's still unsolved |
 | [er605.md](docs/er605.md) | The router, written out so it can be rebuilt |
 | [navi.md](docs/navi.md) | The box. Hardware, boot, services, updates |
+| [hyrule-castle.md](docs/hyrule-castle.md) | The mini PC. Hardware, BIOS, network, what's left |
 | [https.md](docs/https.md) | Certificates, why they exist, installing the root |
 | [monitoring.md](docs/monitoring.md) | What's watched, and why each check exists |
 | [runbook.md](docs/runbook.md) | When something breaks |
 | [decisions.md](docs/decisions.md) | Why it's built this way |
 | [gotchas.md](docs/gotchas.md) | The things that cost hours |
-| [future-plans.md](docs/future-plans.md) | What's next: the mini PC, the staged storage buy, the NAS |
+| [future-plans.md](docs/future-plans.md) | What's next: the music migration, the staged storage buy, the NAS |
 | [tailscale.md](docs/tailscale.md) | Remote access, the procedure, not yet run |
 | [hosting.md](docs/hosting.md) | Domains, email, the public sites, the offsite copy |

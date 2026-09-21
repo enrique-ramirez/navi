@@ -70,7 +70,14 @@ What it buys: no more double NAT, the PS5 freed from being pinned to Telmex, and
 symmetric cross-ISP monitoring. **Not** remote access - Tailscale gives you that
 regardless of the answer, so don't sequence one behind the other.
 
-## ocarina, the mini PC
+## hyrule-castle, the mini PC
+
+**Built on 2026-09-20.** Debian 13 is on it, it answers on `10.100.100.50`, and it
+runs no services yet. The machine itself is documented in
+[hyrule-castle.md](hyrule-castle.md); what follows is only what's still ahead of
+it. It was called `ocarina` while it was still hypothetical - see
+[decisions.md](decisions.md) for why the machine got renamed and why
+`ocarina.lan` didn't.
 
 A KINGDEL K12 with an Intel i3-N305 (Alder Lake-N, 8 cores, 32 GB DDR5, 1 TB
 NVMe, dual 2.5 GbE, Intel QuickSync). Ordered 2026-09-02 as an N355; the seller
@@ -95,41 +102,38 @@ N305 delivers both. Being the older part it also has three more years of kernel
 and driver history behind it, which for a Linux box is a mild point in its
 favour.
 
-**Verify the 32 GB on arrival, inside the return window.** Intel specifies both
-chips at 16 GB maximum. That number is a validation limit rather than a hard
-controller ceiling, and 32 GB SODIMMs are widely reported working on Alder
-Lake-N boards, but it is not universal. The seller stated in writing on the
-Amazon message thread that 32 GB is recognised and that other customers run this
-configuration; keep that thread, because it is the only thing backing the claim.
-Check the BIOS and `free -h` before anything else gets installed. Either way the
-RAM is maxed: one SODIMM slot, single channel, no upgrade path.
+**The 32 GB is confirmed**, three ways on 2026-09-20. That was the one assumption
+the purchase rested on, and it held. Either way the RAM is maxed: one SODIMM slot,
+single channel, no upgrade path.
 
-**There is no second NVMe slot.** The board has two M.2 sockets, but the seller
-confirmed the second one is the E-key WiFi socket, not a drive socket. E-key is
-physically keyed differently from the M-key an NVMe needs, it carries a single
-PCIe lane rather than four, and its 2230 standoff leaves nowhere to anchor a
-2280 drive. Adapters exist; none of them are worth doing inside a chassis this
-size. Storage growth here is external, or the NAS.
+**There is no second NVMe slot**, also now confirmed - the second M.2 is E-key and
+has the WiFi card in it. Storage growth here is external, or the NAS.
 
-One question still worth asking the seller: some boxes in this class have a SATA
-header and room for a 2.5" drive. If this one does, that is the cheap expansion
-path.
+**The SATA question is half-answered and worth finishing.** The BIOS shows the
+controller enabled in AHCI with two ports present and empty, which means the
+chipset's SATA is switched on but not that the board routes it to a physical
+connector. Take the lid off and look, while the return window still allows it. If
+a header is in there, a 2.5" drive is the cheap expansion path the E-key finding
+took away.
 
 **One caveat to remember before blaming anything else.** The dual NICs are Intel
 i226-V, and early steppings had documented packet-drop and link-flap bugs,
-discussed at length in the pfSense and OPNsense communities. Later revisions fixed
-it and recent kernels are fine. If you ever see unexplained drops, disable Energy
-Efficient Ethernet before suspecting the switch or the cable:
+discussed at length in the pfSense and OPNsense communities. These are **rev 04**
+on kernel 6.12, which is the later stepping and the fixed driver era rather than
+the one that generated the bug reports - so this is now a caveat rather than a
+risk. If you ever do see unexplained drops, disable Energy Efficient Ethernet
+before suspecting the switch or the cable:
 
 ```sh
-sudo ethtool --set-eee enp1s0 eee off
+sudo ethtool --set-eee enp3s0 eee off
 ```
 
 Its only job at first is serving music, so the Windows PC can stop being a media
 server.
 
-**Phase 1, music.** Debian 13 minimal, no desktop. The stack is foobar2000 +
-`foo_beefweb` + `foo_jean`, all Windows binaries, run under Wine. On x86 Linux
+**Phase 1, music.** Debian 13 minimal with no desktop is done. What's left is the
+stack: foobar2000 + `foo_beefweb` + `foo_jean`, all Windows binaries, run under
+Wine. On x86 Linux
 Wine runs the Windows API natively, and two of `foo_jean`'s own design rules (a
 header-only HTTP library over plain sockets, `std::` threading rather than Win32)
 happen to make it unusually likely to work.
@@ -141,16 +145,15 @@ playback. That has a design consequence worth thinking through before assuming
 the remote-control UX carries over: headless, the player's own playback is
 meaningless.
 
-You can de-risk all of this before the hardware arrives by running a Debian VM on
-the Windows PC. It's x86, so the test is valid.
-
 If Wine fails, fall back to a Windows 11 VM under KVM, roughly 2 cores and 6 GB.
 Don't use a debloated ISO; unofficial builds with unclear provenance are a poor
 foundation for an always-on box holding your data.
 
 **Space budget.** The 1 TB NVMe gives about 930 GB usable. Reserve roughly 50 GB
-for Linux and Docker images and about 100 GB for databases and thumbnails in later
-phases, which leaves around 780 GB for music against a current library of 419 GB
+for Linux and Docker images - of which **31 GB is already gone to swap**, which the
+installer sized to match RAM for hibernation on a machine that will never
+hibernate - and about 100 GB for databases and thumbnails in later phases, which
+leaves around 780 GB for music against a current library of 419 GB
 (349 GB sorted plus 70 GB unsorted). Comfortable, but the library is expected to
 grow fast now that adding to it is enjoyable. **Treat 600 GB as the trigger** to
 accelerate the NAS. The second-NVMe option is gone; the board's other M.2 socket
@@ -158,7 +161,7 @@ is E-key WiFi. Wire a disk-usage check into Uptime Kuma via a push monitor so th
 noticed rather than discovered.
 
 In practice the answer to this arrived early. The staged storage plan below puts
-a 16 TB disk on ocarina in October 2026, so the music never lives on the NVMe and
+a 16 TB disk on hyrule-castle in October 2026, so the music never lives on the NVMe and
 the NVMe holds only the OS, containers and databases. Keep the trigger anyway: it
 is now the number that says the USB disk has become the bottleneck rather than
 the NAS.
@@ -195,9 +198,23 @@ same week rather than treating it as a follow-up task.
 
 **What changes on navi when it lands:** two values in `.env`, `MUSIC_BACKEND` and
 `MUSIC_FOOJEAN`, from `10.100.100.20` to `10.100.100.50`. Both listeners need
-repointing, not just the first, or streaming breaks while the UI looks fine. Then
-`PIHOLE_HOSTS` so `ocarina.lan` points at `.50` directly instead of at navi's
-proxy.
+repointing, not just the first, or streaming breaks while the UI looks fine.
+
+**Do not repoint `ocarina.lan` at `.50` in `PIHOLE_HOSTS`.** An earlier draft of
+this doc said to, on the theory that going direct is tidier. It isn't - it
+bypasses Caddy, and music is the one service that has to be HTTPS because Jean
+needs a secure context for `navigator.mediaSession` and `Notification`. The names
+stay pointed at navi and Caddy proxies onward to `.50`; [decisions.md](decisions.md)
+has why there is only one Caddy.
+
+`PIHOLE_HOSTS` does get a new entry, for the machine itself:
+`10.100.100.50 hyrule-castle hyrule-castle.lan`.
+
+The migration to `foo_jean` alone, with beefweb dropped, collapses `MUSIC_BACKEND`
+and `MUSIC_FOOJEAN` onto the same host and port - and may remove the need for the
+separate `:8881` vhost entirely, since that split exists only because Jean derives
+foo_jean's address from `window.location` while beefweb served the page. Check
+whether a single-origin foo_jean still needs it before copying the vhost across.
 
 **Later phases**, in this order, because four migrations at once is how
 self-hosting projects die. Jellyfin (easiest real win, QuickSync handles the
@@ -213,7 +230,7 @@ to afford a populated NAS in one purchase, it comes in three monthly pieces, and
 the first drive does real work from the day it arrives instead of sitting in a
 box waiting for the others.
 
-**October 2026: the first 16 TB drive, hanging off ocarina over USB.** A UGREEN
+**October 2026: the first 16 TB drive, hanging off hyrule-castle over USB.** A UGREEN
 3.5" USB 3.0 enclosure, about 650 MXN, with its own 12 V brick rather than bus
 power, which a 3.5" drive needs. The music migration lands here instead of on the
 NVMe. Offsite backup starts the same week.
@@ -253,7 +270,7 @@ it can't start against an empty directory and rescan the library into nothing.
 **Watch heat and head parking.** The enclosure is sealed passive plastic with no
 fan, holding an enterprise 7200 RPM drive 24/7, which is a warmer combination
 than these cases are usually sold for. Stand it upright, keep it off the top of
-ocarina, and put SMART attribute 194 on the same Kuma push monitor as the
+hyrule-castle, and put SMART attribute 194 on the same Kuma push monitor as the
 disk-usage check. Sustained above about 50 °C, add a fan. Separately, enclosures
 in this class spin down on idle and usually don't pass `hdparm -B`/`-S` through
 the bridge, so read `Load_Cycle_Count` after the first week and extrapolate
@@ -293,9 +310,9 @@ where SSD speed is real and costs $60 rather than $3,000. Why this box and not a
 Synology, a QNAP or a USB enclosure is in [decisions.md](decisions.md), as is
 TrueNAS over Unraid.
 
-It is a disk shelf and nothing else. ocarina keeps every service - foobar2000,
+It is a disk shelf and nothing else. hyrule-castle keeps every service - foobar2000,
 Jellyfin, Immich, all of it - and the NAS runs TrueNAS alone. That is the same
-separation [decisions.md](decisions.md) already requires of navi and ocarina,
+separation [decisions.md](decisions.md) already requires of navi and hyrule-castle,
 applied a third time.
 
 One hard rule when it arrives: databases and caches stay local, bulk media goes to
@@ -379,6 +396,70 @@ and already the monitoring box, so Kuma can alert on power events. That requires
 navi to be physically USB-connected to the UPS, which is why everything lives in
 the kitchen.
 
+**What goes on battery, and what only gets surge.** The unit has twelve outlets,
+half of them battery-backed. Battery side: navi, hyrule-castle, the ER605, the
+Telmex modem, and the main Deco. Everything else takes surge only.
+
+The Deco is the one that's easy to forget and the one that makes the rest useful -
+without it you'd have working internet during an outage and no Wi-Fi to reach it
+from, since every device you'd actually pick up is wireless. Coverage during a cut
+is kitchen-only; the office and bedroom Decos are on other circuits and can't be
+helped.
+
+Telmex rather than Megacable, if rationing to one line: it's the 9.3 ms path
+rather than the 46.7 ms one, and the only one that accepts inbound.
+
+**hyrule-castle goes on battery specifically so it can be shut down, not so it can
+keep running.** It draws battery for the minute or two before NUT stops it, then
+it's off, and `Restore AC Power Loss` brings it back when mains returns. The
+alternative - surge-only, hard cut on every outage - is exactly the treatment this
+doc already warns will corrupt Immich's Postgres.
+
+At roughly 90 W across everything on the battery side, expect somewhere in the
+region of 1.5-2.5 hours. Check CyberPower's runtime chart against a measured draw
+rather than that estimate.
+
+**Test it the week it arrives.** Same rule this doc applies to disks, and for a
+sharper reason: the Amazon listing is marked non-returnable, and UPS units do
+arrive with dead or deeply discharged batteries. Charge it fully, pull the mains
+with a known load attached, confirm it holds. Finding out during the first real
+outage is the expensive version.
+
+AVR is arguably the bigger win anyway. Sags and brownouts are far more frequent
+here than full cuts, and they're what quietly kills power supplies over years.
+
+## The kitchen cable box
+
+Currently a power strip with five oddly-shaped wall warts fighting over it, each
+brick blocking the sockets either side. It is the reason hyrule-castle nearly
+ended up in the office instead of the kitchen: its 60 W brick plus the travel
+adapter it needs simply would not fit.
+
+The rebuild, which also prepares for the UPS:
+
+- The strip goes away. The UPS replaces it, and lives **outside** the box - it has
+  a battery, it needs airflow, you need to read the LCD, and it wants replacing
+  every few years.
+- Every brick sits inside the box, plugged into its own **one-foot grounded
+  extension pigtail**. The pigtail's slim plug goes to the UPS. A brick then
+  occupies one UPS outlet instead of blocking three.
+- Pigtails rather than a strip inside the box on purpose: it's what lets each
+  device be assigned individually to a battery outlet or a surge-only one, which
+  is the whole reason for buying a UPS with both.
+
+Six pigtails covers both modems, the ER605, navi, the main Deco and
+hyrule-castle. 14 AWG is heavy for a load under 1 A total, and it is stiff - 16 AWG
+routes more easily in a cramped box and is still enormously overspec. ETL is
+Intertek's mark and is equivalent to UL for this; what matters is that there is a
+mark at all.
+
+**Don't seal the box.** Five or six bricks in an enclosed container accumulate
+heat, and the mini PC's is the biggest and warmest of them. Leave the lid ajar or
+ventilate it, and don't stack bricks touching each other. Same reasoning as the
+50 °C trigger on the USB enclosure above.
+
+Never daisy-chain: one pigtail, one device, straight into a UPS outlet.
+
 ## Smaller things worth doing
 
 A both-lines-down monitor at ntfy priority 5. Nothing currently justifies waking
@@ -391,3 +472,8 @@ deliberately.
 
 Moving the state backup somewhere off the flat. Right now both copies are in the
 same building.
+
+Getting a US plug head for hyrule-castle's power brick. It shipped with the
+European one only, and the interim answer is a bulky travel adapter - see
+[hyrule-castle.md](hyrule-castle.md). Ask the seller on the Amazon thread; it costs
+a message. The pigtail rebuild makes it cosmetic rather than blocking.

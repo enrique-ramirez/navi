@@ -2,9 +2,10 @@
 
 Settled, with reasons, so they don't get relitigated.
 
-## navi and ocarina stay separate machines
+## navi and hyrule-castle stay separate machines
 
-The mini PC will run media services. It doesn't also run DNS, for three reasons.
+hyrule-castle will run the media services. It doesn't also run DNS, for three
+reasons.
 
 It's the machine that gets updated, restarted and actively developed against.
 `foo_jean` is built and tested there, so crashes are expected. House DNS can't
@@ -29,8 +30,11 @@ same media engine, roughly 3% of CPU clock and 8% of GPU clock given up. The
 argument for buying above an N100 was cores and execution units for Immich, and
 the N305 has all of them. Details in [future-plans.md](future-plans.md).
 
-Two things this leaves open, both tracked there: confirm the BIOS actually sees
-32 GB when the box arrives, and confirm the 500 MXN refund lands after delivery.
+**The 32 GB was confirmed on 2026-09-20**, three ways: the BIOS, Windows before it
+was wiped, and `free -h`. That was the one assumption the purchase rested on and it
+held. Details in [hyrule-castle.md](hyrule-castle.md).
+
+Still open: confirm the 500 MXN refund lands.
 
 ## TrueNAS SCALE, not Unraid
 
@@ -76,8 +80,10 @@ streaming and bad during a resilver. And USB bridges reset, dropping a disk off
 the bus long enough for ZFS to suspend the pool - an acceptable, reversible risk
 on one disk for three months, not the permanent home for irreplaceable photos.
 
-There is no third option. ocarina has no PCIe slot and its second M.2 is E-key
-WiFi, so a real HBA cannot be added. It is USB or a separate machine.
+There is no third option. hyrule-castle has no PCIe slot and its second M.2 is
+E-key WiFi, so a real HBA cannot be added - confirmed on 2026-09-20 by the WiFi
+card being present and working, rather than taken on the seller's word. It is USB
+or a separate machine.
 
 ## One IronWolf Pro and one Red Pro, not two of either
 
@@ -165,6 +171,31 @@ random and secret, which is the only protection ntfy.sh topics have.
 Without it, `status.lan:3001` and `dns.lan:8081`, which nobody remembers. With it,
 every service has a name on port 80.
 
+**One Caddy, and it stays on navi.** When hyrule-castle arrived the obvious move
+was a second Caddy there, so service traffic would go straight to the box holding
+the data instead of being proxied through a Pi. That was wrong twice over.
+
+A single centralised ingress is the mainstream pattern, not a compromise - a
+Kubernetes cluster runs one ingress controller in front of everything, for the
+same reason. Two Caddyfiles with overlapping concerns is two things to keep in
+step and one of them will rot.
+
+The performance argument for splitting was weaker than it looked. Every Deco
+backhauls to the kitchen, so living-room and bedroom clients cross the same number
+of hops either way; only a client in the same room as the server would have
+benefited, and that stopped mattering once hyrule-castle moved to the kitchen
+anyway. The availability argument was worse than weak - it was double counting.
+Every service name resolves through Pi-hole, which runs on navi, so navi being
+down already means `music.lan` doesn't resolve regardless of where Caddy lives.
+Splitting would have moved which component fails, not removed a failure.
+
+And one Caddy means one internal CA, one root installed on the TVs and the
+MacBook, and no copying a CA private key onto a second machine.
+
+Revisit only if measured: 4K direct-play streams saturating a Pi 4's TLS
+throughput, or DNS latency tracking video playback. Moving Caddy later is an
+evening, not a rewrite.
+
 It also solved the foo_jean problem: Jean derives foo_jean's address from
 `window.location.hostname`, so serving the UI at `music.lan` makes the browser ask
 for `music.lan:8881`. A second Caddy listener fixes that without touching Jean's
@@ -173,6 +204,13 @@ hardcode the player's address and defeat the point of having `music.lan` as an
 indirection at all.
 
 ## Two layers of names
+
+The machine is `hyrule-castle`; the things on it are `music.lan`, `films.lan`,
+`photos.lan`, `files.lan`. Earlier drafts named the machine `ocarina`, which broke
+the rule by picking a Zelda name to describe a function - and then aged badly the
+moment the roadmap gave that box a film library and a photo library. `ocarina.lan`
+survives as an alias of `music.lan`, where it always belonged. Renaming the machine
+cost nothing because DNS maps names to addresses independently of hostnames.
 
 Machines get Zelda names because they're memorable and the roles map onto the
 myth. Functions get dull names because those are what you reach for when

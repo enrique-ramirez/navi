@@ -184,3 +184,134 @@ Uptime Kuma push URLs carry the message as a query parameter. A hand-rolled
 "replace spaces with %20" breaks the moment a message contains `%` or `&`, which
 happened the first time the disk usage was included. `curl -G --data-urlencode`
 does it correctly.
+
+## AC power loss recovery is in the Super I/O menu, and it ships wrong
+
+On Intel platforms this setting is normally `Chipset → PCH-IO Configuration →
+State After G3`. hyrule-castle's AMI Aptio build doesn't expose it there at all -
+that submenu contains only PCI Express, SATA, USB and HD Audio. It lives in
+`Advanced → IT8613 Super IO Configuration → Restore AC Power Loss by IO`.
+
+It shipped set to power **off**. An always-on headless box that stays dark after
+a blackout produces no symptom except the services being gone, which is the same
+silent failure this whole project exists to delete.
+
+Prefer `Power On` over `Last State`. Last State only brings the machine back if it
+happened to be running when power died, and "almost always" is not a property you
+want in an unattended recovery path.
+
+Verify it rather than trusting the menu: pull the cord, wait ten seconds, plug it
+back in, don't touch the button.
+
+## A working ethernet link can be ten times too slow
+
+hyrule-castle's first cable came up perfectly - `LOWER_UP`, `Link detected: yes`,
+carrying traffic - at `100Mb/s`. A second cable on the same port and the same Deco
+negotiated `1000Mb/s`.
+
+100BASE-TX needs two pairs and gigabit needs four, so a Cat5 cable, a two-pair
+patch lead, or one damaged pair produces a link that works and alarms nothing. The
+only way to see it is to look:
+
+```sh
+sudo ethtool enp3s0 | grep -E 'Speed|Link detected'
+```
+
+`Link partner advertised link modes` is the diagnostic when it is slow. If the
+switch is offering 1000 and you negotiated 100, the cable is dropping pairs. If
+the partner itself only offers 100, something 100 Mbit is in the path.
+
+**`ethtool` omits every `Link partner...` line when there is no link at all.** A
+`sed` range or a `grep` anchored on one of them prints nothing, which reads as a
+broken command rather than as the answer. Use `ip -br link` and look for
+`LOWER_UP` to distinguish "no link" from "slow link".
+
+## The chassis says `eth0`, the kernel doesn't
+
+hyrule-castle's case is labelled `eth0` and `eth1`. Linux has used predictable
+names derived from PCI topology for about a decade, so those stickers match
+nothing. `enp3s0` is the jack labelled `eth0`.
+
+That mapping is the only thing tying the physical port to the DHCP reservation. Put
+the cable in the wrong jack and the box comes up on a pool address with nothing
+explaining why. The table in [hyrule-castle.md](hyrule-castle.md) is the record;
+the port also has a physical label now.
+
+## Setting a root password means you get no `sudo` command
+
+Debian's installer grants the first user `sudo` **only if you leave the root
+password blank**. Set one, and it doesn't.
+
+The confusing part is that `groups` still lists `sudo`, because the group ships in
+`/etc/group` on every Debian system regardless. So the user is in a group granting
+rights to a binary that was never installed, and every command fails with
+`sudo: command not found` rather than anything about permissions.
+
+Fix from a root shell: `apt install sudo`, then `usermod -aG sudo <user>` if the
+installer didn't add them.
+
+## `/etc/default/keyboard` doesn't own itself
+
+Editing that file by hand appears to work and then doesn't survive. It's managed
+by `keyboard-configuration` through debconf, and the console keymap is generated
+from it into a cache under `/etc/console-setup/`. A hand edit leaves debconf
+holding the old answers and the cache built from them, so `console-setup` applies
+the stale version at boot - and the next package update overwrites your edit
+anyway.
+
+Use `sudo dpkg-reconfigure keyboard-configuration`. It works fine over SSH,
+because it's a debconf dialog. The variant - Dvorak, in this case - is on a
+*second* screen after you pick the country, which is the step that gets missed.
+
+`setupcon` will refuse to do anything over SSH, reporting `We are not on the
+console`. That's correct behaviour, not a failure; the config applies at next boot
+regardless.
+
+## Pasting a block whose first command reads stdin
+
+`sudo apt install -y ethtool` followed by eight more pasted lines runs the install
+and silently swallows everything after it. `apt` consumes the queued input as its
+own, the commands never execute, and the prompt comes back clean - so it looks
+like they ran and produced nothing.
+
+Paste `apt` on its own. Same for anything else that reads stdin, and run `sudo -v`
+on its own line first so a password prompt can't eat the block either.
+
+## macOS raw disk writes need Full Disk Access, and `sudo` doesn't help
+
+`dd` to `/dev/rdiskN` fails with `Operation not permitted` unless the *calling
+application* holds Full Disk Access. TCC attaches the grant to the app, not the
+user, so `sudo` does not get you around it - and the app is whatever terminal
+you're in, which may be a code editor rather than Terminal.app.
+
+`diskutil unmountDisk` also fails on a busy volume and leaves the raw device
+locked, producing the same error for a different reason. Use `unmountDisk force`.
+
+Easiest route is to skip `dd` and use Raspberry Pi Imager's **Use custom** option,
+which handles both the unmount and the authorisation through its own privileged
+helper.
+
+## The ER605 gives reserved addresses an infinite lease
+
+Pool clients get the 120 minutes in [network.md](network.md). A reserved address
+comes back as `leased ... for infinity`, so the client never renews.
+
+Consequence: editing a reservation does nothing visible until the client is
+rebooted or bounced with `ifdown`/`ifup`. Twenty minutes of re-checking the router
+UI is the usual way to discover this.
+
+## `Export to IP-MAC Binding` is inert until suddenly it isn't
+
+The Address Reservation form offers it, defaults to ticked, and is harmless on its
+own - just a row in a table nothing reads. Which is exactly why it gets left on.
+
+It becomes load-bearing the moment anything ticks **"Permit the packets matching
+the IP-MAC Binding entries only"** under Firewall → Anti-ARP Spoofing. At that
+point every device in the flat without a binding loses the network: TVs, consoles,
+phones, and the WiFi side of any machine bound only by its wired MAC. A security
+setting that takes the house offline is a bad twenty minutes.
+
+[er605.md](er605.md) therefore says leave it unchecked on every reservation, which
+is the right call: it deletes the trap rather than depending on nobody ever
+enabling strict mode years from now. hyrule-castle's two entries were created with
+it ticked on 2026-09-20 and want undoing.
