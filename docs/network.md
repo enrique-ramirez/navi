@@ -52,9 +52,11 @@ being pinned to Telmex. Worth a phone call, still not made. **Probed on
 2026-09-07 and still unresolved** - [future-plans.md](future-plans.md) has the
 test that would settle it and what to ask.
 
-The evidence is genuinely split. `189.196.217.197` resolves to
-`customer-GDL-CGN-217-197.megared.net.mx`, and `CGN` in an ISP's own hostname
-usually means carrier-grade NAT. But a TCP traceroute from `.62` finds no
+The evidence is genuinely split. As measured on 2026-09-07, `189.196.217.197`
+resolved to `customer-GDL-CGN-217-197.megared.net.mx`, and `CGN` in an ISP's own
+hostname usually means carrier-grade NAT. That address has since changed - it was
+`189.196.209.57` on 2026-09-21 - so re-read the PTR before leaning on it; the
+pattern is the evidence, not the number. But a TCP traceroute from `.62` finds no
 `100.64/10` anywhere, which is the one unambiguous marker, and the HSI connection
 is native dual-stack rather than DS-Lite, which would have been carrier NAT by
 construction. Hops 3 to 8 are all RFC1918 `10.x`, and that proves nothing in

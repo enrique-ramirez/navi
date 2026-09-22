@@ -305,6 +305,27 @@ Kernel upgrades are not excluded here as they are on navi. navi's exclusion exis
 because a bad kernel on a box with no monitor is a bad afternoon; hyrule-castle has
 HDMI and a keyboard can reach it. Revisit if that stops being true.
 
+## What navi knows about it
+
+`PIHOLE_HOSTS` carries `10.100.100.50 hyrule-castle hyrule-castle.lan`, added
+2026-09-21. `ocarina.lan` and `music.lan` deliberately stay pointed at navi and
+are proxied onward - see [decisions.md](decisions.md).
+
+Kuma monitor 14, a 60-second ping on `.50`, reading `<1ms`.
+
+**A `.env` edit is not applied until the container is recreated.** `deploy.sh`
+passes `--env-file` to compose, which does detect env changes - but the deploy has
+to actually be run, and it reporting success is not proof. The check:
+
+```sh
+sudo docker inspect pihole --format '{{.State.StartedAt}}'
+sudo docker inspect pihole --format '{{range .Config.Env}}{{println .}}{{end}}' | grep hosts
+```
+
+A recent `StartedAt` plus the expected value in that env line. This is the same
+lesson `deploy.sh` already records in a comment about Caddy, generalised: the
+script succeeding and the container having taken the change are different facts.
+
 ## Where it lives
 
 The kitchen, wired directly into the ER605's fifth LAN port, which
@@ -325,7 +346,8 @@ the far end, by design.
 
 In rough order:
 
-- Add `hyrule-castle` to `PIHOLE_HOSTS` on navi and give Kuma a monitor for it
+- Replace the ping monitor with something that proves the stream works, once
+  there is a stream
 - Docker CE from Docker's own repo, pinned key, same as navi
 - foobar2000 under Wine and Xvfb, then the library migration
 - Open the lid and settle the SATA question while the return window allows

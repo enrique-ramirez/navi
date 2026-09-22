@@ -1,8 +1,11 @@
 # Monitoring
 
-Thirteen monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
-phone. Six of them Kuma can run by itself; the other seven are pushed by
-`wan-check.sh` every five minutes because Kuma can't see what they need to see.
+Fourteen monitors in Uptime Kuma at `status.lan`, all alerting to ntfy on the
+phone. Seven Kuma runs by itself; the other seven are pushed by `wan-check.sh`
+every five minutes because Kuma can't see what they need to see.
+
+All fourteen confirmed pushing real values on 2026-09-21. Three of them had not
+been, for weeks - see "What .env drift did to this file" below.
 
 ## The monitors
 
@@ -21,6 +24,74 @@ phone. Six of them Kuma can run by itself; the other seven are pushed by
 | 11 | Needs attention | push | pending reboot, full disk, updates gone quiet |
 | 12 | SSH attempts | push | something on the LAN trying to get into navi |
 | 13 | Temperature | push | cooling regressing, or the PSU sagging |
+| 14 | hyrule-castle | ping | the services box is down |
+
+**14 is a ping, and that's all it can honestly be today**, because hyrule-castle
+runs no services yet. It proves the box is powered and on the network, nothing
+more. This file's whole argument - that pinging a modem doesn't prove the ISP is
+delivering - applies here too: when foobar2000 and Jean are up, this needs a
+check that proves the stream works, not that the host replies.
+
+## What .env drift did to this file
+
+Found 2026-09-21 while adding monitor 14, and it is the worst class of bug this
+box has produced: **three monitors were running, green, and measuring nothing.**
+
+Four keys existed in `.env.example` and had never been added to the `.env` on
+navi. Not empty - absent.
+
+| Key | Effect while missing |
+|---|---|
+| `KUMA_PUSH_SSH` | monitor 12 never created, no alert on SSH attempts |
+| `KUMA_PUSH_TEMP` | monitor 13 never created, **thermal zone never even read** |
+| `WAN1_ISP` | monitor 6 silently fell back to the weaker test |
+| `WAN2_ISP` | monitor 7 the same |
+
+The WAN pair is the serious one. This file says monitors 6 and 7 "are the ones
+that matter. Everything else is context" - they are the ones built to catch the
+two-week silent Telmex outage. When `WAN1_ISP` is empty, `check_wan` cannot
+compare the PTR against anything, so it falls through to the weaker invariant
+(both lines must not egress the same address), pushes **up**, and states the
+degradation in its own message:
+
+```
+187.224.28.154 - ISP unverified, no ISP domain set in .env
+```
+
+That message had been arriving on every tick since the 2026-09-04 rewrite. It
+went to a monitor that was green, so nobody read it. After the fix:
+
+```
+187.224.28.154 (prod-infinitum.com.mx)
+189.196.209.57 (megared.net.mx)
+```
+
+**Why nothing broke loudly.** `wan-check.sh` defaults all four keys to `""` at the
+top, deliberately, with a comment explaining that an unset key under `set -u`
+would kill the script and take every monitor down at once. That defence is
+correct and worth keeping. Its cost is that a missing key degrades silently
+instead, and the two failure modes trade against each other: loud and total, or
+quiet and partial. The script chose quiet, and this is the bill.
+
+**The real lesson is that `.env.example` is documentation, not configuration.**
+Deploying a script and filling in `.env` are two separate steps performed by a
+human, and nothing checks that the second one happened. `deploy.sh` copies
+scripts and restarts containers; it has no opinion about whether the keys those
+scripts need exist.
+
+Worth building: a drift check comparing the key set in `.env.example` against
+`.env`, folded into monitor 11. It is the one gap in this system that hides other
+gaps. Until then, run it by hand after any change that adds a key:
+
+```sh
+diff <(grep -oE '^[A-Z0-9_]+=' /srv/navi/.env.example | sort)      <(grep -oE '^[A-Z0-9_]+=' /srv/navi/.env | sort)
+```
+
+Also retired the same day: `WAN1_EXPECT` and `WAN2_EXPECT`, still present in
+`.env` and read by nothing since the rewrite. Their stored values were
+`187.211.43.253` and `189.196.218.19`, against actual addresses of
+`187.224.28.154` and `189.196.209.57` - stale, which is exactly why the check
+stopped matching literal addresses. Commented out rather than deleted.
 
 ## Why the obvious checks aren't enough
 

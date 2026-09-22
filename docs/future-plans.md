@@ -41,8 +41,10 @@ prove nothing either way. Evidence in [network.md](network.md).
 
 **Settle it before calling, with this test.** Plug a laptop into a spare LAN port
 on the ZTE, run `python3 -m http.server 8080`, forward TCP 8080 to it in the
-ZTE's UI, then open `http://189.196.217.197:8080` from a phone on LTE with Wi-Fi
-off. It touches no ER605 config, so both lines stay up and nothing in Kuma goes
+ZTE's UI, then open `http://<current-megacable-ip>:8080` from a phone on LTE with
+Wi-Fi off. **Get that address fresh, don't take it from these docs** - it has
+moved twice since first being written down. `curl --interface 10.100.100.62
+-s ifconfig.me` from navi returns the live one. It touches no ER605 config, so both lines stay up and nothing in Kuma goes
 red, and it tests the thing you actually care about - inbound reachability -
 instead of inferring it from an address. Loads, and there's a routable address
 and the call is worth making. Times out, and it's CGNAT or their forwarding UI is
@@ -60,9 +62,15 @@ status page has IPv4 address, gateway and DNS fields in firmware and the
 WAN address is what left this unresolved.
 
 Worth knowing either way: the address is dynamic, confirmed on 2026-09-04 when a
-power cycle changed both lines' public IPs. But the DHCP lease is seven days and
-it came back as the same `189.196.217.197`, so it's stickier than "dynamic"
-implies. Don't build on it staying put; don't expect it to move often either.
+power cycle changed both lines' public IPs.
+
+**Update 2026-09-21: less sticky than this doc used to claim.** It said Megacable
+came back on the same `189.196.217.197` after that power cycle, so it was
+stickier than "dynamic" implies. Both lines have since moved again with no power
+cycle at all - Telmex to `187.224.28.154`, Megacable to `189.196.209.57`. Treat
+both as genuinely dynamic and don't quote an address out of these docs without
+checking it first. This is why monitors 6 and 7 match the ISP's reverse DNS
+rather than a literal address; see [monitoring.md](monitoring.md).
 
 Take an ER605 config backup first. The dual-WAN setup took an evening to get right.
 
