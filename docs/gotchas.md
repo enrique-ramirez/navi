@@ -217,6 +217,32 @@ Uptime Kuma push URLs carry the message as a query parameter. A hand-rolled
 happened the first time the disk usage was included. `curl -G --data-urlencode`
 does it correctly.
 
+## One repo, two machines, two deploy scripts
+
+`scripts/deploy.sh` is navi's. `hyrule-castle/scripts/deploy.sh` is the mini PC's.
+The commands differ by one directory, both begin `cd /srv/navi && git pull`, and
+for a while nothing stopped you running either on either box.
+
+Running the hyrule-castle deploy on navi installed Xvfb, openbox and foobar2000
+units on the Raspberry Pi that serves the flat's DNS, enabled them, and started
+them. They cannot work there - no wine, no X, wrong architecture - so they failed
+and restarted until systemd's start rate limiting gave up on them. DNS survived,
+but only because nothing in that stack conflicts with Pi-hole.
+
+Both scripts now check `hostname` and refuse to run on the wrong machine. Any
+future box added to this repo gets the same guard before it gets a deploy script.
+
+The cleanup, if it happens again:
+
+```sh
+sudo systemctl disable --now xvfb openbox foobar2000 fb2k-backup.timer
+sudo rm -f /etc/systemd/system/{xvfb,openbox,foobar2000,fb2k-backup}.service \
+           /etc/systemd/system/fb2k-backup.timer
+sudo rm -f /usr/local/bin/fb2k-backup.sh
+sudo systemctl daemon-reload && sudo systemctl reset-failed
+sudo rm -rf /srv/fb2k
+```
+
 ## Background processes die when the last SSH session closes
 
 `nohup cmd &` over SSH is not enough. `Linger=no` is the default, so when the last

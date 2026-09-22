@@ -11,6 +11,17 @@
 # hyrule-castle/scripts/fb2k-backup.sh for what protects them.
 set -euo pipefail
 
+# One repo, two machines, two deploy scripts, and the paths differ by one
+# directory. Run this on navi and it installs a Wine and Xvfb stack on the box
+# that serves the flat's DNS, where the units fail and restart on a loop.
+# That happened on 2026-09-22. Check first.
+EXPECT_HOST=hyrule-castle
+if [ "$(hostname)" != "$EXPECT_HOST" ]; then
+    echo "refusing: this deploy is for $EXPECT_HOST, but this is $(hostname)"
+    echo "navi's deploy is ./scripts/deploy.sh - this one is ./hyrule-castle/scripts/deploy.sh"
+    exit 1
+fi
+
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 USER_NAME=${SUDO_USER:-enrique-ramirez}
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }

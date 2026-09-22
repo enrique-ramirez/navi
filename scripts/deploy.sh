@@ -7,6 +7,15 @@
 # itself onto the box at 3am while nobody is watching.
 set -euo pipefail
 
+# The repo is checked out on two machines now. Running this one on hyrule-castle
+# would try to bring up Pi-hole, Caddy and Kuma there. See hyrule-castle/scripts.
+EXPECT_HOST=navi
+if [ "$(hostname)" != "$EXPECT_HOST" ]; then
+    echo "refusing: this deploy is for $EXPECT_HOST, but this is $(hostname)"
+    echo "hyrule-castle's deploy is ./hyrule-castle/scripts/deploy.sh"
+    exit 1
+fi
+
 REPO=/srv/navi
 [ -f "$REPO/.env" ] || { echo "missing $REPO/.env - copy .env.example and fill it in"; exit 1; }
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }

@@ -15,14 +15,27 @@ scripts/   deploy.sh, fb2k-backup.sh
 
 Same rule as navi, and for the same reason: a human runs the deploy.
 
+The repo has to be checked out on hyrule-castle first - it is the same repo navi
+uses, and the two machines each apply their own half:
+
+```sh
+# once, on hyrule-castle
+sudo mkdir -p /srv/navi && sudo chown enrique-ramirez: /srv/navi
+git clone git@github.com:enrique-ramirez/navi.git /srv/navi
+```
+
 ```sh
 # on your laptop
 edit, commit, push
 
 # on hyrule-castle
-ssh enrique-ramirez@10.100.100.50      # or hyrule-castle.lan
+ssh enrique-ramirez@hyrule-castle.lan
 cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 ```
+
+**Both deploy scripts check `hostname` and refuse to run on the wrong machine.**
+That guard exists because this one was run on navi by mistake, which installed a
+Wine and Xvfb stack on the flat's DNS server.
 
 `deploy.sh` installs the units, creates `/srv/fb2k` and the `Musica` symlink if
 missing, and restarts the display stack **only when a unit actually changed**.
