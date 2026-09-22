@@ -49,7 +49,8 @@ One SODIMM slot, single channel, no upgrade path.
 WiFi card, which is now confirmed by the card being present and working rather
 than taken on the seller's word. Storage growth here is external, or the NAS.
 
-**There may be a SATA header.** `Chipset → PCH-IO Configuration → SATA
+**There may be a SATA header, and it is now curiosity rather than diligence** -
+the return window has closed and the box is being kept. `Chipset → PCH-IO Configuration → SATA
 Configuration` shows the controller `Enabled` in `AHCI` mode with `Serial ATA
 Port 0` and `Port 1` both present and `Empty`. That is not proof: AMI enumerates
 the PCH's ports whether or not the board routes them to a connector. The lid has
@@ -326,6 +327,182 @@ A recent `StartedAt` plus the expected value in that env line. This is the same
 lesson `deploy.sh` already records in a comment about Caddy, generalised: the
 script succeeding and the container having taken the change are different facts.
 
+## The music library
+
+`/srv/music/library` holds the sorted library - 349 GB, 37,091 files, copied
+2026-09-21 from the old Toshiba over USB rather than over the network, which kept
+filename encoding a single conversion done once by the kernel's vfat driver rather
+than a chain of translations through Windows and SMB. A Spanish-language library is
+full of accents; mojibake across 37,000 names is not something you want to discover
+later.
+
+`/srv/music/inbox` exists and is empty. The 79 GB of unsorted material stayed on
+the Toshiba pending a Mac-side sorting workflow, and is knowingly single-copy until
+that happens.
+
+**This path does not move.** In October the 16 TB USB disk mounts at `/srv/music`
+and the contents move onto it; the path stays. See
+[future-plans.md](future-plans.md) for the ordering, which never drops below two
+copies.
+
+### The layout foobar2000 needs
+
+Not a drive letter. foobar2000's library index holds `file-relative://` paths, so
+what matters is that `Musica` is a **sibling of the install directory**:
+
+```
+/srv/fb2k/foobar2000/                     the portable install
+/srv/fb2k/Musica -> /srv/music/library    symlink
+```
+
+The symlink is what decouples the two. October's remount changes the contents of
+`/srv/music/library` and the symlink keeps pointing at it, so nothing in
+foobar2000's config ever learns the disk changed. Keep the install out of
+`/srv/music` itself or it vanishes with that mount.
+
+## The music player
+
+foobar2000 **v2.25.10 x64**, portable, at `/srv/fb2k/foobar2000`, running headless
+under Wine 10.0 and Xvfb as a systemd service. Migrated 2026-09-22.
+
+```
+/srv/fb2k/
+├── foobar2000/            the portable install, including profile/
+└── Musica -> /srv/music/library
+
+~/fb2k-wine/               the Wine prefix, win64
+└── dosdevices/f: -> /srv/fb2k
+```
+
+So `F:\foobar2000\` and `F:\Musica\`, and the library's `file-relative://..\Musica\`
+paths resolve. **The prefix deliberately lives outside `/srv/fb2k`.** It was inside
+at first, which made `F:\wine\dosdevices\f:` point back at `F:` - a loop any
+library scan of the drive root would have followed forever. It is also disposable
+in a way the profile is not: a broken prefix should be deletable in thirty seconds
+without threatening the library index.
+
+**The drive letter is cosmetic.** Every path in the index is relative, so `F` was
+chosen only because it matches what the Windows machine used.
+
+### What came across, and what did not
+
+Fresh binaries and components, old profile. The three components were installed on
+Windows, where a GUI exists, rather than driving an installer under Xvfb:
+`foo_audioscrobbler`, `foo_enhanced_playcount`, `foo_openlyrics`. Deliberately not
+carried over: `foo_beefweb` and `foo_jean`, because the migration off beefweb is
+still in progress and one change at a time is the point. Also dropped, and worth
+knowing in case they are missed: `foo_quicksearch` and `foo_quicktag`, which were
+installed on the old machine. Their settings came across, so installing them later
+picks up where they left off.
+
+Transplanted from the old profile: `metadb.sqlite`, `config.sqlite`, `library-v2.0`,
+`playlists-v2.0`, `configuration/`, `dsp-presets/`, `config.fb2k-dsp`, `theme.fth`.
+
+**`metadb.sqlite` is the irreplaceable one.** 91.6 MB holding 30,446 tracks, and -
+this is the part that is not obvious - every play count. foobar2000's own
+`playCount` and `rating` columns are empty; `foo_enhanced_playcount` keeps its data
+in GUID-named `metadb_index_*` tables inside the same file. The fresh install
+created the same index GUIDs because it has the same components, so the old data
+landed exactly where the new components look for it.
+
+Verified after landing: `PRAGMA integrity_check` ok on both databases, 30,429
+tracks in the library, every playlist present, Last.fm credentials intact.
+
+### Output is Null Output, and has to be
+
+The box has no sound card and Wine's audio driver is disabled outright:
+
+```sh
+wine reg add "HKCU\Software\Wine\Drivers" /v Audio /d "" /f
+```
+
+Without that, foobar2000 can stall on a modal audio-init error nobody can see.
+Audio reaches listeners through `foo_jean`'s stream endpoint rather than the
+machine's own playback, so this is the correct permanent setting rather than a
+workaround.
+
+### Sixteen files do not play
+
+`profile/library-error-log.txt` lists them, and **it appends one copy per
+startup** - 52 lines after three starts is still the same 16 files.
+
+| count | format | why |
+|---|---|---|
+| 11 | `.wma` | Sidilarsen, *(2005) Eau* - Windows Media codecs are not in Wine |
+| 1 | `.wmv` | a Professor Elemental video, same reason |
+| 4 | `.mp3` | Masashi Hamauzu - "Unsupported format or corrupted file" |
+
+The Sidilarsen album is **entirely** unplayable here, 11 of 11 tracks. Re-acquiring
+it in a sane format is the fix; there is no codec to install.
+
+30,446 in the index minus these 16, minus the 4 test files under
+`..\foo_jean-test\` that were not copied, gives the 30,429 the player reports.
+
+### Stopping it correctly is not obvious
+
+The unit runs two `ExecStop` commands and both are load-bearing:
+
+```
+ExecStop=/usr/bin/wine .../foobar2000.exe /exit
+ExecStop=/usr/bin/wineserver -w
+```
+
+`/exit` is a Windows shutdown request. A bare SIGTERM to the Wine process is not,
+and without it foobar2000 never flushes `metadb.sqlite` - every play count since
+the last flush would be lost on each restart. Confirmed working: a clean stop
+writes `profile/nobadshutdown` and `metadb.sqlite` grows.
+
+`wineserver -w` exists because the player exits and the **launcher does not** -
+wineserver lingers while the session winds down, systemd waits out
+`TimeoutStopSec`, and a perfectly clean shutdown gets marked `failed`. It waits
+rather than kills on purpose: `wineserver -k` is the obvious fix and it is wrong,
+because it races the metadb flush `/exit` just started. That flush was measured at
+about seven seconds.
+
+### Seeing the GUI
+
+Xvfb is a real X server with no monitor, so the GUI is available whenever wanted:
+
+```sh
+ssh -t -L 5900:localhost:5900 enrique-ramirez@10.100.100.50 \
+    'x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -passwd <throwaway>'
+```
+
+Then `vnc://localhost:5900` from the Mac. Bound to localhost and tunnelled, so
+nothing is exposed on the LAN - which is what makes a throwaway password
+acceptable. On demand only, never as a service.
+
+`openbox` runs as a unit alongside Xvfb. Without a window manager nothing on `:99`
+can be moved or resized, and modal dialogs land wherever they land - which makes
+Preferences unusable. The first launch proved the point: foobar2000 restored a
+window position from the Windows machine that put it at `X=1210` on a 1280-wide
+screen, leaving 70 visible pixels and no way to drag it.
+
+## What is in git, and what is not
+
+Config is in the repo at [../hyrule-castle/](../hyrule-castle/) - units, a deploy
+script, and the profile backup. A few KB, no secrets. Applied the same way navi
+is, by a human:
+
+```sh
+cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
+```
+
+Everything foobar2000 accumulates stays out: the 25 MB install, the Wine prefix,
+`library-v2.0`, and both SQLite databases - `config.sqlite` because it holds the
+Last.fm session, `metadb.sqlite` because it is 92 MB rewritten constantly.
+
+**`fb2k-backup.timer` exists because of that exclusion.** `metadb.sqlite` holds
+every play count and would otherwise be protected by nothing at all. Daily, keeps
+fifteen, mode 600. It copies both databases through SQLite's online backup API
+rather than `cp`: foobar2000 holds them open and writes while running, and a plain
+copy of a live database can be internally inconsistent in a way that surfaces
+later as missing play counts rather than as an error.
+
+Backups are local only, in `/srv/backup`. Same gap navi has - both copies in one
+flat - and the offsite plan in [future-plans.md](future-plans.md) is what closes
+it.
+
 ## Where it lives
 
 The kitchen, wired directly into the ER605's fifth LAN port, which
@@ -348,6 +525,13 @@ In rough order:
 
 - Replace the ping monitor with something that proves the stream works, once
   there is a stream
-- Docker CE from Docker's own repo, pinned key, same as navi
-- foobar2000 under Wine and Xvfb, then the library migration
+- `foo_jean`, once the migration off beefweb finishes. Then `MUSIC_BACKEND` and
+  `MUSIC_FOOJEAN` in navi's `.env` move to `10.100.100.50:8881`
+- WMA playback, if it proves worth it. Eleven tracks of one album; re-acquiring it
+  in another format is probably cheaper than making Wine decode Windows Media
+- Offsite backup, covering `/srv/backup` as well as the library
+- `wine` and `xvfb` from Debian, a systemd unit for foobar2000, then the library
+  migration. 64-bit only - see [future-plans.md](future-plans.md)
+- Docker CE, **at the Jellyfin phase and not before** - see
+  [decisions.md](decisions.md)
 - Open the lid and settle the SATA question while the return window allows

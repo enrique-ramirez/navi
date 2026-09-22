@@ -117,11 +117,11 @@ single channel, no upgrade path.
 **There is no second NVMe slot**, also now confirmed - the second M.2 is E-key and
 has the WiFi card in it. Storage growth here is external, or the NAS.
 
-**The SATA question is half-answered and worth finishing.** The BIOS shows the
+**The SATA question stays open, and no longer urgently.** The BIOS shows the
 controller enabled in AHCI with two ports present and empty, which means the
-chipset's SATA is switched on but not that the board routes it to a physical
-connector. Take the lid off and look, while the return window still allows it. If
-a header is in there, a 2.5" drive is the cheap expansion path the E-key finding
+chipset's SATA is switched on but not that the board routes it to a connector.
+The return window has closed and the box is being kept, so this is curiosity now.
+If a header is in there it is still the cheap expansion path the E-key finding
 took away.
 
 **One caveat to remember before blaming anything else.** The dual NICs are Intel
@@ -139,9 +139,46 @@ sudo ethtool --set-eee enp3s0 eee off
 Its only job at first is serving music, so the Windows PC can stop being a media
 server.
 
-**Phase 1, music.** Debian 13 minimal with no desktop is done. What's left is the
-stack: foobar2000 + `foo_beefweb` + `foo_jean`, all Windows binaries, run under
-Wine. On x86 Linux
+**Phase 1, music. Done on 2026-09-22**, except `foo_jean` itself.
+
+foobar2000 v2.25.10 x64 runs headless under Wine 10.0 and Xvfb as a systemd
+service, with the library, every playlist, all play counts and the Last.fm session
+carried over from the Windows install. 30,429 tracks. Full detail, including the
+several ways stopping it can go wrong, is in
+[hyrule-castle.md](hyrule-castle.md).
+
+Wine needed no tricks. It runs the Win32 API natively on x86, foobar2000 is a
+plain desktop app, and the two `foo_jean` design rules this doc noted - a
+header-only HTTP library over plain sockets, `std::` threading rather than Win32 -
+should carry over as predicted. That remains unproven until the component is
+actually installed.
+
+What is left of the original phase-1 plan: the stack:
+
+**`foo_beefweb` is out of the plan.** Jean started as a beefweb theme with
+`foo_jean` alongside it for the parts beefweb couldn't do, and is migrating to
+`foo_jean` alone. Earlier versions of this doc listed both; only one component
+gets installed.
+
+**64-bit, settled by the component.** `plugins/fb2k/foo_jean.sln` in the jean repo
+has exactly two configurations, `Debug|x64` and `Release|x64`, and the vcxproj
+declares no `Win32` platform at all. So foobar2000 must be the v2 **x64** build,
+and since plugin and host architecture have to match and nothing 32-bit remains in
+the stack, **no `dpkg --add-architecture i386` and no `wine32`.** That removes the
+fiddliest part of Wine on Debian.
+
+**It needs foobar2000 2.0 or newer, and this is a hard floor.** `foo_jean`'s
+`ARCHITECTURE.md` records that the media library API depends on `metadb_v2` and
+that `library_callback_v2_dynamic` registers against `library_manager_v4`, whose
+`get()` crashes when absent. Development and measurements are against 2.25.x.
+Install a v2 x64 build, not v1.
+
+Debian trixie carries `wine 10.0~repack-6` in `main`, which is recent enough to
+start with; `xvfb` and `contrib` (for `winetricks`, if needed) are both available.
+Reach for the WineHQ repo only if something specific fails, rather than by
+default.
+
+On x86 Linux
 Wine runs the Windows API natively, and two of `foo_jean`'s own design rules (a
 header-only HTTP library over plain sockets, `std::` threading rather than Win32)
 happen to make it unusually likely to work.
@@ -174,8 +211,96 @@ the NVMe holds only the OS, containers and databases. Keep the trigger anyway: i
 is now the number that says the USB disk has become the bottleneck rather than
 the NAS.
 
-**Migrating the library.** 419 GB currently lives on an old, untrusted external
-drive. Three rules, all load-bearing. Check SMART before copying, because
+**Migrating the library. Started 2026-09-21, ahead of schedule and deliberately.**
+The sorted library is now on hyrule-castle's NVMe at `/srv/music/library`, copied
+directly from the Toshiba over USB rather than over the network.
+
+This contradicts the line further up that says the music never lives on the NVMe.
+That line assumed the October disk would arrive before the library needed a home.
+It hadn't, and until this copy the library existed in **exactly one place** - a
+drive this doc itself calls untrusted, with 48,541 power-on hours on it. Three more
+weeks of single-copy exposure was the worse bet. The price is one extra local copy
+in October, NVMe to USB, a couple of unattended hours.
+
+The unsorted `sort` pile - now 79 GB, not the 70 recorded below - was deliberately
+left behind, pending a Mac-side sorting workflow. **It remains single-copy on the
+old drive**, which is a known and accepted exposure rather than an oversight.
+
+Measured on the day: 349 GB, 37,231 files in `Musica`; 37,091 transferred after
+excluding macOS `._*` / `.DS_Store` and Windows `Thumbs.db` / `desktop.ini`.
+373.77 GB at 86.89 MB/s in 1:08:22 over USB 3.0 with UASP.
+
+**Verified, not assumed.** A second pass with `rsync -rltc --dry-run
+--itemize-changes` re-read all 349 GB from both copies and compared by checksum,
+taking 61 minutes at 97 MB/s and reporting **zero differences across all 37,091
+files**. Matching sizes and counts would have proved nothing - corruption comes
+back the right length, which is the entire reason this doc demands checksums.
+
+`-rltc` rather than the `-avc` this doc used to specify: `-a` on a FAT32 source
+generates permission and ownership noise for attributes FAT does not have.
+
+What that pass proves is that the **copy is faithful**. It cannot prove the
+**source was good** - a file that rotted on the Toshiba years ago now has an
+identical rotten twin, and rsync calls that a match. FLAC stores an MD5 of its own
+decoded audio, so `flac -t` is the check that catches that. It was run on
+2026-09-21 across all 5,037 FLAC files, 141.4 GB.
+
+**There is no rot. Not one file.** Zero MD5 mismatches, zero mid-stream sync
+losses. Five and a half years on that drive cost nothing.
+
+What it did find, all of it pre-existing and none of it caused by the copy:
+
+| | files | albums | |
+|---|---|---|---|
+| clean | 4,479 | | |
+| ID3 tags only | 519 | 48 | audio complete, fixed |
+| truncated | 39 | 5 | real loss, left alone |
+
+**The 519 were cosmetic.** ID3v2 on the front and ID3v1 on the back of a FLAC,
+written years ago by something treating FLAC as MP3. The audio was complete; the
+decoder simply ran off the end of the stream into the trailer. Stripped with
+`mutagen.id3.delete(p, delete_v1=True, delete_v2=True)` after proving on a copy
+that audio MD5, Vorbis comments and embedded art all survive untouched. All 519
+verify `CLEAN` afterwards. About 1.2 MB of junk removed. Joaquin Sabina (16
+albums), Stevie Wonder (7) and CCR (6) were most of it.
+
+**The 39 are genuinely short**, 6 ms to 763 ms missing from the end of each track,
+across five albums - every track in each affected. All are obscure 2009-2012 indie
+releases, which reads like incomplete downloads from that era rather than anything
+the drive did:
+
+| album | worst track |
+|---|---|
+| `S/Spouds, The/(2012) Paxil` | 763 ms, all 11 tracks |
+| `W/We Only Said/(2009) We Only Said` | 740 ms, all 10 tracks |
+| `K/KYST/(2011) Waterworks` | 615 ms, all 8 tracks |
+| `E/Ewa Gigon/(2011) Moonflowers` | 92 ms, all 8 tracks |
+| `R/Rachael/(2011) Summer Dope` | 66 ms, both tracks |
+
+Left deliberately unfixed. Stripping their ID3 would not make them pass, and
+leaving them means a library-wide `flac -t` now returns **exactly 39 known errors
+in 5 named albums and nothing else** - a set small enough to stay meaningful
+rather than 558 errors nobody reads.
+
+MP3 has no equivalent integrity field, so the other ~32,000 files cannot be
+checked this way at all.
+
+**The source drive.** A Toshiba MQ01UBD100, FAT32, volume label `FALCHION`. SMART
+was clean where it counts - zero reallocated, zero pending, zero offline
+uncorrectable - against 48,541 power-on hours and 7,846 loaded hours, so roughly
+84% of its powered life had the heads parked. Zero reallocations at that age is a
+healthy old drive rather than a dying one, but it is well past the duty cycle a
+2.5" portable is designed around.
+
+**It is a native-USB drive, so it cannot be shucked.** The USB 3.0 interface is on
+the drive's own PCB - `lsusb` reports Toshiba `0480:0201`, not a third-party bridge
+chip. If that interface fails the platters are unreachable without a recovery
+service, even though the data is intact. That is a different and worse failure mode
+than a normal disk in an enclosure, and it is a reason not to let it be the only
+copy of anything.
+
+**The original three rules still hold.** 419 GB - now 428 - lives on an old,
+untrusted external drive. Three rules, all load-bearing. Check SMART before copying, because
 reallocated or pending sectors mean `ddrescue` is a better tool than a plain copy.
 Verify with checksums, because a failing drive returns silently corrupted data on
 read and you'd find the damage years later; use TeraCopy or `rsync -avc`, never
@@ -187,14 +312,40 @@ derives from the `#Jean Library` autoplaylist, which mirrors the Media Library, 
 a playlist polluted with unsorted material makes every figure wrong. Use
 `/srv/music/library` (watched) and `/srv/music/inbox` (not).
 
-The portable foobar2000 config holds `F:\` paths. Map the music directory to
-drive F in the Wine prefix and the library resolves untouched:
+**The `F:\` claim in earlier versions of this doc was wrong**, and the drive-letter
+mapping it prescribed does not do what it said. Checked against the real
+`metadb.sqlite` on 2026-09-21: all 30,446 entries are `file-relative://`, and not
+one holds an absolute path.
 
-```sh
-ln -s /srv/music ~/fb2k/dosdevices/f:
+```
+0+file-relative://..\Musica\#\10cc\(1975) The Original Soundtrack\01. ...
 ```
 
-Get that wrong and 30,441 tracks come up dead.
+| scheme | count | |
+|---|---|---|
+| `file-relative://` | 30,446 | every entry |
+| under `..\Musica\` | 30,442 | the library |
+| under `..\foo_jean-test\` | 4 | Jean's sample files |
+
+So the constraint is not a drive letter. **`Musica` has to be a sibling of the
+directory holding `foobar2000.exe`**, because `..\` resolves relative to the
+install in portable mode. `sort` appears zero times, which means the unsorted pile
+is already outside the watched tree without anyone having to arrange it.
+
+The layout that satisfies this, and survives October:
+
+```
+/srv/fb2k/foobar2000/          the portable install
+/srv/fb2k/Musica -> /srv/music/library      symlink
+```
+
+foobar2000 asks for `..\Musica\`, Wine follows the symlink. When `/srv/music`
+becomes the USB disk's mount point in October, the symlink already points there
+and **nothing changes** - which is a better property than the drive-letter scheme
+ever had. Keep the install out of `/srv/music` itself, or it disappears when that
+path is remounted.
+
+Get the sibling relationship wrong and 30,442 tracks come up dead.
 
 **Start offsite backup when the music lands, not when the NAS arrives.** That is
 October 2026 under the staged plan below. Every album added after the migration
@@ -481,7 +632,7 @@ deliberately.
 Moving the state backup somewhere off the flat. Right now both copies are in the
 same building.
 
-Getting a US plug head for hyrule-castle's power brick. It shipped with the
-European one only, and the interim answer is a bulky travel adapter - see
-[hyrule-castle.md](hyrule-castle.md). Ask the seller on the Amazon thread; it costs
-a message. The pigtail rebuild makes it cosmetic rather than blocking.
+**The US plug head is not coming.** The seller conversation closed before it was
+asked for, so the brick keeps its European head and the travel adapter. That is
+fine: the pigtail rebuild above makes the adapter's bulk irrelevant, which was the
+only problem it ever caused.

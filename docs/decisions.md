@@ -203,6 +203,38 @@ build. The alternative was setting `__PLAYER_HOST__` at build time, which would
 hardcode the player's address and defeat the point of having `music.lan` as an
 indirection at all.
 
+## Docker arrives with Jellyfin, not with foobar2000
+
+hyrule-castle's first service runs on the host under systemd. Docker gets
+installed when the second one does.
+
+foobar2000 under Wine is a bad container candidate and a good systemd unit. No
+maintained image exists, so it would be a Dockerfile to own forever. Debugging a
+Win32 GUI app, under Wine, under Xvfb, under a container is three layers of
+indirection on the box where `foo_jean` is actively developed and restarted
+constantly. And the `F:\` path mapping is already the part
+[future-plans.md](future-plans.md) warns will cost you 30,441 dead tracks if it
+goes wrong; a bind mount underneath it adds a second place for that to happen.
+The one thing that normally forces containers here - audio device passthrough -
+doesn't apply, because `foo_jean` streams over HTTP and the player's own output is
+Null Output.
+
+Those docs already assumed this without saying so: `RequiresMountsFor=/srv/music`
+is described as going on "the foobar2000 unit", and the Wine prefix maps drive F
+through a symlink in a home directory. Both describe a host process.
+
+Docker earns its place later and specifically. Immich is distributed as Compose
+and its ML container is the hungriest thing on the roadmap. Jellyfin's official
+image makes QuickSync a `--device /dev/dri` rather than a hand-maintained native
+install. And `mem_limit` matters once a photo import shares a box with a live
+audio stream - the same argument [navi.md](navi.md) makes for enabling memory
+cgroups so a runaway container can't take DNS down.
+
+Deferring is not just neutral. Docker brings a daemon and its own iptables
+chains, and there is a plan to restrict `foo_jean`'s port to navi with nftables.
+Installing Docker before it is needed means debugging that interaction earlier
+than necessary, on the box that is supposed to be playing music.
+
 ## Two layers of names
 
 The machine is `hyrule-castle`; the things on it are `music.lan`, `films.lan`,

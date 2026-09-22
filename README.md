@@ -28,9 +28,14 @@ stack/          docker compose per service, plus the Caddyfile
 scripts/        wan-check, backup, deploy
 systemd/        timers and units
 www/            the help.lan landing page
+hyrule-castle/  the mini PC's units and scripts, applied on that box
 docs/           everything below
 .env.example    every value you need; the real .env is gitignored
 ```
+
+Everything at the top level belongs to navi. `hyrule-castle/` is the second
+machine, deployed separately on that box - see
+[hyrule-castle/README.md](hyrule-castle/README.md). The docs cover both.
 
 ## Changing something
 
@@ -45,6 +50,13 @@ edit, commit, push
 ssh enrique@navi.lan          # or 10.100.100.53 if DNS is down, which is
                               # exactly when you'll need to get in
 cd /srv/navi && git pull && sudo ./scripts/deploy.sh
+```
+
+hyrule-castle has its own deploy on the same repo:
+
+```sh
+ssh enrique-ramirez@hyrule-castle.lan
+cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 ```
 
 `deploy.sh` copies scripts and units into place, reloads systemd if they changed,

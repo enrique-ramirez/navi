@@ -1,0 +1,24 @@
+[Unit]
+Description=Window manager for the headless X display
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+
+# Without a window manager, nothing on :99 can be moved or resized. foobar2000
+# restores its window position from config, and a position saved on another
+# machine can land almost entirely off-screen - which is what happened on the
+# first run. Worse, modal dialogs open wherever they land and cannot be dragged,
+# which makes Preferences unusable over VNC.
+After=xvfb.service
+Requires=xvfb.service
+PartOf=xvfb.service
+
+[Service]
+Type=simple
+User=enrique-ramirez
+Group=enrique-ramirez
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/openbox
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

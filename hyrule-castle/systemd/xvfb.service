@@ -1,0 +1,19 @@
+[Unit]
+Description=Virtual framebuffer X server for headless foobar2000
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+
+[Service]
+Type=simple
+User=enrique-ramirez
+Group=enrique-ramirez
+
+# 1920x1080 rather than something smaller: this display is only ever seen over
+# VNC, and foobar2000 needs room for the media library tree beside a playlist.
+# The framebuffer costs a few MB.
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

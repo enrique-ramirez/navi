@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily foobar2000 profile backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

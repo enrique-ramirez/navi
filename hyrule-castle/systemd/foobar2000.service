@@ -1,0 +1,47 @@
+[Unit]
+Description=foobar2000 under Wine, headless
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+After=xvfb.service network-online.target
+Requires=xvfb.service
+
+# The library lives under /srv/music. Today that is the root filesystem, so this
+# is inert; in October it becomes the USB disk mount and this is what stops
+# foobar2000 starting against an empty directory and rescanning the library
+# into nothing. See docs/future-plans.md.
+RequiresMountsFor=/srv/music
+
+[Service]
+Type=simple
+User=enrique-ramirez
+Group=enrique-ramirez
+WorkingDirectory=/srv/fb2k/foobar2000
+
+Environment=WINEPREFIX=/home/enrique-ramirez/fb2k-wine
+Environment=WINEDEBUG=-all
+Environment=WINEDLLOVERRIDES=mscoree,mshtml=
+Environment=DISPLAY=:99
+
+ExecStart=/usr/bin/wine /srv/fb2k/foobar2000/foobar2000.exe
+
+# Two steps, and both are needed.
+#
+# /exit asks the player to quit the way Windows expects. A bare SIGTERM to the
+# Wine process is not a Windows shutdown message, and without this foobar2000
+# never flushes metadb.sqlite - which is where every play count, rating and
+# date-added lives. Verified 2026-09-22: after a clean stop the profile gains
+# nobadshutdown and metadb.sqlite grows.
+ExecStop=/usr/bin/wine /srv/fb2k/foobar2000/foobar2000.exe /exit
+#
+# The player exits but the wine launcher does not: wineserver lingers while the
+# session winds down, so systemd waits out TimeoutStopSec and marks a perfectly
+# clean shutdown as failed. -w blocks until wineserver is gone, which is the
+# real end of the shutdown. Waiting, not killing - a -k here would race the
+# metadb flush that /exit just started.
+ExecStop=/usr/bin/wineserver -w
+
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

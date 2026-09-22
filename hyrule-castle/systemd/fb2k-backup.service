@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up the foobar2000 profile (play counts, preferences, playlists)
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fb2k-backup.sh
