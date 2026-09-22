@@ -166,6 +166,17 @@ wireless.
 There's no bufferbloat. 698 Mbps down, 612 Mbps up, added latency under 1 ms. Don't
 propose QoS shaping to fix a problem that isn't there.
 
+**The kitchen LAN is sub-millisecond**, measured 2026-09-21 from hyrule-castle on
+the ER605's fifth port: 0.697 ms average to the router, 0.291 ms to navi, 0.069 ms
+of deviation. Set that against the `1.65/3.10/31.0/3.75 ms` a wired client on the
+Office Deco measures in [wifi.md](wifi.md) - 27x the worst case and 27x the jitter,
+because of one wireless backhaul hop. Wiring to the router is not a marginal
+improvement over wiring to a satellite.
+
+navi answers faster than the router does. That's expected: LAN-to-LAN crosses the
+ER605's switch fabric, while pinging the router hits its management CPU, which
+deprioritises ICMP. Don't read it as the router being slow.
+
 **Gigabit is the LAN ceiling and nothing on the shopping list changes that.** The
 ER605's LAN ports are 1 GbE. hyrule-castle has dual 2.5 GbE and the Deco XE75 Pro
 has 2.5 GbE ports, so it is tempting to think there is headroom to unlock by

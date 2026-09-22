@@ -163,8 +163,8 @@ reservation is bound to that MAC: put the cable in the other jack and the box
 silently gets a pool address instead.
 
 Both reservations live on the ER605. They were created with `Export to IP-MAC
-Binding` ticked, which contradicts the standing rule in [er605.md](er605.md) and
-wants undoing - harmless today, a trap later.
+Binding` ticked, against the standing rule in [er605.md](er605.md); the resulting
+bindings were deleted on 2026-09-21 and the list is now empty.
 
 ### Two interfaces on purpose
 
@@ -193,6 +193,28 @@ interface out from under an SSH session. Keep it.
 `/etc/network/interfaces` is mode 600 because the installer wrote the PSK into it
 in cleartext. Leave it that way.
 
+### Measured on the ER605 port, 2026-09-21
+
+`enp3s0` negotiates `1000Mb/s` full duplex. Latency from the box:
+
+| to | min | avg | max | mdev |
+|---|---|---|---|---|
+| ER605 `.1` | 0.528 | 0.697 | 1.156 | 0.158 ms |
+| navi `.53` | 0.183 | 0.291 | 0.504 | 0.069 ms |
+
+**navi answers faster than the router, and that is not a fault.** LAN-to-LAN
+traffic crosses the ER605's switch fabric in hardware; pinging the router itself
+hits its management CPU, which deprioritises ICMP. The 0.697 ms figure understates
+the path rather than describing it.
+
+Compare against [wifi.md](wifi.md)'s wired-client-on-the-Office-Deco measurement of
+`1.65/3.10/31.0/3.75 ms`: the kitchen is 4.4x better on average and **27x better on
+worst case and jitter** than the office fallback would have been. That is what the
+power-brick fight bought.
+
+The navi to hyrule-castle number is also the cost of the Caddy proxy hop, which
+[decisions.md](decisions.md) argued about at length: 0.291 ms.
+
 ### Gigabit is the ceiling, and that is fine
 
 The link negotiates `1000Mb/s`. The NICs are 2.5 GbE and the Deco's ports are
@@ -220,15 +242,68 @@ consequence documented in [gotchas.md](gotchas.md): Debian then declines to
 install the `sudo` package, leaving the user in a group whose command does not
 exist. It was installed by hand afterwards.
 
-**Still to do**, and not yet done: password authentication is still enabled and
-root login is not yet disabled. navi carries both in
-`/etc/ssh/sshd_config.d/99-hardening.conf` and this box should match.
+Key-only, matching navi, in `/etc/ssh/sshd_config.d/99-hardening.conf` as of
+2026-09-21:
+
+```
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+```
+
+Verified from the MacBook after the restart rather than assumed: key auth
+succeeds, and both a password attempt and a root login come back
+`Permission denied (publickey)`.
+
+`ssh.service` is enabled and `ssh.socket` is disabled, so this is a classic
+service - a plain `systemctl restart ssh` applies changes. Worth knowing because
+Debian 13 can run sshd socket-activated, and there the restart would not.
+
+**Recovery if ever locked out is physical.** These settings apply to every
+interface, so the WiFi path does not help - it's a monitor and keyboard on the
+box, with a Dvorak console. Validate with `sudo sshd -t` before restarting;
+that turns the only realistic lockout cause into a caught error.
+
+`sudo` asks for a password here. navi has it passwordless via
+`/etc/sudoers.d/010_enrique-nopasswd`; this box does not, which is a small
+inconsistency to settle deliberately rather than drift into.
 
 The console keyboard is **US Dvorak**. Set through `dpkg-reconfigure
 keyboard-configuration` rather than by editing `/etc/default/keyboard`, for the
 reason in [gotchas.md](gotchas.md). This only affects someone physically at the
 machine, which is exactly the break-glass case - so anyone helping debug it at
 3am needs to know before they touch the keys.
+
+## Updates
+
+`unattended-upgrades` 2.12, restricted to the Debian security pocket, configured
+2026-09-21 in `/etc/apt/apt.conf.d/52unattended-upgrades-local` - a drop-in rather
+than an edit to the shipped file, so a package upgrade can't quietly revert it.
+
+Two defaults had to be overridden, and one of them is a trap:
+
+- **The general archive is enabled by default** and needs `#clear` to remove,
+  because apt.conf lists append rather than replace. [gotchas.md](gotchas.md) has
+  the detail; it is not a Raspberry Pi OS quirk as previously recorded.
+- **`/etc/apt/apt.conf.d/20auto-upgrades` did not exist**, so nothing periodic ran
+  despite the service being enabled. Created with
+  `APT::Periodic::Update-Package-Lists` and `APT::Periodic::Unattended-Upgrade`.
+
+In force, verified rather than assumed:
+
+```
+Allowed origins are: origin=Debian,codename=trixie,label=Debian-Security,
+                     origin=Debian,codename=trixie-security,label=Debian-Security
+```
+
+Automatic reboots are off, explicitly rather than by inherited default. This box
+streams music and will serve video; it doesn't get to choose when it disappears.
+Docker's packages are blacklisted ahead of being installed, for navi's reason:
+upgrading the container engine restarts every container.
+
+Kernel upgrades are not excluded here as they are on navi. navi's exclusion exists
+because a bad kernel on a box with no monitor is a bad afternoon; hyrule-castle has
+HDMI and a keyboard can reach it. Revisit if that stops being true.
 
 ## Where it lives
 
@@ -250,10 +325,7 @@ the far end, by design.
 
 In rough order:
 
-- Move it to the kitchen and onto the ER605 (waiting on the pigtails)
-- SSH hardening to match navi: key-only, no root login
-- `unattended-upgrades`, security pocket only, no automatic reboots
-- Add `hyrule-castle` to `PIHOLE_HOSTS` and give Kuma a monitor for it
+- Add `hyrule-castle` to `PIHOLE_HOSTS` on navi and give Kuma a monitor for it
 - Docker CE from Docker's own repo, pinned key, same as navi
 - foobar2000 under Wine and Xvfb, then the library migration
 - Open the lid and settle the SATA question while the return window allows

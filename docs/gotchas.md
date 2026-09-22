@@ -108,11 +108,43 @@ hardcodes an assumption about the thing it watches will eventually cry wolf when
 that thing legitimately changes, and a monitor you've learned to disbelieve is
 worse than none.
 
-## unattended-upgrades is wider than you think
+## unattended-upgrades is wider than you think, on Debian itself
 
-Raspberry Pi OS's default origins include `origin=Debian,codename=trixie,label=Debian`,
-the general archive, not just security. Left alone it auto-applies all stable
-updates.
+The default `Origins-Pattern` in `/etc/apt/apt.conf.d/50unattended-upgrades`
+includes `origin=Debian,codename=${distro_codename},label=Debian` - the general
+archive, not just security - **uncommented and active**. Left alone it
+auto-applies every stable update.
+
+This was first found on navi and written down as a Raspberry Pi OS quirk. It
+isn't. A stock Debian 13 netinst with `unattended-upgrades` 2.12 ships the same
+active line, confirmed on hyrule-castle 2026-09-21. Assume it on every Debian
+box you build, and check rather than assuming it's been fixed upstream.
+
+**Overriding it needs `#clear`, because apt.conf lists append.** Redeclaring
+`Unattended-Upgrade::Origins-Pattern` in a higher-numbered drop-in adds to the
+existing list rather than replacing it, so the general-archive entry survives and
+nothing looks wrong. The working form:
+
+```
+#clear Unattended-Upgrade::Origins-Pattern;
+Unattended-Upgrade::Origins-Pattern {
+        "origin=Debian,codename=${distro_codename},label=Debian-Security";
+        "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+};
+```
+
+Verify, don't assume - this prints the list actually in force:
+
+```sh
+sudo unattended-upgrade --dry-run --debug 2>&1 | grep -i 'allowed origins'
+```
+
+**Installing the package does not switch it on.** `unattended-upgrades.service`
+gets enabled, which is misleading: the periodic run is driven by
+`apt-daily-upgrade.timer`, which checks `APT::Periodic::Unattended-Upgrade` and
+does nothing unless it's set. A minimal Debian install ships no
+`/etc/apt/apt.conf.d/20auto-upgrades` at all, so the package sits installed and
+inert with every timer enabled and green.
 
 ## The green LED is not a liveness light
 
@@ -313,5 +345,17 @@ setting that takes the house offline is a bad twenty minutes.
 
 [er605.md](er605.md) therefore says leave it unchecked on every reservation, which
 is the right call: it deletes the trap rather than depending on nobody ever
-enabling strict mode years from now. hyrule-castle's two entries were created with
-it ticked on 2026-09-20 and want undoing.
+enabling strict mode years from now.
+
+**The worse part is that you cannot undo it where you did it.** The checkbox exists
+only on the Address Reservation *Add* form. Reopen that reservation to edit it and
+the field is simply absent - MAC, IP, Description and Status, nothing else. What
+the tick did was write a row into a different table entirely, and the row outlives
+any amount of staring at the reservation screen.
+
+To remove it: **Firewall → Anti ARP Spoofing → IP-MAC Binding List**, select, delete.
+Deleting there does not affect the DHCP reservation; they are separate tables.
+
+Worth checking that list even if you believe you never ticked the box. When it was
+first opened on 2026-09-21 it held an entry for the main Deco that nobody
+remembered creating, and which this repo had been asserting did not exist.
