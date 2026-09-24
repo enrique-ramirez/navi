@@ -9,6 +9,7 @@ gets applied to it.
 ```
 systemd/   xvfb, openbox, foobar2000, and the profile backup timer
 scripts/   deploy.sh, fb2k-backup.sh
+sudoers/   passwordless systemctl stop/start/restart foobar2000, for foo_jean deploys
 ```
 
 ## Applying it
@@ -37,8 +38,9 @@ cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 That guard exists because this one was run on navi by mistake, which installed a
 Wine and Xvfb stack on the flat's DNS server.
 
-`deploy.sh` installs the units, creates `/srv/fb2k` and the `Musica` symlink if
-missing, and restarts the display stack **only when a unit actually changed**.
+`deploy.sh` installs the units and the sudoers drop-in, which it checks with
+`visudo` first. It creates `/srv/fb2k`, the `Musica` symlink, and the empty
+`foo_jean-test/` tree if any of them are missing, and restarts the display stack **only when a unit actually changed**.
 When it does restart, it stops foobar2000 before touching Xvfb - the order is
 load-bearing and the script says why.
 
@@ -71,7 +73,10 @@ missing play counts rather than as an error.
 ## Not here yet
 
 `foo_jean` is deliberately not installed - the migration off beefweb is still in
-progress. When it lands, `MUSIC_BACKEND` and `MUSIC_FOOJEAN` in navi's `.env`
+progress. What its deploy needs from this box is already here: the sudoers rule,
+and `/srv/fb2k/foo_jean-test/`. Registering `one` and `two` in that tree as
+library folders is a manual GUI step. See
+[../docs/hyrule-castle.md](../docs/hyrule-castle.md). When it lands, `MUSIC_BACKEND` and `MUSIC_FOOJEAN` in navi's `.env`
 move to `10.100.100.50:8881` and the Caddy vhosts follow.
 
 Backups are local only, in `/srv/backup`. Same gap the top-level README notes for

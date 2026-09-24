@@ -269,6 +269,16 @@ that turns the only realistic lockout cause into a caught error.
 `/etc/sudoers.d/010_enrique-nopasswd`; this box does not, which is a small
 inconsistency to settle deliberately rather than drift into.
 
+**The one exception is the player.** `/etc/sudoers.d/020_foobar2000-restart`,
+installed by `deploy.sh` from
+[../hyrule-castle/sudoers/](../hyrule-castle/sudoers/), allows `systemctl
+stop|start|restart foobar2000` without a password, and nothing else. It exists so
+a `foo_jean` deploy can swap the component DLL over SSH without anyone typing a
+password. It is scoped this narrowly on purpose, because allowing all of
+`systemctl` would amount to root access. `deploy.sh` runs `visudo -c` on the file
+before installing it: a broken sudoers file breaks sudo entirely, and with root
+SSH disabled, fixing it means a keyboard at the box.
+
 The console keyboard is **US Dvorak**. Set through `dpkg-reconfigure
 keyboard-configuration` rather than by editing `/etc/default/keyboard`, for the
 reason in [gotchas.md](gotchas.md). This only affects someone physically at the
@@ -438,6 +448,29 @@ it in a sane format is the fix; there is no codec to install.
 30,446 in the index minus these 16, minus the 4 test files under
 `..\foo_jean-test\` that were not copied, gives the 30,429 the player reports.
 
+### The foo_jean test tree
+
+```
+/srv/fb2k/foo_jean-test/     F:\foo_jean-test\
+├── one/                     library folder
+├── two/                     library folder
+└── loose/                   deliberately NOT a library folder
+```
+
+`foo_jean`'s tag-write tests write ratings and tags into real files. **They must
+never touch `/srv/music`.** This tree gives them their own copies. `deploy.sh`
+creates the empty folders. `foo_jean`'s `test-fixtures` script fills them, and
+refilling them is its job, not this repo's. `one` and `two` hold different
+recordings at the same relative path. `loose` sits outside the library on
+purpose. The script's header explains why both matter.
+
+Registering `one` and `two` as library folders is a one-off step in the GUI:
+Preferences → Media Library, over the VNC tunnel below. That setting lives in
+`config.sqlite`, so it is covered by the backup. After a rebuild from a fresh
+profile, it has to be done again.
+
+The tree is disposable and is not backed up.
+
 ### Stopping it correctly is not obvious
 
 The unit runs two `ExecStop` commands and both are load-bearing:
@@ -526,7 +559,10 @@ In rough order:
 - Replace the ping monitor with something that proves the stream works, once
   there is a stream
 - `foo_jean`, once the migration off beefweb finishes. Then `MUSIC_BACKEND` and
-  `MUSIC_FOOJEAN` in navi's `.env` move to `10.100.100.50:8881`
+  `MUSIC_FOOJEAN` in navi's `.env` move to `10.100.100.50:8881`. The sudo rule
+  and the test tree it needs are already in place. Registering `one` and `two`
+  as library folders is the only step left, and it is manual. See *The foo_jean
+  test tree*
 - WMA playback, if it proves worth it. Eleven tracks of one album; re-acquiring it
   in another format is probably cheaper than making Wine decode Windows Media
 - Offsite backup, covering `/srv/backup` as well as the library

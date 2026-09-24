@@ -1,0 +1,17 @@
+# Installed to /etc/sudoers.d/ by hyrule-castle/scripts/deploy.sh, which runs
+# visudo -c on it first. A broken file here breaks sudo for everything.
+#
+# Lets a foo_jean deploy stop, start and restart the player over SSH without a
+# password prompt. Nothing else: sudo still asks for a password for any other
+# command. Both spellings are listed because sudo compares arguments as literal
+# strings, and "foobar2000" and "foobar2000.service" are different strings.
+#
+# The name has no dot in it on purpose, because sudo skips any file in
+# sudoers.d whose name contains one.
+enrique-ramirez ALL=(root) NOPASSWD: \
+    /usr/bin/systemctl stop foobar2000, \
+    /usr/bin/systemctl start foobar2000, \
+    /usr/bin/systemctl restart foobar2000, \
+    /usr/bin/systemctl stop foobar2000.service, \
+    /usr/bin/systemctl start foobar2000.service, \
+    /usr/bin/systemctl restart foobar2000.service
