@@ -202,9 +202,8 @@ exists. This was the step most likely to bite and it's already done.
 
 What Model 2 buys: every `.lan` name works remotely, with the existing
 certificates, exactly as it does at home. It is the only model in which
-`music.lan` works properly - it's HTTPS-only and Jean derives `foo_jean`'s
-address from `window.location`, so it needs both the real name and reachability
-to `10.100.100.20:8881`.
+`music.lan` works properly - it's HTTPS-only, so it needs the real name for the
+certificate to match, and Caddy on navi needs to reach `10.100.100.50:8881`.
 
 What it costs: it re-exposes the whole `/24`, including the two things
 [future-plans.md](future-plans.md) has a standing rule about. beefweb has no

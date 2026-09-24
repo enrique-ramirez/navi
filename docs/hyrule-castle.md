@@ -558,8 +558,10 @@ In rough order:
 
 - Replace the ping monitor with something that proves the stream works, once
   there is a stream
-- `foo_jean`, once the migration off beefweb finishes. Then `MUSIC_BACKEND` and
-  `MUSIC_FOOJEAN` in navi's `.env` move to `10.100.100.50:8881`. The sudo rule
+- `foo_jean`, once the migration off beefweb finishes. Then `MUSIC_BACKEND` in
+  navi's `.env` moves to `10.100.100.50:8881`. The Caddyfile is already
+  written for it: one vhost, with no `:8881` listener and no `/jean/` prefix.
+  The sudo rule
   and the test tree it needs are already in place. Registering `one` and `two`
   as library folders is the only step left, and it is manual. See *The foo_jean
   test tree*

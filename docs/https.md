@@ -37,21 +37,20 @@ helpfully adding those redirects.
 
 ## music.lan is the exception
 
-It's HTTPS-only, and it has to be.
+It's HTTPS-only. Jean needs a secure context for `navigator.mediaSession` (lock
+screen, media keys) and `Notification`, and over plain HTTP both silently go
+missing. So `http://music.lan` redirects to HTTPS. A device without the root
+installed gets an honest certificate warning rather than a Jean that is quietly
+missing features.
 
-A single port can't serve both HTTP and HTTPS. Jean derives foo_jean's address
-from `window.location`, so the page and the component on port 8881 always share a
-scheme. If 8881 were plain and the page were TLS, the browser would block it as
-mixed content. If 8881 were TLS and the page plain, the connection would be
-refused. Either way Jean reports NOT CONNECTED, streaming disappears, and nothing
-on screen says why.
-
-Half-working was the worse option, so `http://music.lan` redirects to HTTPS. A
-device without the root installed gets an honest certificate warning rather than a
-service that looks fine and isn't.
+This used to be forced rather than chosen. While beefweb served the page, Jean
+reached foo_jean on a second port, and that port had to share the page's scheme or
+the browser blocked it. Since foo_jean serves Jean itself on one origin, that
+constraint is gone. A plain-HTTP `music.lan` would now work, minus those two
+features. It stays HTTPS-only by choice.
 
 If you need Jean somewhere you can't install the CA, go straight to the player at
-`http://10.100.100.20:8880/jean` and skip Caddy entirely.
+`http://10.100.100.50:8881/` and skip Caddy entirely.
 
 ## The certificates
 

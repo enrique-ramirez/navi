@@ -196,12 +196,12 @@ Revisit only if measured: 4K direct-play streams saturating a Pi 4's TLS
 throughput, or DNS latency tracking video playback. Moving Caddy later is an
 evening, not a rewrite.
 
-It also solved the foo_jean problem: Jean derives foo_jean's address from
-`window.location.hostname`, so serving the UI at `music.lan` makes the browser ask
-for `music.lan:8881`. A second Caddy listener fixes that without touching Jean's
-build. The alternative was setting `__PLAYER_HOST__` at build time, which would
-hardcode the player's address and defeat the point of having `music.lan` as an
-indirection at all.
+It also solved the foo_jean problem, while beefweb served the page: Jean derived
+foo_jean's address from `window.location.hostname`, so serving the UI at
+`music.lan` made the browser ask for `music.lan:8881`. A second Caddy listener
+fixed that without touching Jean's build. That listener was retired on 2026-09-24,
+when foo_jean started serving Jean itself on one origin and there was no second
+port left to reach.
 
 ## Docker arrives with Jellyfin, not with foobar2000
 

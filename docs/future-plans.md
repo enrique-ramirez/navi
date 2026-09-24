@@ -355,9 +355,9 @@ schedule gives a real three-copies-two-media-one-offsite position immediately.
 Seeding 419 GB up a residential Mexican line is a multi-day job, so start it the
 same week rather than treating it as a follow-up task.
 
-**What changes on navi when it lands:** two values in `.env`, `MUSIC_BACKEND` and
-`MUSIC_FOOJEAN`, from `10.100.100.20` to `10.100.100.50`. Both listeners need
-repointing, not just the first, or streaming breaks while the UI looks fine.
+**What changes on navi when it lands:** `MUSIC_BACKEND` in `.env` becomes
+`10.100.100.50:8881`. It is the only music value now. See the note on
+`MUSIC_FOOJEAN` below.
 
 **Do not repoint `ocarina.lan` at `.50` in `PIHOLE_HOSTS`.** An earlier draft of
 this doc said to, on the theory that going direct is tidier. It isn't - it
@@ -369,11 +369,12 @@ has why there is only one Caddy.
 `PIHOLE_HOSTS` does get a new entry, for the machine itself:
 `10.100.100.50 hyrule-castle hyrule-castle.lan`.
 
-The migration to `foo_jean` alone, with beefweb dropped, collapses `MUSIC_BACKEND`
-and `MUSIC_FOOJEAN` onto the same host and port - and may remove the need for the
-separate `:8881` vhost entirely, since that split exists only because Jean derives
-foo_jean's address from `window.location` while beefweb served the page. Check
-whether a single-origin foo_jean still needs it before copying the vhost across.
+The migration to `foo_jean` alone, with beefweb dropped, collapsed `MUSIC_BACKEND`
+and `MUSIC_FOOJEAN` onto the same host and port. It also removed the need for the
+separate `:8881` vhost, which existed only because Jean reached foo_jean on a
+second port while beefweb served the page. Checked on 2026-09-24: foo_jean now
+serves Jean at `/`, and Jean calls the API on the page's own origin. So
+`MUSIC_FOOJEAN` and the vhost are gone, and old `/jean/` URLs redirect to `/`.
 
 **Later phases**, in this order, because four migrations at once is how
 self-hosting projects die. Jellyfin (easiest real win, QuickSync handles the

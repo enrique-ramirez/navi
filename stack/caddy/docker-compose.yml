@@ -16,5 +16,4 @@ services:
     environment:
       TZ: ${TZ}
       MUSIC_BACKEND: ${MUSIC_BACKEND}
-      MUSIC_FOOJEAN: ${MUSIC_FOOJEAN}
     mem_limit: 128m

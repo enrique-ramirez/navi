@@ -90,8 +90,8 @@ missing play counts rather than as an error.
 progress. What its deploy needs from this box is already here: the sudoers rule,
 and `/srv/fb2k/foo_jean-test/`. Registering `one` and `two` in that tree as
 library folders is a manual GUI step. See
-[../docs/hyrule-castle.md](../docs/hyrule-castle.md). When it lands, `MUSIC_BACKEND` and `MUSIC_FOOJEAN` in navi's `.env`
-move to `10.100.100.50:8881` and the Caddy vhosts follow.
+[../docs/hyrule-castle.md](../docs/hyrule-castle.md). When it lands, `MUSIC_BACKEND` in navi's
+`.env` moves to `10.100.100.50:8881`. The Caddyfile already expects that.
 
 Backups are local only, in `/srv/backup`. Same gap the top-level README notes for
 navi: both copies are in the same flat.
