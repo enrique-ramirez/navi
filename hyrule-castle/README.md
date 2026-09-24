@@ -21,9 +21,23 @@ uses, and the two machines each apply their own half:
 
 ```sh
 # once, on hyrule-castle
+sudo apt install git
+ssh-keygen -t ed25519 -f ~/.ssh/navi_deploy -N "" -C "hyrule-castle deploy key"
+cat ~/.ssh/navi_deploy.pub    # GitHub -> Settings -> Deploy keys, read-only
+# plus the same `Host github.com` block in ~/.ssh/config as navi,
+# see docs/runbook.md, "Rebuilding from nothing"
 sudo mkdir -p /srv/navi && sudo chown enrique-ramirez: /srv/navi
 git clone git@github.com:enrique-ramirez/navi.git /srv/navi
 ```
+
+The repo is private, and hyrule-castle has its own deploy key rather than navi's.
+GitHub refuses to attach one key to two repos, but one repo can take several
+keys. Each machine's key is regenerated rather than backed up, for the reason
+the runbook gives.
+
+**Until the first `deploy.sh` run, nothing in this directory is live.** The
+first units were copied over by hand, which left `fb2k-backup.timer` never
+installed and play counts unprotected. `deploy.sh` is what installs it.
 
 ```sh
 # on your laptop
