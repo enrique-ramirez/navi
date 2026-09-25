@@ -309,6 +309,13 @@ ExecStop=/usr/bin/wineserver -w
 it races whatever flush `/exit` just started - about seven seconds for
 foobar2000's metadb, which is where every play count lives.
 
+`-w` is not enough on its own. Wine 10 puts the wineserver socket in
+`/run/user/<uid>/wine/` if that directory exists, and in `/tmp/.wine-<uid>/`
+otherwise. Without linger, that directory comes and goes with SSH logins. If it
+changes between start and stop, `/exit` starts a second Wine session and the
+stop still times out. Run `loginctl enable-linger <user>` for any user whose
+system service runs Wine.
+
 ## `MemoryCurrent` on a file-reading service is not a memory figure
 
 `systemctl show -p MemoryCurrent` reported foobar2000 climbing about 1 GB every

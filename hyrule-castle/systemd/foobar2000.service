@@ -4,6 +4,14 @@ Documentation=file:///srv/navi/docs/hyrule-castle.md
 After=xvfb.service network-online.target
 Requires=xvfb.service
 
+# Wine keeps its wineserver socket in /run/user/1000 if that directory exists,
+# and in /tmp if it does not. deploy.sh turns on linger so the directory lasts
+# from boot to shutdown, and this line makes sure it is mounted before Wine
+# looks for it. Otherwise the start and the ExecStop can pick different places,
+# and the stop hangs. See docs/hyrule-castle.md.
+Wants=user-runtime-dir@1000.service
+After=user-runtime-dir@1000.service
+
 # The library lives under /srv/music. Today that is the root filesystem, so this
 # is inert; in October it becomes the USB disk mount and this is what stops
 # foobar2000 starting against an empty directory and rescanning the library

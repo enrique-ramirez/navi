@@ -492,6 +492,31 @@ rather than kills on purpose: `wineserver -k` is the obvious fix and it is wrong
 because it races the metadb flush `/exit` just started. That flush was measured at
 about seven seconds.
 
+**Both of those only work if the `ExecStop` commands reach the same wineserver
+the player is using.** For a while they did not, and every stop took two minutes
+and ended as `Result=timeout`. The cause was the place Wine 10 keeps its socket.
+It uses `/run/user/1000/wine/` if `/run/user/1000` exists, and
+`/tmp/.wine-1000/` if it does not. `XDG_RUNTIME_DIR` makes no difference. Without
+linger, logind creates `/run/user/1000` when you log in and deletes it when your
+last session ends. So:
+
+- If the player was started over SSH, its socket was deleted when that SSH
+  session ended.
+- If the player was started at boot, its socket is in `/tmp`, but the next time
+  anyone logs in, Wine looks in `/run/user/1000` first.
+
+In either case `wine foobar2000.exe /exit` found no server, so it started a
+**second** Wine session. `wineserver -w` then waited on the wrong server. When
+systemd sent SIGTERM to what was left, one `winedevice.exe` from the original
+session ignored it and held the unit in `final-sigterm` until the timeout.
+Observed on 2026-09-24: two `wineserver64` processes, two `services.exe`
+processes, and so on, all in the one cgroup.
+
+The fix is `loginctl enable-linger enrique-ramirez`, which `deploy.sh` runs.
+With linger on, `/run/user/1000` exists from boot to shutdown whether anyone is
+logged in or not. The unit is ordered after `user-runtime-dir@1000.service` so
+the directory is there before Wine goes looking for it.
+
 ### Seeing the GUI
 
 Xvfb is a real X server with no monitor, so the GUI is available whenever wanted:

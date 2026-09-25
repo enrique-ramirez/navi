@@ -68,6 +68,15 @@ if [ ! -e /srv/fb2k/Musica ]; then
     echo "    created Musica symlink"
 fi
 
+# Wine puts the wineserver socket in /run/user/<uid> when that exists and in
+# /tmp otherwise. Without linger, /run/user/<uid> exists only while someone is
+# logged in, so the player's ExecStop could look somewhere other than where the
+# running server put its socket. It then starts a second Wine session, and the
+# stop hangs until TimeoutStopSec. Linger keeps the directory around from boot
+# to shutdown. See "Stopping it correctly" in docs/hyrule-castle.md.
+echo "==> linger"
+loginctl enable-linger "$USER_NAME"
+
 echo "==> systemd units"
 changed=0
 for u in "$REPO"/hyrule-castle/systemd/*; do
