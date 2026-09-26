@@ -1,0 +1,48 @@
+#!/bin/bash
+# Runs the music library engine, on hyrule-castle:
+#
+#     musiclib check ROOT
+#
+# Installed to /usr/local/bin/musiclib by hyrule-castle/scripts/deploy.sh,
+# which copies the musiclib package itself to /usr/local/lib/musiclib.
+#
+# ACOUSTID_API_KEY is optional: without it the fingerprint fallback just
+# marks an album unidentified. The real value lives in the gitignored
+# hyrule-castle/.env on the box, never sourced directly - see
+# scripts/wan-check.sh for why - so only that one key is read out of it here.
+set -euo pipefail
+
+ENV_FILE=/srv/navi/hyrule-castle/.env
+# Start from whatever the caller already exported. A non-empty value here wins
+# over .env entirely - .env only fills the key in when the caller has none -
+# so an empty or absent .env line can never clear a key set on the command
+# line, and testing a call with a fresh export never has to touch the file.
+ACOUSTID_API_KEY="${ACOUSTID_API_KEY:-}"
+if [ -z "$ACOUSTID_API_KEY" ] && [ -f "$ENV_FILE" ]; then
+    # .env is written by hand and by whatever `export FOO=bar` a person is used
+    # to pasting, so accept a leading "export", spaces around "=", quotes
+    # around the value, CRLF line endings and a last line with no trailing
+    # newline. Everything that isn't this one key - comments included - just
+    # fails to match and is skipped.
+    kv_re='^[[:space:]]*(export[[:space:]]+)?ACOUSTID_API_KEY[[:space:]]*=[[:space:]]*(.*)$'
+    dq_re='^"(.*)"[[:space:]]*$'
+    sq_re="^'(.*)'[[:space:]]*\$"
+    trim_re='^(.*[^[:space:]])[[:space:]]*$'
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        [[ "$line" =~ $kv_re ]] || continue
+        v="${BASH_REMATCH[2]}"
+        if [[ "$v" =~ $dq_re ]] || [[ "$v" =~ $sq_re ]]; then
+            v="${BASH_REMATCH[1]}"
+        elif [[ "$v" =~ $trim_re ]]; then
+            v="${BASH_REMATCH[1]}"
+        else
+            v=""
+        fi
+        ACOUSTID_API_KEY="$v"
+    done < "$ENV_FILE"
+fi
+export ACOUSTID_API_KEY
+
+export PYTHONPATH=/usr/local/lib/musiclib
+exec python3 -m musiclib "$@"

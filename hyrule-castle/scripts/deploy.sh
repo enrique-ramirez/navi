@@ -26,8 +26,20 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 USER_NAME=${SUDO_USER:-enrique-ramirez}
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
+echo "==> packages"
+apt-get install -y --no-install-recommends python3-pil python3-mutagen libchromaprint-tools
+
+# Wipe first so a module deleted from the package doesn't linger as a stale
+# .py file that nothing in git references anymore.
+echo "==> engine"
+rm -rf /usr/local/lib/musiclib
+mkdir -p /usr/local/lib/musiclib
+cp -a "$REPO/hyrule-castle/music/musiclib" /usr/local/lib/musiclib/
+find /usr/local/lib/musiclib -depth -name __pycache__ -exec rm -rf {} +
+
 echo "==> scripts"
 install -m 700 "$REPO/hyrule-castle/scripts/fb2k-backup.sh" /usr/local/bin/fb2k-backup.sh
+install -m 755 "$REPO/hyrule-castle/scripts/musiclib" /usr/local/bin/musiclib
 
 # A sudoers file with a syntax error breaks sudo for everything, and this box
 # has no root SSH login to fix it with. So: validate it, write it under a

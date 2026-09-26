@@ -8,6 +8,7 @@ Config for the mini PC. The machine itself is described in [../docs/hyrule-castl
 systemd/   xvfb, openbox, foobar2000, and the profile backup timer
 scripts/   deploy.sh, fb2k-backup.sh
 sudoers/   passwordless systemctl stop/start/restart foobar2000, for foo_jean deploys
+music/     musiclib, the engine that identifies, tags and names releases against docs/music-library.md
 ```
 
 ## Applying it
