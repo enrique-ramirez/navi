@@ -120,6 +120,12 @@ Before you hand it over, check the bundle against these. Each one is a thing tha
 
 `/build` dispatches one agent per task and one test per criterion, so a task serving four criteria is four tests behind one checkbox. Split it.
 
+**Size a task by the files its tests have to span, not the files it edits.** That is what predicts what it costs. A task whose tests span two toolchains, or three surfaces, is several tasks: the tests cannot be written without deciding all of it at once, and the builder cannot land it in one pass. Split it at the seam.
+
+Tasks whose tests live in the same files belong together. Put them next to each other in `tasks.md`, so `/build` can hand them to one test-writer and one builder as a group.
+
+Where a shared artifact, a contract, a schema or generated types, could be written from the spec before the code behind it exists, make it its own early task. Everything that depends on it can then start without waiting for the implementation.
+
 The cleanup task is not a courtesy. A flag whose other branch is dead, a fixture nothing loads, a probe left in `_tmp/`: these are the residue of the work, and the bundle is not done while they are in the tree.
 
 ## When the spec is done

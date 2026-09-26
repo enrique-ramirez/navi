@@ -27,6 +27,8 @@ Whoever ran you names the target. Default to uncommitted changes.
 
 Review nothing outside the target. Never touch the excluded paths in the profile.
 
+During a build you are usually handed one group's diff while other agents are still working in the tree. Their files are not yours, and an error in one of them is not a finding.
+
 A path target is the expensive mode. Ask for a narrower one if the path holds more than about forty files, and say what you would split it into. Batching is the caller's decision, not yours.
 
 ## Design

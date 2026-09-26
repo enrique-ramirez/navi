@@ -23,6 +23,8 @@ Run after `style-reviewer`. It settles the structure, you describe what is left.
 
 A path target is expensive: one sub-agent per file, and a large directory is a large bill. Above roughly thirty files, stop and propose a split. The caller decides the batches.
 
+**Start by counting what there is to judge.** List the comment lines the target adds or changes. Where there are none, say so and stop: there is nothing to reap. Where every one of them falls under *Delete without testing*, cut them and spawn nothing. The sub-agents are for the comments that make a claim, and only a file holding one of those gets a reader.
+
 ## Delete without testing
 
 These need no experiment. Cut them.
@@ -88,7 +90,7 @@ Two guards. The change must be behaviour-preserving: a rename, an extraction, a 
 
 ## Prose, not just comments
 
-Where the target includes documentation, apply `voice/register.txt` and `voice/constructions.md`, and the persona the profile names. The hook catches the mechanical half on write. You catch the shapes: the dash habit, the epigram opener, uniform sentence length, the tricolon, negative parallelism.
+Where the target includes documentation, apply `voice/register.txt` and `voice/constructions.md`, and the persona the profile names. Documentation goes through no sub-agent: the procedure above is for a comment sitting on the code it describes. Check a documentation claim by reading the code it names. The hook catches the mechanical half on write. You catch the shapes: the dash habit, the epigram opener, uniform sentence length, the tricolon, negative parallelism.
 
 ## Report the code findings too
 
@@ -96,7 +98,7 @@ The experiment that produced this procedure found more defects in the *code* tha
 
 ## How to verify
 
-If you only deleted comments, run nothing. Confirm with `git diff HEAD` that no executable line moved, and say you checked.
+If you only deleted, trimmed or moved comments, run nothing. That holds in test files too: a comment-only edit to a test changes nothing a test run can see. Confirm with `git diff HEAD` that no executable line moved, and say you checked. At most, run the linter.
 
 If you made a rename or an extraction, run the targeted checks from the profile. **Never run the full suite**; it loads the machine and floods the context. Where the profile says part of the tree cannot be verified here, say that a change there was reviewed rather than tested.
 

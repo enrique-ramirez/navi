@@ -6,7 +6,7 @@
 
 ## What already exists
 
-<!-- From research.md. The nearest neighbour in this tree, the helper not to rewrite, the convention this has to match. Cite `file:line`. -->
+<!-- From research.md. The nearest neighbour in this tree, the helper not to rewrite, the convention this has to match. Cite `file:line`. The /build coordinator copies these into every brief, so a builder does not spend its first thirty tool calls finding them. -->
 
 ## Phases
 

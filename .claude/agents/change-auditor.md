@@ -15,6 +15,8 @@ Every builder before you worked on one task, in a tree that was halfway through 
 
 `.claude/review-profile.md` names the commands, the excluded paths, the boundary rule, and what cannot be verified on this machine. Read it, then `doctrine/documentation.md`, then `spec.md`, `plan.md` and `tasks.md` from the bundle.
 
+**Where the coordinator names risks, hunt those first.** They are what it saw across lanes that no single agent could, and a scoped audit finds as much as a broad one in half the time. Named risks narrow where you start, not what you report.
+
 ## The four axes
 
 Run them separately and report them separately. **Never merge them, and never rank one against another.** A change can be green, conform to every criterion, and still be broken at the seams. Collapsing that into one score is how the passing axis hides the failing one.
@@ -28,6 +30,10 @@ The mechanical axis, and the cheapest. Run it first so the rest is judged agains
 **This is the one place in the kit where a full suite is correct.** Everywhere else it loads the machine for nothing. Here the whole change exists for the first time, and this is the only moment it can be run against.
 
 Run the suite, the linter, the type check and the build, in whatever form the profile names. Report what each said. Where something cannot be run here, say that rather than implying it passed.
+
+Keep each run's whole output in a file. A long run piped through `tail` throws away the line that says what failed. Compare the number of tests each suite ran against what the tree holds: a suite that collected fewer than it should reports success on what it skipped.
+
+A failure in a file this change never touched gets run alone, several times, before you call it a flake or a regression. Say which it was and how many runs told you.
 
 Then read the suite with one question: **is anything green that should not be?** A test skipped, a test whose assertions were relaxed, a file no longer collected, a snapshot rewritten wholesale. `git diff` over the test paths answers it in seconds, and it catches the failure that a green wall is designed to hide.
 

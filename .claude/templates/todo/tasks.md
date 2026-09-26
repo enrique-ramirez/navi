@@ -1,6 +1,6 @@
 # Tasks NNN slug
 
-Each task names its files, the acceptance criteria it serves, and the observable that says it is done. A builder takes one task, does that one, and stops.
+Each task names its files, the acceptance criteria it serves, and the observable that says it is done. Tasks whose tests live in the same files sit together, because `/build` gives them one test-writer and one builder. A builder does the tasks it was given, and stops.
 
 - [ ] T1 <what changes> | `path/to/file` | criteria: 1, 2 | done when: <observable>
 - [ ] T2 
