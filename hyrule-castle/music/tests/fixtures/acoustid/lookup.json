@@ -1,0 +1,27 @@
+{
+  "status": "ok",
+  "results": [
+    {
+      "id": "0b7d2a4e-3f9c-4d1a-8e6b-5c2f7a9d1e30",
+      "score": 0.41,
+      "recordings": [{"id": "a0c1e2f3-0000-4000-8000-000000000001"}]
+    },
+    {
+      "id": "7e1f3c5a-9b2d-4e8f-a6c4-1d3b5f7a9c02",
+      "score": 0.97,
+      "recordings": [
+        {"id": "f9e8d7c6-0000-4000-8000-000000000002"},
+        {"id": "c3e9d4f6-2a7b-4c8d-8e1f-2a3b4c5d6e7f"}
+      ]
+    },
+    {
+      "id": "4a6c8e0b-2d4f-4a1c-9e3b-5d7f9a1c3e04",
+      "score": 0.88
+    },
+    {
+      "id": "9d2b4f6a-8c1e-4b3d-a5f7-9b1d3f5a7c06",
+      "score": 0.63,
+      "recordings": [{"id": "d4f0e5a7-3b8c-4d9e-9f2a-3b4c5d6e7f80"}]
+    }
+  ]
+}

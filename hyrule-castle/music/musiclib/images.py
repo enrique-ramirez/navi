@@ -1,0 +1,200 @@
+"""Album images and the embedded cover: naming, JPEG conversion and embedding."""
+
+from __future__ import annotations
+
+import base64
+import io
+import struct
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from mutagen.asf import ASF, ASFByteArrayAttribute
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import APIC, ID3, ID3NoHeaderError
+from mutagen.mp4 import MP4, MP4Cover
+from mutagen.oggvorbis import OggVorbis
+from PIL import Image
+
+_SKIP_TYPES = {"Raw/Unedited", "Watermark"}
+_EMBED_MAX = 1200
+
+
+@dataclass
+class ImagePlan:
+    files: dict[str, bytes]
+    problems: list[str]
+
+
+def _is_skipped(image: dict) -> bool:
+    return any(t in _SKIP_TYPES for t in image.get("types", []))
+
+
+def _base_name(image: dict) -> str:
+    types = image.get("types", [])
+    return types[0].lower().replace("/", "-") if types else "other"
+
+
+def _is_jpeg(data: bytes) -> bool:
+    return data[:3] == b"\xff\xd8\xff"
+
+
+def _as_jpeg(data: bytes) -> bytes:
+    """`data`, unchanged if it is already a JPEG, else converted to one."""
+    if _is_jpeg(data):
+        return data
+    with Image.open(io.BytesIO(data)) as image:
+        out = io.BytesIO()
+        image.convert("RGB").save(out, "JPEG", quality=95)
+        return out.getvalue()
+
+
+def plan_images(
+    caa_images: list[dict],
+    download: Callable[[str], bytes],
+    existing_cover: bytes | None,
+) -> ImagePlan:
+    """The album's image files, from the Cover Art Archive's list for the release."""
+    kept = [image for image in caa_images if not _is_skipped(image)]
+    front = next((image for image in kept if image.get("front")), None)
+    if front is None:
+        front = next((image for image in kept if "Front" in image.get("types", [])), None)
+
+    files: dict[str, bytes] = {}
+    problems: list[str] = []
+    if front is not None:
+        files["cover.jpg"] = _as_jpeg(download(front["image"]))
+    elif existing_cover is not None:
+        files["cover.jpg"] = existing_cover
+    else:
+        problems.append("no Cover Art Archive front image and no existing cover.jpg to keep")
+
+    rest = [image for image in kept if image is not front]
+    counts: dict[str, int] = {}
+    for image in rest:
+        base = _base_name(image)
+        counts[base] = counts.get(base, 0) + 1
+
+    seen: dict[str, int] = {}
+    for image in rest:
+        base = _base_name(image)
+        seen[base] = seen.get(base, 0) + 1
+        # `booklet` is always numbered, even the only one; every other type
+        # is numbered only once there is more than one of it. Numbering
+        # follows the archive's list order, not the image id: the fixture
+        # deliberately gives the second of each pair the lower id.
+        if base == "booklet":
+            name = f"booklet-{seen[base]:02d}.jpg"
+        elif counts[base] > 1:
+            name = f"{base}-{seen[base]}.jpg"
+        else:
+            name = f"{base}.jpg"
+        files[name] = _as_jpeg(download(image["image"]))
+
+    return ImagePlan(files=files, problems=problems)
+
+
+def embedded_front(cover_jpeg: bytes) -> bytes:
+    """`cover_jpeg`, resized to at most 1200 px on the long side."""
+    with Image.open(io.BytesIO(cover_jpeg)) as image:
+        if max(image.size) <= _EMBED_MAX:
+            return cover_jpeg
+        resized = image.convert("RGB")
+        resized.thumbnail((_EMBED_MAX, _EMBED_MAX), Image.LANCZOS)
+        out = io.BytesIO()
+        resized.save(out, "JPEG", quality=90)
+        return out.getvalue()
+
+
+def _picture(jpeg: bytes) -> Picture:
+    picture = Picture()
+    picture.type = 3
+    picture.mime = "image/jpeg"
+    picture.data = jpeg
+    with Image.open(io.BytesIO(jpeg)) as image:
+        picture.width, picture.height = image.size
+    picture.depth = 24
+    return picture
+
+
+def _asf_picture_bytes(jpeg: bytes, picture_type: int = 3, mime: str = "image/jpeg",
+                       description: str = "") -> bytes:
+    """A `WM/Picture` value, laid out the way Windows Media Player and Picard write it.
+
+    One byte of picture type, the image's length as a little-endian 32-bit
+    number, the MIME type and the description as NUL-terminated UTF-16LE,
+    then the image itself.
+    """
+    return (struct.pack("<bI", picture_type, len(jpeg))
+            + mime.encode("utf-16-le") + b"\0\0"
+            + description.encode("utf-16-le") + b"\0\0"
+            + jpeg)
+
+
+def _utf16z(raw: bytes, pos: int) -> int:
+    """Where the NUL-terminated UTF-16LE string at `pos` ends."""
+    end = pos
+    while raw[end:end + 2] != b"\0\0":
+        end += 2
+    return end + 2
+
+
+def _parse_asf_picture(raw: bytes) -> tuple[int, bytes]:
+    """`(picture type, image bytes)` out of a `WM/Picture` value, the inverse of `_asf_picture_bytes`."""
+    picture_type, size = struct.unpack_from("<bI", raw)
+    pos = _utf16z(raw, 5)  # mime
+    pos = _utf16z(raw, pos)  # description
+    return picture_type, raw[pos:pos + size]
+
+
+def embed(path: Path, jpeg: bytes) -> None:
+    """Replace every embedded picture in `path` with one front cover, `jpeg`."""
+    ext = Path(path).suffix.lower().lstrip(".")
+    if ext == "mp3":
+        try:
+            tag = ID3(path)
+        except ID3NoHeaderError:
+            tag = ID3()
+        tag.delall("APIC")
+        tag.add(APIC(encoding=3, mime="image/jpeg", type=3, desc="Cover", data=jpeg))
+        tag.save(path, v2_version=4, v1=0)
+    elif ext == "flac":
+        audio = FLAC(path)
+        audio.clear_pictures()
+        audio.add_picture(_picture(jpeg))
+        audio.save()
+    elif ext == "ogg":
+        audio = OggVorbis(path)
+        audio["metadata_block_picture"] = [base64.b64encode(_picture(jpeg).write()).decode("ascii")]
+        audio.save()
+    elif ext in ("m4a", "mp4"):
+        audio = MP4(path)
+        audio["covr"] = [MP4Cover(jpeg, imageformat=MP4Cover.FORMAT_JPEG)]
+        audio.save()
+    elif ext == "wma":
+        audio = ASF(path)
+        audio["WM/Picture"] = [ASFByteArrayAttribute(_asf_picture_bytes(jpeg))]
+        audio.save()
+    else:
+        raise ValueError(f"unsupported extension: {ext!r}")
+
+
+def embedded_pictures(path: Path) -> list[tuple[int, bytes]]:
+    """Every embedded picture in `path`, with its picture type (M4A/MP4 have none: 0)."""
+    ext = Path(path).suffix.lower().lstrip(".")
+    if ext == "mp3":
+        return [(frame.type, frame.data) for frame in ID3(path).getall("APIC")]
+    if ext == "flac":
+        return [(picture.type, picture.data) for picture in FLAC(path).pictures]
+    if ext == "ogg":
+        audio = OggVorbis(path)
+        pictures = []
+        for block in (audio.tags or {}).get("metadata_block_picture", []):
+            picture = Picture(base64.b64decode(block))
+            pictures.append((picture.type, picture.data))
+        return pictures
+    if ext in ("m4a", "mp4"):
+        return [(0, bytes(cover)) for cover in MP4(path).get("covr", [])]
+    if ext == "wma":
+        return [_parse_asf_picture(bytes(attribute.value)) for attribute in ASF(path).get("WM/Picture", [])]
+    raise ValueError(f"unsupported extension: {ext!r}")

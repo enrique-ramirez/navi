@@ -1,0 +1,9 @@
+{
+  "id": "5e2a7c1d-4b3f-4e8a-9c6d-1f0b2a3c4d5e",
+  "title": "Halo 2 Original Soundtrack, Volume One",
+  "primary-type": "Album",
+  "secondary-types": ["Soundtrack"],
+  "first-release-date": "2004-11-09",
+  "genres": [{"name": "video game music", "count": 2}, {"name": "orchestral", "count": 1}],
+  "tags": [{"name": "vgm", "count": 3}, {"name": "video game music", "count": 2}, {"name": "orchestral", "count": 1}]
+}

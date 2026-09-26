@@ -1,0 +1,120 @@
+"""The AcoustID fallback: fingerprinting locally, looking up on AcoustID.
+
+Without `fpcalc` on `PATH` or `ACOUSTID_API_KEY` set, an album cannot be
+identified this way at all, and `unavailable` names why before anything is
+attempted. No more than 3 requests a second, and every lookup response
+cached like a MusicBrainz one - but never the fingerprint itself, since it
+reads the file fresh each time and a stale cached one would answer for audio
+that is no longer there.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import time
+from pathlib import Path
+from typing import Callable, Mapping
+from urllib.parse import quote
+
+from musiclib import mb
+from musiclib.cache import Cache
+
+_BASE = "https://api.acoustid.org/v2/lookup"
+_MIN_INTERVAL = 1 / 3
+
+
+class AcoustIDError(Exception):
+    """AcoustID answered with an error, or `fpcalc` failed to run."""
+
+
+def unavailable(
+    env: Mapping[str, str] = os.environ,
+    which: Callable[[str], str | None] = shutil.which,
+) -> str | None:
+    """Why AcoustID identification cannot run here, or `None` if it can.
+
+    `fpcalc` is checked first: with neither in place, that is the more basic
+    thing missing, and the one line worth telling the caller.
+    """
+    if which("fpcalc") is None:
+        return "fpcalc not installed"
+    if not env.get("ACOUSTID_API_KEY", "").strip():
+        return "ACOUSTID_API_KEY not set"
+    return None
+
+
+class AcoustID:
+    """Fingerprints a file with `fpcalc` and looks up recordings on AcoustID."""
+
+    def __init__(
+        self,
+        cache: Cache,
+        key: str,
+        transport: mb.Transport | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+        fpcalc: str = "fpcalc",
+    ) -> None:
+        self.cache = cache
+        self.key = key
+        # Same shape and default as musiclib.mb, so tests need only fake one.
+        self.transport = transport or mb.default_transport
+        self.fpcalc = fpcalc
+        self._throttle = mb.Throttle(clock, sleep)
+
+    def fingerprint(self, path: Path) -> tuple[int, str]:
+        """Run `fpcalc -json` on `path` and return its duration and fingerprint.
+
+        A list of arguments, never a shell string: album paths carry spaces,
+        brackets and apostrophes that a shell would need escaping for.
+        """
+        result = subprocess.run(
+            [self.fpcalc, "-json", str(path)], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise AcoustIDError(f"fpcalc failed on {path}: {result.stderr.strip()}")
+        data = json.loads(result.stdout)
+        return round(data["duration"]), data["fingerprint"]
+
+    def lookup(self, duration: int, fingerprint: str) -> list[str]:
+        """Recording MBIDs for `duration`/`fingerprint`, best score first, ties by MBID.
+
+        The cache key drops `client`: it is a secret that gets rotated, and
+        neither rotating it nor the cache directory itself should carry it.
+        """
+        enc_fp = quote(fingerprint, safe="")
+        tail = f"duration={duration}&fingerprint={enc_fp}&meta=recordings"
+        cache_url = f"{_BASE}?{tail}"
+        request_url = f"{_BASE}?client={quote(self.key, safe='')}&{tail}"
+
+        def fetch() -> bytes:
+            self._throttle.hold(_MIN_INTERVAL)
+            status, body = self.transport(request_url, {"User-Agent": mb.USER_AGENT})
+            # `cache_url` names the request without exposing `client`: the
+            # key is a secret that gets rotated, and it must never land in a
+            # run's output or a stored reason by way of this message.
+            if status != 200:
+                raise AcoustIDError(f"acoustid: {cache_url} -> {status}")
+            if json.loads(body).get("status") != "ok":
+                raise AcoustIDError(f"acoustid: {body!r}")
+            return body
+
+        body = self.cache.fetch(cache_url, fetch)
+        return _ranked(json.loads(body))
+
+
+def _ranked(data: dict) -> list[str]:
+    best: dict[str, float] = {}
+    for result in data.get("results", []):
+        recordings = result.get("recordings")
+        if not recordings:
+            continue
+        score = result.get("score", 0)
+        for recording in recordings:
+            rid = recording["id"]
+            if score > best.get(rid, float("-inf")):
+                best[rid] = score
+    return [rid for rid, _ in sorted(best.items(), key=lambda kv: (-kv[1], kv[0]))]

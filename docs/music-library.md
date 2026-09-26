@@ -62,6 +62,8 @@ One prefix at most, in the order the table lists them. A plain album (an LP, in 
 
 **No duplicate fields.** One album artist field (`TPE2`, `ALBUMARTIST`), never `TXXX:ALBUM ARTIST` or `ALBUM ARTIST` beside it. One total, never both inside `TRCK`/`TPOS` and in a `TXXX`.
 
+No field credits whoever ripped, encoded or uploaded the file, or links to where it came from.
+
 **Genres.** Only names on MusicBrainz's official genre list, spelled the way MusicBrainz spells them (lowercase, `post-rock`, `hip hop`), stored as separate values rather than one delimited string. Two custom genres exist because MusicBrainz models soundtracks as a release type rather than a genre: `soundtrack` and `video game music`. A release MusicBrainz marks as a soundtrack gets `soundtrack` by default. The import review can switch it to `video game music`, and that choice is remembered per composer. A release with no MusicBrainz genres and no soundtrack type has no genre rather than an invented one.
 
 **Ratings.** Whole stars, 1 to 5. MP3 holds one `POPM` frame with the email `Windows Media Player 9 Series` on the WMP byte scale (1, 64, 128, 196, 255), which is what foobar2000 writes. FLAC and Ogg hold `RATING` as a plain number. An unrated track has no rating tag at all, never `0` or `-1`. The import never writes a rating: ratings come from listening, in foobar2000 or Jean.

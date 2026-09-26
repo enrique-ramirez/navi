@@ -1,0 +1,11 @@
+{
+  "created": "2026-09-26T10:00:00.000Z",
+  "count": 2,
+  "offset": 0,
+  "releases": [
+    {"id": "3f1b0c0e-5a4d-4c1e-9d2a-7b6f0e1a2c3d", "score": 100, "title": "The Downward Spiral", "date": "1994-03-08", "track-count": 14,
+     "media": [{"format": "CD", "track-count": 14}]},
+    {"id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "score": 97, "title": "The Downward Spiral", "date": "2004-11-23", "track-count": 30,
+     "media": [{"format": "CD", "track-count": 14}, {"format": "CD", "track-count": 16}]}
+  ]
+}

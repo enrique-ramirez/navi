@@ -1,0 +1,40 @@
+{
+  "id": "3f1b0c0e-5a4d-4c1e-9d2a-7b6f0e1a2c3d",
+  "title": "The Downward Spiral",
+  "status": "Official",
+  "date": "1994-03-08",
+  "country": "US",
+  "barcode": "606949209229",
+  "artist-credit": [
+    {
+      "name": "Nine Inch Nails",
+      "joinphrase": "",
+      "artist": {"id": "b7ffd2af-418f-4be2-bdd1-22f8b48613da", "name": "Nine Inch Nails", "sort-name": "Nine Inch Nails"}
+    }
+  ],
+  "label-info": [
+    {"catalog-number": "INTSD-92346", "label": {"id": "a1c7b2d4-0e5f-4a6b-8c9d-0e1f2a3b4c5d", "name": "Nothing Records"}},
+    {"catalog-number": "92346-2", "label": {"id": "b2d8c3e5-1f6a-4b7c-9d0e-1f2a3b4c5d6e", "name": "Interscope Records"}}
+  ],
+  "release-group": {
+    "id": "8b6c4f2a-9e3d-4c1b-a0f5-2d7e6c8b9a01",
+    "title": "The Downward Spiral",
+    "primary-type": "Album",
+    "secondary-types": [],
+    "first-release-date": "1994-03-08"
+  },
+  "media": [
+    {
+      "position": 1,
+      "format": "CD",
+      "title": "",
+      "track-count": 2,
+      "tracks": [
+        {"position": 1, "number": "1", "title": "Mr. Self Destruct", "length": 270000,
+         "recording": {"id": "c3e9d4f6-2a7b-4c8d-8e1f-2a3b4c5d6e7f", "title": "Mr. Self Destruct", "length": 270000}},
+        {"position": 2, "number": "2", "title": "Piggy", "length": 264000,
+         "recording": {"id": "d4f0e5a7-3b8c-4d9e-9f2a-3b4c5d6e7f80", "title": "Piggy", "length": 264000}}
+      ]
+    }
+  ]
+}
