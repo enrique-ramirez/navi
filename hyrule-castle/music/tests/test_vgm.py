@@ -114,6 +114,15 @@ class NotGameMusic(unittest.TestCase):
             with self.subTest(tag=tag):
                 self.assertIsNone(custom(group(tags=(tag,))))
 
+    def test_a_game_tag_counts_only_with_a_vote_count_above_zero(self) -> None:
+        # A folksonomy tag voted down to 0 or below is still returned by
+        # MusicBrainz. Reading the name alone turns it into game music.
+        for count, expected in ((1, VGM), (0, None), (-1, None)):
+            with self.subTest(count=count):
+                release_group = group()
+                release_group["tags"] = [{"name": "vgm", "count": count}]
+                self.assertEqual(custom(release_group), expected)
+
     def test_a_game_name_among_the_genres_rather_than_the_tags_does_not_fire(self) -> None:
         self.assertIsNone(custom(group(genre_names=("video game music", "game"))))
 

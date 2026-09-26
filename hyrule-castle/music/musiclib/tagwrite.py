@@ -175,11 +175,15 @@ def _apply(path: str, family: str, target: dict) -> None:
     to_delete = sorted(set(live) - set(target))
     to_set = {k: v for k, v in target.items() if live.get(k) != v}
 
+    # A backstop against a hash-randomized key order creeping in upstream:
+    # writing `to_set` in a fixed order keeps two runs of the same plan
+    # byte-identical even if some future `target` were built in an order
+    # that is not.
     if family == "id3":
         tags = audio.tags
         for key in to_delete:
             tags.delall(key)
-        for key, values in to_set.items():
+        for key, values in sorted(to_set.items()):
             tags.delall(key)
             tags.add(_build_id3_frame(key, values))
         audio.save(v1=0, v2_version=4)
@@ -190,7 +194,7 @@ def _apply(path: str, family: str, target: dict) -> None:
     for key in to_delete:
         if key in tags:
             del tags[key]
-    for key, values in to_set.items():
+    for key, values in sorted(to_set.items()):
         tags[key] = value_of(key, values)
     audio.save()
 

@@ -127,24 +127,25 @@ class _Determinism(unittest.TestCase):
     def setUp(self):
         self.work = Path(tempfile.mkdtemp(dir=self.tmp))
 
-    def rip(self, root: Path, ext: str) -> Path:
+    def rip(self, root: Path, ext: str, genre: tuple[str, ...] = ()) -> Path:
         """The rip, plus a file the write keeps, one it deletes and one it moves to the extras root.
 
         Two kept files, so a `kept` list built from a set has an order to lose.
+        The tracks carry `genre`, none unless a case gives some.
         """
-        album = _rip(root, *DISCS, ext=ext)
+        album = _rip(root, *DISCS, ext=ext, genre=genre)
         (album / "rip.log").write_text("Exact Audio Copy V1.6 extraction logfile\n")
         (album / "notes.txt").write_text("Bought at Rough Trade.\n")
         (album / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1")
         (album / "Making of.mkv").write_bytes(b"\x1aE\xdf\xa3 a video")
         return album
 
-    def copies(self, name: str) -> dict[str, Path]:
+    def copies(self, name: str, genre: tuple[str, ...] = ()) -> dict[str, Path]:
         """One library root per format under `name`, each holding the rip in that format."""
         roots = {}
         for ext in FORMATS:
             roots[ext] = self.work / name / ext
-            self.rip(roots[ext], ext)
+            self.rip(roots[ext], ext, genre)
         return roots
 
     def run_child(self, seed: str, roots: dict[str, Path], extras: dict[str, Path] | None) -> dict[str, bytes]:
@@ -192,6 +193,24 @@ class OnePlanWrittenTwice(_Determinism):
                 self.assertEqual(_differing(builders.tree(first[ext]), builders.tree(second[ext])), [])
                 self.assertEqual(_differing(builders.tree(extras["first"][ext]),
                                             builders.tree(extras["second copy"][ext])), [])
+
+    def test_a_rip_that_already_carries_a_genre_is_written_byte_identical_under_two_hash_seeds(self):
+        # Unlike the case above, these files already carry a genre tag, so
+        # the plan's read of the existing Vorbis comments is exercised too,
+        # not just its write. The genre is on the list, so the plan is
+        # clean and the write runs.
+        first, second = self.copies("first", ("gothic rock",)), self.copies("second copy", ("gothic rock",))
+        extras = {name: {ext: self.work / f"{name} extras" / ext for ext in FORMATS}
+                  for name in ("first", "second copy")}
+        before = {ext: builders.tree(first[ext]) for ext in FORMATS}
+
+        self.run_child(SEEDS[0], first, extras["first"])
+        self.run_child(SEEDS[1], second, extras["second copy"])
+
+        for ext in FORMATS:
+            with self.subTest(ext):
+                self.assertNotEqual(builders.tree(first[ext]), before[ext], "nothing was written")
+                self.assertEqual(_differing(builders.tree(first[ext]), builders.tree(second[ext])), [])
 
 
 class AReplanOfAWrittenAlbum(_Determinism):

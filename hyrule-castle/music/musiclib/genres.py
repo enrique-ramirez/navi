@@ -27,22 +27,24 @@ _INCOMING_GAME_GENRES = {"game", "video game", "vgm", _SOUNDTRACK}
 def compose(custom: str | None, mb_genres: list[dict[str, object]], file_genres: list[str]) -> list[str]:
     """The album's genres: `custom` first, then what `mb_genres` contributes.
 
-    With no MusicBrainz genres at all, the file's own genres survive as they
-    came, `custom` moved to the front. With some, only the ones on `OFFICIAL`
-    survive, ranked by vote count, and the file's genres play no part.
+    With no MusicBrainz genres at all, the file's own genres that are on
+    `OFFICIAL` survive, lowercased and deduplicated, `custom` moved to the
+    front. With some MusicBrainz genres, only the ones on `OFFICIAL` survive,
+    ranked by vote count, and the file's genres play no part.
     """
     if not mb_genres:
-        # No MusicBrainz genres at all is not the same as MusicBrainz genres
-        # that all fail the official-list filter: here the file's genres
-        # survive, unchecked against the list.
-        kept = list(file_genres)
-        if custom is None:
-            return kept
-        kept = [g for g in kept if g.casefold() != custom.casefold()]
-        if custom == _VGM:
-            # `video game music` replaces a file `soundtrack`.
-            kept = [g for g in kept if g.casefold() != _SOUNDTRACK]
-        return [custom] + kept
+        # Neither `custom` nor a dropped file `soundtrack` needs removing by
+        # hand: both are already off the official list, so the same filter
+        # drops them on its own.
+        seen: set[str] = set()
+        kept: list[str] = []
+        for value in file_genres:
+            name = value.strip().casefold()
+            if not name or name not in OFFICIAL or name in seen:
+                continue
+            seen.add(name)
+            kept.append(name)
+        return kept if custom is None else [custom] + kept
 
     on_list = [(g["name"].lower(), g.get("count") or 0) for g in mb_genres if g["name"].lower() in OFFICIAL]
     on_list.sort(key=lambda item: (-item[1], item[0]))

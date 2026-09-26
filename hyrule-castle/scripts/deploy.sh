@@ -27,6 +27,7 @@ USER_NAME=${SUDO_USER:-enrique-ramirez}
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 echo "==> packages"
+apt-get update
 apt-get install -y --no-install-recommends python3-pil python3-mutagen libchromaprint-tools
 
 # Wipe first so a module deleted from the package doesn't linger as a stale

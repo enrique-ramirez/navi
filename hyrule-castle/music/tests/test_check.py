@@ -21,6 +21,7 @@ test fixes them. One id per rule in the doc:
     duplicate field       a second album artist field, or a TXXX total
     disc in album title   `(disc 1)` and the like in the album title
     genre                 a genre off the official list, miscased or delimited
+    no genre              a track that carries no genre at all
     rating                a rating in any form but the documented one
     whitespace            leading, trailing or doubled spaces in a field
     cover.jpg             no cover.jpg
@@ -386,6 +387,64 @@ class Tags(_Library):
                 builders.write_tags(path, tags, v2_version=4)
                 self.assertBreaks(root, album, {"genre"})
 
+    def test_every_track_with_no_genre_breaks_no_genre_and_nothing_else(self):
+        field = {"mp3": "TCON", "flac": "GENRE", "ogg": "GENRE", "m4a": "\xa9gen"}
+        for ext in ("mp3", "flac", "ogg", "m4a"):
+            for stripped in (1, 2):
+                with self.subTest(ext=ext, tracks_stripped=stripped):
+                    root = self.library()
+                    album = builders.library_album(root, ext=ext)
+                    for path in self.audio(album)[:stripped]:
+                        builders.delete_tags(path, [field[ext]])
+                    self.assertBreaks(root, album, {"no genre"})
+                    found = [v for v in check.check(root) if v.rule == "no genre"]
+                    self.assertEqual(len(found), stripped, found)
+
+    def test_a_genre_field_that_is_blank_or_only_spaces_breaks_no_genre(self):
+        # The field is there, so a check that only asks whether the key
+        # exists passes it. MP3 is left out: mutagen never saves an empty
+        # ID3 text frame, so an MP3 cannot carry one. Whether the blank value
+        # also breaks `genre` or `whitespace` is not decided, so either may
+        # come with it.
+        field = {"flac": "GENRE", "ogg": "GENRE", "m4a": "\xa9gen"}
+        for ext in ("flac", "ogg", "m4a"):
+            for blank in ("", "   "):
+                with self.subTest(ext=ext, value=repr(blank)):
+                    root = self.library()
+                    album = builders.library_album(root, ext=ext)
+                    for path in self.audio(album):
+                        builders.write_tags(path, {field[ext]: blank})
+                    self.assertBreaks(root, album, {"no genre"}, {"genre", "whitespace"})
+
+    def test_a_blank_genre_beside_a_real_one_breaks_genre_naming_the_track(self):
+        # The track has a genre, so it is not `no genre`. The blank is still
+        # not an official genre, and a check that drops blanks before judging
+        # the values passes the track silently. Only one track carries it, so
+        # the detail has to say which.
+        field = {"flac": "GENRE", "ogg": "GENRE", "m4a": "\xa9gen"}
+        for ext in ("flac", "ogg", "m4a"):
+            for blank, also in (("", set()), ("   ", {"whitespace"})):
+                with self.subTest(ext=ext, value=repr(blank)):
+                    root = self.library()
+                    album = builders.library_album(root, ext=ext)
+                    blanked = self.audio(album)[0]
+                    builders.write_tags(blanked, {field[ext]: [blank, "rock"]})
+                    self.assertBreaks(root, album, {"genre"}, also)
+                    details = [v.detail for v in check.check(root) if v.rule == "genre"]
+                    self.assertTrue(all(blanked.name in d for d in details),
+                                    f"a genre break does not name {blanked.name}: {details}")
+
+    def test_a_track_carrying_only_video_game_music_is_clean(self):
+        # `video game music` is off the official list, and it is still a genre.
+        for ext, tags in (("mp3", {"TCON": "video game music"}), ("flac", {"GENRE": "video game music"}),
+                          ("ogg", {"GENRE": "video game music"}), ("m4a", {"\xa9gen": "video game music"})):
+            with self.subTest(ext):
+                root = self.library()
+                album = builders.library_album(root, ext=ext)
+                for path in self.audio(album):
+                    builders.write_tags(path, tags, v2_version=4)
+                self.assertEqual(check.check(root), [])
+
     def test_a_rating_in_any_but_the_documented_form(self):
         # MP3: one POPM from Windows Media Player 9 Series on the WMP scale.
         # FLAC and Ogg: RATING, whole stars 1 to 5. Unrated means no tag.
@@ -623,14 +682,14 @@ class ABadFile(_Library):
     def test_an_mp3_with_no_id3_header_breaks_the_tag_rules_and_is_not_unreadable(self):
         # mutagen reads the audio fine; there is just no tag. So it is judged
         # like any other track: no ID3v2.4, none of the required fields, no
-        # embedded front cover. Calling it unreadable would hide which rules
-        # a retag has to fix.
+        # genre, no embedded front cover. Calling it unreadable would hide
+        # which rules a retag has to fix.
         root = self.library()
         album = builders.library_album(root, ext="mp3")
         path = album / "02. Hurt.mp3"
         ID3(path).delete(path)
         self.assertNotEqual(path.read_bytes()[:3], b"ID3")
-        self.assertBreaks(root, album, {"tag format", "required field", "embedded cover"})
+        self.assertBreaks(root, album, {"tag format", "required field", "no genre", "embedded cover"})
 
     def test_a_bad_file_leaves_the_rest_of_its_album_and_the_next_album_judged(self):
         # The bad album sorts first, and so does the bad file within it: the
@@ -810,12 +869,22 @@ def _release(*media: list[str], title: str = "Disintegration", credit=CURE, **ch
     )
 
 
+#: The stock group's genres when a case names none. A rip carries no genre,
+#: and an album that ends with none is refused, so a group with none would
+#: stop every plan that is meant to go through clean.
+STOCK_GENRES = {"gothic rock": 1}
+
+
 def _release_group(genre_counts: dict[str, int] | None = None) -> dict:
-    """The stock release's group as `mb.release_group` returns it, genres and tags included."""
+    """The stock release's group as `mb.release_group` returns it, genres and tags included.
+
+    `genre_counts` of `{}` is MusicBrainz with no genres at all; `None` is `STOCK_GENRES`.
+    """
+    counts = STOCK_GENRES if genre_counts is None else genre_counts
     return {
         "id": builders.RELEASE_GROUP_ID, "title": "Disintegration", "primary-type": "Album",
         "secondary-types": [], "first-release-date": "1989-05-02", "tags": [],
-        "genres": [{"name": name, "count": count} for name, count in (genre_counts or {}).items()],
+        "genres": [{"name": name, "count": count} for name, count in counts.items()],
     }
 
 
@@ -852,14 +921,16 @@ class _Services:
 
 def _rip(root: Path, *discs: list[str], where: str = "C/The Cure/Disintegration [rip]",
          ext: str = "flac", album: str = "Disintegration", date: str | None = "1989",
-         disc_dirs: tuple[str, ...] | None = None, cover: bool = True) -> Path:
+         disc_dirs: tuple[str, ...] | None = None, cover: bool = True,
+         genre: tuple[str, ...] = ()) -> Path:
     """An album the way a rip arrives: loose names, lower-case titles, no MusicBrainz IDs.
 
     Each of `discs` is one medium's titles. More than one puts each medium
     in its own folder, `CDn` unless `disc_dirs` names them. The files are
     dated 1989, the original release, where the matched release is 2010: a
     plan that names the folder from the files rather than the release shows.
-    `date=None` leaves the files with no DATE. Returns the album folder.
+    `date=None` leaves the files with no DATE, and the files carry `genre`,
+    none unless a case gives some. Returns the album folder.
     """
     base = root / where
     for disc, titles in enumerate(discs, start=1):
@@ -873,6 +944,8 @@ def _rip(root: Path, *discs: list[str], where: str = "C/The Cure/Disintegration 
             fields = {"title": [title.lower()], "artist": ["The Cure"], "album": [album]}
             if date:
                 fields["date"] = [date]
+            if genre:
+                fields["genre"] = list(genre)
             builders.write_tags(path, builders.picard_tags(ext, fields, track=(number, len(titles)),
                                                            disc=(disc, len(discs))), v2_version=4)
     if cover:
@@ -1084,11 +1157,10 @@ class APlanThatBreaksARule(_Planning):
         self.assertTrue(said, f"no problem names the unreadable file: {plan.problems}")
         self.assertRefused(plan, said[0], root, before)
 
-    def test_a_plan_and_check_on_disk_report_a_break_under_the_same_rule(self):
-        # MusicBrainz has no genres for the group, so the plan keeps the
-        # files' own, which is off the official list. Only check's rules can
-        # say so: mapping and images raise nothing here. The plan naming
-        # "genre" is the proof it went through check_album.
+    def test_an_off_list_genre_breaks_genre_on_disk_and_the_plan_drops_it_and_reports_no_genre(self):
+        # The same files, judged twice. On disk the value is there and off the
+        # list. MusicBrainz has no genres, so the plan falls back to the
+        # files' genres, keeps only those on the list, and is left with none.
         root = self.library()
         album = builders.library_album(root, artist="Nine Inch Nails", album="The Fragile",
                                        date="1999-09-21", discs=(("Somewhat Damaged", "Hurt"),))
@@ -1098,11 +1170,48 @@ class APlanThatBreaksARule(_Planning):
         release = _release(["Somewhat Damaged", "Hurt"], title="The Fragile", credit=NIN,
                            date="1999-09-21")
 
-        plan = self.plan(self.unit(root, album), release, status="auto")
+        plan = self.plan(self.unit(root, album), release, _release_group({}), status="auto")
 
-        self.assertIn("genre", {p.split(":", 1)[0].strip() for p in plan.problems},
-                      f"got {plan.problems}")
+        self.assertEqual({p.split(":", 1)[0].strip() for p in plan.problems}, {"no genre"},
+                         f"got {plan.problems}")
+        self.assertEqual([f.target["genre"] for f in plan.files if "genre" in f.target], [])
 
+
+class APlanLeftWithNoGenre(_Planning):
+    """Both routes through genre composition that leave a track with no genre.
+
+    Neither rip carries a soundtrack or game genre, and the group has no
+    tags or Soundtrack type, so there is no custom genre to fall back on.
+    """
+
+    def test_carries_a_no_genre_problem_and_write_album_refuses_it_touching_nothing(self):
+        cases = [
+            # The fallback to the files' genres applies, and none of them
+            # is on the list. "Rock; Pop" is two listed genres in one value.
+            ("no musicbrainz genres and only off-list file genres", {},
+             ("made-up genre", "Rock; Pop")),
+            # MusicBrainz has genres, so the files' are never consulted, even
+            # though "gothic rock" would have survived the fallback.
+            ("musicbrainz genres all off the list", {"seen live": 5, "anime": 2},
+             ("gothic rock",)),
+        ]
+        for case, group_genres, file_genres in cases:
+            with self.subTest(case):
+                root = self.library()
+                album = _rip(root, ["Plainsong", "Pictures of You"], genre=file_genres)
+                unit = self.unit(root, album)
+                # Without the genres on the files, the second case no longer
+                # shows the fallback staying shut.
+                self.assertEqual(unit.tracks[0].tags.get("genre"), list(file_genres))
+                release = _release(["Plainsong", "Pictures of You"])
+                before = _snapshot(root)
+
+                plan = self.plan(unit, release, _release_group(group_genres), status="auto")
+
+                said = [p for p in plan.problems if p.split(":", 1)[0].strip() == "no genre"]
+                self.assertTrue(said, f"no problem under 'no genre': {plan.problems}")
+                self.assertEqual([f.target["genre"] for f in plan.files if "genre" in f.target], [])
+                self.assertRefused(plan, said[0], root, before)
 
 if __name__ == "__main__":
     unittest.main()

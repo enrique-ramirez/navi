@@ -416,9 +416,20 @@ def _tag_format_violations(state: TrackState) -> list[tuple[str, str]]:
     return out
 
 
-def _genre_violations(track: files.Track) -> list[tuple[str, str]]:
-    return [("genre", f"{value!r} is not an official genre")
-            for value in _field(track, "genre") or []
+def _genre_violations(state: TrackState) -> list[tuple[str, str]]:
+    track = state.track
+    values = _field(track, "genre") or []
+    # No field at all, and a field holding only blank or whitespace-only
+    # values (a blank cannot mean "not asked" the way a missing key does),
+    # both leave the track with nothing a person would call a genre. Named
+    # by file, not just "no genre" repeated: a plan's own problem list
+    # (`plan._dedupe`) collapses identical strings, and two different tracks
+    # both missing a genre must not fold into the one problem the owner sees.
+    if not any(value.strip() for value in values):
+        return [("no genre", f"{state.filename} carries no genre on the official list; "
+                             "tag one into the files or add genres on MusicBrainz, then plan again")]
+    return [("genre", f"{state.filename}: {value!r} is not an official genre")
+            for value in values
             if value not in genres.OFFICIAL and value not in _CUSTOM_GENRES]
 
 
@@ -497,7 +508,7 @@ def _track_violations(state: TrackState, disc_counts: dict[str | None, int]) -> 
     out.extend(_filename_violations(state, number, name_total))
     out.extend(_disc_folder_violations(state, disc, discs))
     out.extend(_tag_format_violations(state))
-    out.extend(_genre_violations(track))
+    out.extend(_genre_violations(state))
     out.extend(_rating_violations(track))
     out.extend(_duplicate_field_violations(track))
     out.extend(_disc_marker_violations(track))

@@ -18,3 +18,5 @@ backups/
 _todo/
 _done/
 _tmp/
+
+__pycache__/

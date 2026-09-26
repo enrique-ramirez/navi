@@ -227,8 +227,15 @@ def snapshot(audio, family: str) -> dict[str, list[str]]:
             else:
                 out[key] = [hashlib.sha1(repr(frame).encode("utf-8", "replace")).hexdigest()]
     elif family == "vorbis":
-        for key, values in tags.items():
-            out.setdefault(key.lower(), []).extend(values)
+        # `tags.items()` walks mutagen's `VCommentDict.keys()`, which builds
+        # a `set` of key names - hash-randomized, so two reads of the same
+        # file could disagree on which key came first. A `VComment` is
+        # documented as "a list of key/value pairs" with "all comment
+        # ordering ... preserved", so reading it as the list it already is
+        # keeps the file's own, on-disk order regardless of the interpreter's
+        # hash seed.
+        for key, value in tags:
+            out.setdefault(key.lower(), []).append(value)
     elif family == "mp4":
         for key, value in tags.items():
             if key in ("trkn", "disk"):

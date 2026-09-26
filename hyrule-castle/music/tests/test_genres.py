@@ -70,9 +70,48 @@ class Compose(unittest.TestCase):
 
 
 class ComposeWhenMusicBrainzHasNoGenres(unittest.TestCase):
-    def test_keeps_the_files_genres_as_they_are(self) -> None:
-        # Kept means kept: not lowercased and not checked against the list.
-        self.assertEqual(genres.compose(None, [], ["J-Pop", "anime"]), ["J-Pop", "anime"])
+    # The file's genres are the fallback, and only the ones on the official
+    # list survive it. MusicBrainz spells it "dark wave", so "Darkwave" would
+    # not be on the list at all.
+    def test_keeps_only_the_files_genres_on_the_list_lowercased_and_once_each(self) -> None:
+        # "Rock; Pop" names two genres that are both on the list, and is
+        # still dropped: split it and the rule is broken the other way.
+        self.assertEqual(
+            genres.compose(None, [], ["Dark Wave", "made-up genre", "dark wave", "Rock; Pop"]),
+            ["dark wave"],
+        )
+
+    def test_finds_a_miscased_file_genre_on_the_list(self) -> None:
+        self.assertEqual(genres.compose(None, [], ["J-Pop", "anime"]), ["j-pop"])
+
+    def test_keeps_the_order_the_files_first_give_them(self) -> None:
+        self.assertEqual(
+            genres.compose(None, [], ["Shoegaze", "ambient", "shoegaze", "Jazz"]),
+            ["shoegaze", "ambient", "jazz"],
+        )
+
+    def test_gives_nothing_when_no_file_genre_is_on_the_list(self) -> None:
+        self.assertEqual(genres.compose(None, [], ["made-up genre", "Rock; Pop"]), [])
+
+    def test_drops_a_blank_or_whitespace_only_file_genre(self) -> None:
+        self.assertEqual(genres.compose(None, [], ["", "   ", "Rock"]), ["rock"])
+        self.assertEqual(genres.compose(None, [], ["", "   "]), [])
+
+    def test_puts_the_custom_genre_first_and_lowercases_the_rest(self) -> None:
+        # The file's own "Soundtrack" is the custom genre miscased, so it goes
+        # rather than sitting after it a second time.
+        self.assertEqual(
+            genres.compose("soundtrack", [], ["Rock", "Soundtrack", "made-up genre", "jazz"]),
+            ["soundtrack", "rock", "jazz"],
+        )
+
+    def test_gives_the_custom_genre_alone_when_no_file_genre_is_on_the_list(self) -> None:
+        self.assertEqual(genres.compose(VGM, [], ["made-up genre"]), [VGM])
+
+    def test_video_game_music_still_drops_a_file_soundtrack(self) -> None:
+        # "soundtrack" is off the official list, so the list filter drops it
+        # too: this holds the promise, and cannot tell the two reasons apart.
+        self.assertEqual(genres.compose(VGM, [], ["Soundtrack", "Ambient"]), [VGM, "ambient"])
 
     def test_moves_the_custom_genre_to_the_front_of_the_files_genres(self) -> None:
         self.assertEqual(

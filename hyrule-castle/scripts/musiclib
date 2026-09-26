@@ -25,8 +25,8 @@ if [ -z "$ACOUSTID_API_KEY" ] && [ -f "$ENV_FILE" ]; then
     # newline. Everything that isn't this one key - comments included - just
     # fails to match and is skipped.
     kv_re='^[[:space:]]*(export[[:space:]]+)?ACOUSTID_API_KEY[[:space:]]*=[[:space:]]*(.*)$'
-    dq_re='^"(.*)"[[:space:]]*$'
-    sq_re="^'(.*)'[[:space:]]*\$"
+    dq_re='^"([^"]*)".*$'
+    sq_re="^'([^']*)'.*\$"
     trim_re='^(.*[^[:space:]])[[:space:]]*$'
     while IFS= read -r line || [ -n "$line" ]; do
         line="${line%$'\r'}"
@@ -34,10 +34,13 @@ if [ -z "$ACOUSTID_API_KEY" ] && [ -f "$ENV_FILE" ]; then
         v="${BASH_REMATCH[2]}"
         if [[ "$v" =~ $dq_re ]] || [[ "$v" =~ $sq_re ]]; then
             v="${BASH_REMATCH[1]}"
-        elif [[ "$v" =~ $trim_re ]]; then
-            v="${BASH_REMATCH[1]}"
         else
-            v=""
+            v="${v%%#*}"
+            if [[ "$v" =~ $trim_re ]]; then
+                v="${BASH_REMATCH[1]}"
+            else
+                v=""
+            fi
         fi
         ACOUSTID_API_KEY="$v"
     done < "$ENV_FILE"

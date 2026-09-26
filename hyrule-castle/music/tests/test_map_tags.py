@@ -241,13 +241,15 @@ class Genre(TestCase):
     only `compose` is told that.
     """
 
-    def test_with_no_musicbrainz_genres_the_files_genres_are_kept(self):
+    def test_with_no_musicbrainz_genres_only_the_files_genres_on_the_list_are_planned_lowercased(self):
+        on_disk = ["Dark Wave", "made-up genre", "coldwave"]
         for ext in FORMATS:
             with self.subTest(ext):
-                track = on_file(ext, builders.picard_tags(ext, {"genre": ["darkwave", "coldwave"]}))
-                composed = genres.compose(None, [], ["darkwave", "coldwave"])
+                track = on_file(ext, builders.picard_tags(ext, {"genre": on_disk}))
+                composed = genres.compose(None, [], on_disk)
                 target = plan(track, genres=composed).target
-                self.assertEqual(target[key(ext, "genre")], track.tags[key(ext, "genre")])
+                expected = read_back(ext, {"genre": ["dark wave", "coldwave"]})
+                self.assertEqual(target[key(ext, "genre")], expected[key(ext, "genre")])
 
     def test_musicbrainz_genres_all_off_the_list_leave_the_custom_genre_and_never_the_files(self):
         # MusicBrainz has genres here, just none on the official list, so
