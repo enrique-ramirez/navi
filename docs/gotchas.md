@@ -356,3 +356,7 @@ It becomes load-bearing the moment anything ticks **"Permit the packets matching
 To remove it: **Firewall → Anti ARP Spoofing → IP-MAC Binding List**, select, delete. Deleting there does not affect the DHCP reservation; they are separate tables.
 
 Worth checking that list even if you believe you never ticked the box. When it was first opened on 2026-09-21 it held an entry for the main Deco that nobody remembered creating, and which this repo had been asserting did not exist.
+
+## mutagen's Vorbis `keys()` is a set
+
+`VCommentDict.keys()`, and so `.items()`, is built from a `set`, so the order changes with the hash seed from one run to the next. Anything that writes tags back in that order writes a different file each time. Iterate the `VComment` itself, a list of `(key, value)` pairs in file order. musiclib's `files.snapshot` does.
