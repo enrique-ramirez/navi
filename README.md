@@ -1,13 +1,8 @@
 # navi
 
-The Raspberry Pi that runs the house network. It resolves DNS for every device in
-the flat, blocks ads, watches both ISP lines, and gives the machines names worth
-remembering.
+The Raspberry Pi that runs the house network. It resolves DNS for every device in the flat, blocks ads, watches both ISP lines, and gives the machines names worth remembering.
 
-It exists because a Telmex outage went unnoticed for two weeks. There are two ISP
-lines and the router fails between them silently, so losing one produces no
-symptom at all: the internet keeps working, you've just quietly stopped having a
-spare. Nothing in the house could tell you that had happened. Now something can.
+It exists because a Telmex outage went unnoticed for two weeks. There are two ISP lines and the router fails between them silently, so losing one produces no symptom at all: the internet keeps working, you've just quietly stopped having a spare. Nothing in the house could tell you that had happened. Now something can.
 
 ## What runs on it
 
@@ -33,14 +28,11 @@ docs/           everything below
 .env.example    every value you need; the real .env is gitignored
 ```
 
-Everything at the top level belongs to navi. `hyrule-castle/` is the second
-machine, deployed separately on that box - see
-[hyrule-castle/README.md](hyrule-castle/README.md). The docs cover both.
+Everything at the top level belongs to navi. `hyrule-castle/` is the second machine, deployed separately on that box - see [hyrule-castle/README.md](hyrule-castle/README.md). The docs cover both.
 
 ## Changing something
 
-The repo is the source of truth. `navi` has it checked out at `/srv/navi` and
-pulls from it.
+The repo is the source of truth. `navi` has it checked out at `/srv/navi` and pulls from it.
 
 ```sh
 # on your laptop
@@ -59,26 +51,17 @@ ssh enrique-ramirez@hyrule-castle.lan
 cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 ```
 
-`deploy.sh` copies scripts and units into place, reloads systemd if they changed,
-creates any missing state directories, and brings the compose stacks up. Running
-it when nothing changed is safe and near-instant.
+`deploy.sh` copies scripts and units into place, reloads systemd if they changed, creates any missing state directories, and brings the compose stacks up. Running it when nothing changed is safe and near-instant.
 
-There's no auto-pull, and that's on purpose. Real GitOps reconciles continuously,
-but a bad push reconciling itself onto the box that serves the flat's DNS at 3am
-is worse than a config that's a few hours stale. A human runs the deploy.
+There's no auto-pull, and that's on purpose. Real GitOps reconciles continuously, but a bad push reconciling itself onto the box that serves the flat's DNS at 3am is worse than a config that's a few hours stale. A human runs the deploy.
 
 ## Config vs. state
 
-Config lives here. State lives in `/srv/data` on navi and never enters the repo:
-Pi-hole's databases, Kuma's history, Caddy's data directory, 90 days of vitals. That split means
-`git clean` can't eat your query history, and the repo stays a few hundred KB
-instead of 30 MB.
+Config lives here. State lives in `/srv/data` on navi and never enters the repo: Pi-hole's databases, Kuma's history, Caddy's data directory, 90 days of vitals. That split means `git clean` can't eat your query history, and the repo stays a few hundred KB instead of 30 MB.
 
 ## Secrets
 
-`/srv/navi/.env`, mode 600, gitignored. Real values are in 1Password. Copy
-`.env.example` and fill it in. Nothing else in the repo should ever hold a
-password or a token.
+`/srv/navi/.env`, mode 600, gitignored. Real values are in 1Password. Copy `.env.example` and fill it in. Nothing else in the repo should ever hold a password or a token.
 
 ## Docs
 

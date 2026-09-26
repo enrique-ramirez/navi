@@ -32,9 +32,8 @@ MusicBrainz is the reference for every fact about a release. The one exception i
 | `[Single]` | primary type Single |
 | `[Mixtape]` | secondary type Mixtape/Street |
 | `[Live]` | secondary type Live |
-| `[LP]` | **open: MusicBrainz has no LP type. Needs a definition before it can be applied** |
 
-One prefix at most, in the order the table lists them.
+One prefix at most, in the order the table lists them. A plain album (an LP, in the old sense) has none. "LP" appears in a folder name only when it is part of the title MusicBrainz gives the release, as in `(1999) The Slim Shady LP`.
 
 **Discs.** A release with more than one medium puts each in `CD1`, `CD2` and so on, whatever the medium actually is. A single-medium release has no disc folder. Covers and every other image sit in the album folder, never inside a `CDn`.
 
@@ -77,9 +76,11 @@ Everything else the Cover Art Archive has for the release is kept beside it: `ba
 
 ## What an album folder may contain
 
-Audio, images, and `.log` files (a rip log proves how the audio was made).
+Audio, images, PDF booklets, `.log` files (a rip log proves how the audio was made), `.txt` notes and `.lrc` lyrics. All of them sit in the album folder itself, never in a subfolder other than a `CDn`.
 
-Nothing else. Removed on import: `.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, and `.cue`, `.m3u`, `.m3u8`, `.nfo`, `.sfv`, `.txt`. A cue sheet or playlist names the old filenames, so it is wrong the moment files are renamed.
+Removed: OS junk (`.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, Windows Media Player's `AlbumArtSmall.jpg` and `AlbumArt_*.jpg`), and rip lists that name the old filenames and go stale the moment files are renamed (`.cue`, `.m3u`, `.m3u8`, `.sfv`, `.accurip`, `.ffp`, `.md5`), plus `.nfo`, `.url`, `.ini` and `.ico`.
+
+Videos, disc images and CD-ROM software are kept, but outside the library, in `/srv/music/extras` under the same `Letter/Artist/Album` path. foobar2000 does not watch that folder.
 
 ## How new music gets in
 
