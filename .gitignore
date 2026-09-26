@@ -11,3 +11,10 @@
 *.tar.gz
 data/
 backups/
+*.local.txt
+*.local.bak
+.claude/settings.json.bak
+.claude/.review-kit.manifest
+_todo/
+_done/
+_tmp/

@@ -1,0 +1,2 @@
+# Globs exempt from the style hook, one per line, matched against the absolute path.
+*/CONTRIBUTING.md

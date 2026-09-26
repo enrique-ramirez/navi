@@ -89,6 +89,7 @@ password or a token.
 | [er605.md](docs/er605.md) | The router, written out so it can be rebuilt |
 | [navi.md](docs/navi.md) | The box. Hardware, boot, services, updates |
 | [hyrule-castle.md](docs/hyrule-castle.md) | The mini PC. Hardware, BIOS, network, what's left |
+| [music-library.md](docs/music-library.md) | The rules every album follows: layout, names, tags, images |
 | [https.md](docs/https.md) | Certificates, why they exist, installing the root |
 | [monitoring.md](docs/monitoring.md) | What's watched, and why each check exists |
 | [runbook.md](docs/runbook.md) | When something breaks |
