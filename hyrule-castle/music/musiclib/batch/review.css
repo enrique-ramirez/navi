@@ -1,0 +1,93 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 1.5rem;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+h2 {
+  margin-top: 2rem;
+  border-bottom: 2px solid #ccc;
+  padding-bottom: 0.25rem;
+}
+
+h3 {
+  margin: 1rem 0 0.5rem;
+}
+
+.group {
+  margin-bottom: 1.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  background: #fff;
+}
+
+.album {
+  display: block;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ccc;
+  background: #fdfdfd;
+}
+
+.album .source {
+  margin: 0 0 0.25rem;
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+.destination {
+  color: #444;
+  font-family: monospace;
+  margin-bottom: 0.5rem;
+}
+
+[data-file] {
+  border-top: 1px dashed #ddd;
+  padding: 0.35rem 0;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+[data-tag], [data-path] {
+  color: #444;
+}
+
+[data-residue] {
+  color: #555;
+}
+
+[data-deletion], [data-extra], [data-kept], [data-image] {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+input[type="radio"][name^="candidate-"] img {
+  height: 32px;
+  vertical-align: middle;
+  margin: 0 0.35rem;
+}
+
+input[data-field] {
+  margin: 0.2rem 0.5rem 0.2rem 0;
+}
+
+fieldset.decision, fieldset.game {
+  margin-top: 0.5rem;
+  border: 1px solid #ccc;
+}
+
+details > summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#export {
+  margin-top: 1.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+}

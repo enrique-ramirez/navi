@@ -20,3 +20,4 @@ _done/
 _tmp/
 
 __pycache__/
+.DS_Store
