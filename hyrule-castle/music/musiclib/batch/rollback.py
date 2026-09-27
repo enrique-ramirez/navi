@@ -118,7 +118,12 @@ def _undo_album(entry: dict, root: Path, extras_root: Path, moves_done: bool,
 
 def run(job: Job, *, extras_root: Path = Path("/srv/music/extras"),
        live_root: Path = Path("/srv/music/library"), systemctl: str = "systemctl",
-       out=sys.stdout, err=sys.stderr) -> int:
+       out=None, err=None) -> int:
+    # `sys.stdout`/`sys.stderr` resolved here, not as the default value: a
+    # default is bound once at import time, before a caller's redirect (a
+    # test capturing output, or a later reassignment of `sys.stdout`) exists.
+    out = sys.stdout if out is None else out
+    err = sys.stderr if err is None else err
     plan_doc = job_module.read_json(job.plan)
     root = Path(plan_doc["root"])
     extras_root = Path(extras_root)

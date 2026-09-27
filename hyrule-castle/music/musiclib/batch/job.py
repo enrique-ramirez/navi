@@ -73,12 +73,26 @@ def write_json(path, doc) -> None:
     write_bytes(path, data)
 
 
+#: ASCII whitespace only, for spotting a blank line in `read_log`. `str.strip()`
+#: with no argument also strips U+2028, U+2029 and U+0085, which `append_log`
+#: can put in the middle of a JSON string as an ordinary character, not as a
+#: line break: stripping on the wider set could call a line blank when it is
+#: JSON that merely starts or ends with one of those characters.
+_ASCII_WHITESPACE = " \t\n\r\v\f"
+
+
 def read_log(job: Job) -> list[dict]:
-    """`applied.jsonl`, one dict per line, oldest first. No file is no lines."""
+    """`applied.jsonl`, one dict per line, oldest first. No file is no lines.
+
+    Split on `"\\n"` alone, the character `append_log` ends each line with.
+    `str.splitlines()` also breaks on U+2028, U+2029 and U+0085, any of
+    which a tag value can hold, and a split there cuts a JSON string in two.
+    """
     if not job.applied.is_file():
         return []
     text = job.applied.read_text(encoding="utf-8")
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
+    return [json.loads(line) for line in text.split("\n")
+            if line.strip(_ASCII_WHITESPACE)]
 
 
 def append_log(job: Job, entry: dict) -> None:

@@ -438,7 +438,12 @@ def _print_counts(entries: list[dict], out) -> None:
 
 def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, transport=None,
         env: Mapping[str, str] = os.environ, which: Callable[[str], str | None] = shutil.which,
-        out=sys.stdout, err=sys.stderr) -> int:
+        out=None, err=None) -> int:
+    # `sys.stdout`/`sys.stderr` resolved here, not as the default value: a
+    # default is bound once at import time, before a caller's redirect (a
+    # test capturing output, or a later reassignment of `sys.stdout`) exists.
+    out = sys.stdout if out is None else out
+    err = sys.stderr if err is None else err
     root = Path(root)
 
     try:
