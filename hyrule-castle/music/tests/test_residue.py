@@ -70,6 +70,10 @@ def USER():
     return Frames["USER"](encoding=3, lang="eng", text="Terms of use: do not share")
 
 
+def USLT(lang="eng"):
+    return Frames["USLT"](encoding=3, lang=lang, desc="", text="x")
+
+
 ID3 = "id3"
 VORBIS = "vorbis"
 MP4 = "mp4"
@@ -233,6 +237,11 @@ WHOLE = [
     ("software", ASF, "WM/ToolName", "Media Center"),
     ("software", ASF, "WM/ToolVersion", "12.0.0.0"),
     ("timestamps", ASF, "WM/EncodingTime", "128745012000000000"),
+    # The row says TXXX and Vorbis, ignoring case, and foobar2000 and EAC
+    # write it in both cases.
+    ("accurateripresult", ID3, TXXX("AccurateRipResult"), "AccurateRip: Accurate (confidence 5)  [37DEB629]"),
+    ("accurateripresult", ID3, TXXX("ACCURATERIPRESULT"), "AccurateRip: Not present in database"),
+    ("accurateripresult", VORBIS, "accurateripresult", "AccurateRip: Accurate (confidence 5)  [37DEB629]"),
 ]
 
 #: Every free-text field the spec names, and a value in it that must stay.
@@ -394,6 +403,8 @@ KEPT = [
     (ASF, "ripping tool", ["EAC"]),
     (MP4, ITUNES + "iTunes_CDDB_1", ["x"]),
     (ASF, "itunnorm", [" 00000312"]),
+    (MP4, ITUNES + "AccurateRipResult", ["AccurateRip: Accurate (confidence 5)  [37DEB629]"]),
+    (ASF, "AccurateRipResult", ["AccurateRip: Accurate (confidence 5)  [37DEB629]"]),
     # Picard's `website` is ASF `WM/AuthorURL`, but the table has no
     # `website`, and its `url` is qualified TXXX.
     (ASF, "WM/AuthorURL", ["http://example.org/"]),
@@ -495,6 +506,84 @@ class Kept(unittest.TestCase):
         before = copy.deepcopy(tags)
         residue.strip(ID3, tags)
         self.assertEqual(tags, before)
+
+
+#: Every field this engine calls lyrics, in the formats that can carry it.
+#: SYLT is lyrics too, but `Track.tags` holds it as a repr of its
+#: (text, time) pairs, which is never blank, so it has no sample here.
+LYRICS = [
+    (ID3, USLT()),
+    (ID3, USLT("XXX")),
+    (ID3, TXXX("LYRICS")),
+    (ID3, TXXX("unsyncedlyrics")),
+    (ID3, TXXX("UNSYNCED LYRICS")),
+    (VORBIS, "lyrics"),
+    (VORBIS, "unsyncedlyrics"),
+    (VORBIS, "unsynced lyrics"),
+    (VORBIS, "unsynchronised lyrics"),
+    (VORBIS, "unsynchronized lyrics"),
+    (MP4, "\xa9lyr"),
+    (MP4, ITUNES + "UNSYNCED LYRICS"),
+    (MP4, ITUNES + "lyrics"),
+    (ASF, "WM/Lyrics"),
+    (ASF, "Unsynchronized Lyrics"),
+]
+
+#: LRC lyrics as a Windows ripper leaves them: CRLF, and a space at the end
+#: of some lines.
+LRC = "[00:12.34]I hurt myself today \r\n[00:17.02]To see if I still feel\r\n"
+
+
+class AccurateRip(unittest.TestCase):
+    def test_accurateripresult_goes_whole_under_its_own_rule_in_mp3_and_vorbis(self):
+        for family, spec in ((ID3, TXXX("AccurateRipResult")), (ID3, TXXX("accurateripresult")),
+                             (VORBIS, "accurateripresult")):
+            k = key(spec)
+            with self.subTest(key=k):
+                tags = {**CONTEXT[family], k: ["AccurateRip: Accurate (confidence 5)  [37DEB629]"]}
+                kept, removals = residue.strip(family, tags)
+                self.assertEqual(kept, CONTEXT[family])
+                self.assertEqual([tuple(r) for r in removals], [(k, None, "accurateripresult")])
+
+
+class BlankLyrics(unittest.TestCase):
+    """The one residue rule that reaches lyrics."""
+
+    def test_an_empty_or_whitespace_only_lyrics_value_is_removed_under_blank(self):
+        # The three the first run found are USLT ' ', Vorbis '' and MP4 '\r\n'.
+        # Each blank is tried in every lyrics field, so a rule keyed to one
+        # spelling of the name shows.
+        for family, spec in LYRICS:
+            k = key(spec)
+            for blank in ("", " ", "\r\n", " \n  "):
+                with self.subTest(key=k, value=blank):
+                    kept, removals = residue.strip(family, {**CONTEXT[family], k: [blank]})
+                    self.assertEqual(kept, CONTEXT[family])
+                    self.assertEqual([tuple(r) for r in removals], [(k, blank, "blank")])
+
+    def test_a_blank_lyrics_value_beside_real_lyrics_goes_and_the_lyrics_stay_as_written(self):
+        for family, spec in LYRICS:
+            k = key(spec)
+            with self.subTest(key=k):
+                kept, removals = residue.strip(family, {**CONTEXT[family], k: [LRC, " "]})
+                self.assertEqual(kept, {**CONTEXT[family], k: [LRC]})
+                self.assertEqual([tuple(r) for r in removals], [(k, " ", "blank")])
+
+    def test_lyrics_that_match_any_other_free_text_pattern_are_kept(self):
+        # Lyrics are sung words. "Ripped by the storm", a line that is only
+        # "Track 3", a URL in a spoken intro: the free-text patterns were
+        # written for rippers' comments, and a lyrics rule built by reusing
+        # them would eat verses.
+        for family, spec in LYRICS:
+            k = key(spec)
+            for row, value in PATTERNS:
+                if row == "blank":
+                    continue
+                with self.subTest(key=k, row=row, value=value):
+                    tags = {**CONTEXT[family], k: [value]}
+                    kept, removals = residue.strip(family, tags)
+                    self.assertEqual(kept, tags)
+                    self.assertEqual(list(removals), [])
 
 
 class Rules(unittest.TestCase):

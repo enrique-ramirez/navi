@@ -50,7 +50,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 from mutagen.flac import FLAC, Picture
-from mutagen.id3 import APIC, ID3, POPM
+from mutagen.id3 import APIC, COMM, ID3, POPM, SYLT, USLT
 from PIL import Image
 
 from musiclib import caa, check, genres, mb, residue
@@ -61,6 +61,21 @@ from tests import builders
 from tests.test_names import FIONA, FIONA_FOLDER
 
 WMP = "Windows Media Player 9 Series"
+ITUNES = "----:com.apple.iTunes:"
+
+#: The shapes the first real run held 1,790 albums on. LRC lyrics from a
+#: Windows ripper: CRLF, a trailing space on some lines.
+LRC = "[00:12.34]I hurt myself today \r\n[00:17.02]To see if I still feel  \r\n"
+#: iTunes normalisation data, which iTunes also writes into a plain comment.
+ITUNNORM = (" 00001539 000016E0 0000A7B6 0000C0DE 0002A1F3 0002A1F3 00007FFF 00007FFF"
+            " 00017B5A 00017B5A")
+#: iTunes gapless data: one 16-digit group among the 8-digit ones.
+ITUNSMPB = " 00000000 00000210 000007F4 0000000000A4E2BC 00000000 005A8B1C 00000000 00000000"
+
+
+def _comm(text: str) -> COMM:
+    """A comment with no description, the free-text `COMM::eng`."""
+    return COMM(encoding=3, lang="eng", desc="", text=[text])
 
 
 class _Library(unittest.TestCase):
@@ -533,6 +548,92 @@ class Tags(_Library):
                 for v in found:
                     self.assertEqual(Path(v.album), album.relative_to(root))
                     self.assertIn(rule, v.rule)
+
+
+class Whitespace(_Library):
+    """What `whitespace` reports on disk, and what it leaves alone."""
+
+    def judge(self, ext: str, tags: dict, expected: set[str]) -> None:
+        root = self.library()
+        album = builders.library_album(root, ext=ext)
+        builders.write_tags(self.audio(album)[0], tags, v2_version=4)
+        self.assertBreaks(root, album, expected)
+
+    def test_a_track_whose_kept_as_written_fields_carry_stray_spaces_is_clean(self):
+        cases = [
+            ("LRC lyrics in USLT", "mp3", {"USLT": USLT(encoding=3, lang="eng", desc="", text=LRC)}),
+            # SYLT reads back as a repr of its (text, time) pairs, doubled
+            # space and all.
+            ("synced lyrics in SYLT", "mp3", {"SYLT": SYLT(
+                encoding=3, lang="eng", format=2, type=1, desc="",
+                text=[("I hurt  myself today ", 12340), (" To see if I still feel", 17020)])}),
+            ("lyrics in TXXX, one line", "mp3", {"TXXX:LYRICS": "la  la "}),
+            ("unsynced lyrics in Vorbis", "flac", {"UNSYNCED LYRICS": LRC}),
+            # One line, so the line-break rule does not cover it. Only the
+            # field's name keeps it.
+            ("Vorbis lyrics, one line", "ogg", {"LYRICS": " la  la"}),
+            ("unsynced lyrics in an MP4 freeform atom", "m4a", {ITUNES + "UNSYNCED LYRICS": LRC}),
+            ("MP4 lyrics atom, one line", "m4a", {"\xa9lyr": "la  la "}),
+            ("TXXX:LAST_PLAYED with a trailing space", "mp3", {"TXXX:LAST_PLAYED": "2019-04-02 21:14:03 "}),
+            ("TXXX:first_played in lower case", "mp3", {"TXXX:first_played": "2011-07-19 20:01:44 "}),
+            ("the rest of play history in Vorbis", "flac", {
+                "PLAY_COUNT": " 3", "PLAY_COUNTER": "12 ", "PLAY_STAMP": "2019-04-02  21:14:03",
+                "ADDED": "2012-01-01 10:00:00 "}),
+            ("play history in an MP4 freeform atom", "m4a", {ITUNES + "Last_Played": "2019-04-02 21:14:03 "}),
+            ("iTunes normalisation data in COMM::eng", "mp3", {"COMM": _comm(ITUNNORM)}),
+            ("iTunes gapless data in a Vorbis comment", "flac", {"COMMENT": ITUNSMPB}),
+            ("TXXX:major_brand", "mp3", {"TXXX:major_brand": "M4A "}),
+            ("minor_version and compatible_brands in Vorbis", "flac", {
+                "MINOR_VERSION": " 512", "COMPATIBLE_BRANDS": "M4A  mp42isom"}),
+            # A value holding a line break is kept as it is.
+            ("a multi-line Vorbis comment", "flac", {
+                "COMMENT": "Recorded at Abbey Road.  \nMixed by  Alan Moulder "}),
+            ("a multi-line COMM::eng", "mp3", {"COMM": _comm("Recorded at Abbey Road. \r\nMixed  by Alan Moulder")}),
+        ]
+        for case, ext, tags in cases:
+            with self.subTest(case):
+                self.judge(ext, tags, set())
+
+    def test_stray_spaces_in_any_other_single_line_field_break_whitespace(self):
+        # The near misses matter as much as the plain ones: a kept name
+        # matched as a prefix, or a hex test loose enough to take any
+        # comment that starts with a space, would clear these too.
+        cases = [
+            ("TCOM with a doubled space", "mp3", {"TCOM": "Trent  Reznor"}),
+            ("TCOM from the first run", "mp3", {"TCOM": "Billy Squier/Danny  Kortchmar"}),
+            ("a copyright with a trailing space", "flac", {"COPYRIGHT": "(C) 1994 Nothing Records "}),
+            ("groups of four hex digits are not iTunes data", "mp3", {"COMM": _comm(" 1539 16E0 A7B6")}),
+            ("a group of seventeen is not either", "flac", {"COMMENT": " 00000000000001539"}),
+            ("a comment that only starts with a space", "flac", {"COMMENT": " Bought at Rough Trade"}),
+            ("a name that only starts with a kept one", "mp3", {"TXXX:LAST_PLAYED_BY": "Enrique "}),
+            # iTunes data is kept in a comment, and nowhere else.
+            ("iTunes-shaped data outside a comment", "flac", {"COPYRIGHT": ITUNNORM}),
+        ]
+        for case, ext, tags in cases:
+            with self.subTest(case):
+                self.judge(ext, tags, {"whitespace"})
+
+    def test_a_rating_with_a_stray_space_is_not_whitespace(self):
+        # A rating is kept as it is, so the plan never cleans one. Reporting
+        # it here would hold the album for good: no plan can make it go
+        # away. Whether an FMPS rating breaks `rating` is the rating rule's
+        # business, not this one's.
+        for ext, tags in (("flac", {"FMPS_RATING": "0.8 "}), ("mp3", {"TXXX:FMPS_RATING": "0.8 "})):
+            with self.subTest(ext):
+                root = self.library()
+                album = builders.library_album(root, ext=ext)
+                builders.write_tags(self.audio(album)[0], tags, v2_version=4)
+                self.assertBreaks(root, album, set(), also={"rating"})
+
+    def test_a_blank_lyrics_value_is_residue_blank_and_not_whitespace(self):
+        cases = [
+            ("USLT of one space", "mp3", {"USLT": USLT(encoding=3, lang="eng", desc="", text=" ")}),
+            ("empty Vorbis lyrics", "flac", {"LYRICS": ""}),
+            ("MP4 lyrics of only a line break", "m4a", {"\xa9lyr": "\r\n"}),
+        ]
+        for case, ext, tags in cases:
+            with self.subTest(case):
+                self.judge(ext, tags, {"residue: blank"})
 
 
 class Images(_Library):
@@ -1255,6 +1356,55 @@ class APlanLeftWithNoGenre(_Planning):
                 self.assertTrue(said, f"no problem under 'no genre': {plan.problems}")
                 self.assertEqual([f.target["genre"] for f in plan.files if "genre" in f.target], [])
                 self.assertRefused(plan, said[0], root, before)
+
+
+class APlanOfARipWithStraySpaces(_Planning):
+    def test_carries_no_whitespace_problem_cleaning_the_composer_and_keeping_the_lyrics(self):
+        # `check` and plan validation judge whitespace the same way, so a
+        # plan that cleans and keeps what it keeps as written validates
+        # clean.
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"], ext="mp3")
+        kept = {
+            "USLT::eng": [LRC],
+            "TXXX:LAST_PLAYED": ["2019-04-02 21:14:03 "],
+            "COMM::eng": [ITUNNORM],
+        }
+        for path in sorted(album.glob("*.mp3")):
+            builders.write_tags(path, {
+                "TCOM": "Billy Squier/Danny  Kortchmar",
+                "TCOP": "(C) 1989 Fiction Records ",
+                "USLT": USLT(encoding=3, lang="eng", desc="", text=LRC),
+                "TXXX:LAST_PLAYED": "2019-04-02 21:14:03 ",
+                "COMM": _comm(ITUNNORM),
+            }, v2_version=4)
+
+        plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]), status="auto")
+
+        self.assertEqual(list(plan.problems), [])
+        for file_plan in plan.files:
+            self.assertEqual(file_plan.target["TCOM"], ["Billy Squier/Danny Kortchmar"])
+            self.assertEqual(file_plan.target["TCOP"], ["(C) 1989 Fiction Records"])
+            self.assertEqual({k: file_plan.target.get(k) for k in kept}, kept)
+
+    def test_a_rip_whose_fmps_rating_has_a_stray_space_plans_with_no_whitespace_problem(self):
+        # The plan keeps the rating as written, and plan validation must
+        # agree with it, or the album can never be written.
+        for ext, rating_key, tags in (("flac", "fmps_rating", {"FMPS_RATING": "0.8 "}),
+                                      ("mp3", "TXXX:FMPS_RATING", {"TXXX:FMPS_RATING": "0.8 "})):
+            with self.subTest(ext):
+                root = self.library()
+                album = _rip(root, ["Plainsong", "Pictures of You"], ext=ext)
+                for path in sorted(album.glob(f"*.{ext}")):
+                    builders.write_tags(path, tags, v2_version=4)
+
+                plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]),
+                                 status="auto")
+
+                self.assertEqual([p for p in plan.problems if p.startswith("whitespace")], [])
+                for file_plan in plan.files:
+                    self.assertEqual(file_plan.target[rating_key], ["0.8 "])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,8 @@ import itertools
 import tempfile
 import unittest
 
+from mutagen.id3 import COMM, SYLT, TCOM, USLT
+
 from musiclib import files, genres, mapping
 from tests import builders
 
@@ -338,6 +340,167 @@ class Typography(TestCase):
                                            "label": ["Fiction" + RSQUO + "s Records"]})
                 for field in ("title", "album", "discsubtitle", "label"):
                     self.assertEqual(target[key(ext, field)], expected[key(ext, field)], field)
+
+
+ALL_FORMATS = FORMATS + ("wma",)
+ITUNES = "----:com.apple.iTunes:"
+
+#: LRC lyrics from a Windows ripper: CRLF, a trailing space on some lines.
+LRC = "[00:12.34]I hurt myself today \r\n[00:17.02]To see if I still feel  \r\n"
+#: iTunes normalisation and gapless data, as iTunes writes it into a plain comment.
+ITUNNORM = (" 00001539 000016E0 0000A7B6 0000C0DE 0002A1F3 0002A1F3 00007FFF 00007FFF"
+            " 00017B5A 00017B5A")
+ITUNSMPB = " 00000000 00000210 000007F4 0000000000A4E2BC 00000000 005A8B1C 00000000 00000000"
+
+COMPOSER = {"mp3": "TCOM", "flac": "composer", "ogg": "composer", "m4a": "\xa9wrt", "wma": "WM/Composer"}
+COPYRIGHT = {"mp3": "TCOP", "flac": "copyright", "ogg": "copyright", "m4a": "cprt", "wma": "Copyright"}
+COMMENT = {"mp3": "COMM::eng", "flac": "comment", "ogg": "comment", "m4a": "\xa9cmt"}
+LYRICS = {"mp3": "USLT::eng", "flac": "lyrics", "ogg": "lyrics", "m4a": "\xa9lyr", "wma": "WM/Lyrics"}
+
+
+def _vorbis_kept() -> dict:
+    return {
+        "unsynced lyrics": LRC, "unsyncedlyrics": LRC, "unsynchronised lyrics": LRC,
+        "unsynchronized lyrics": LRC, "lyrics": " la  la",
+        "first_played": "2011-07-19 20:01:44 ", "last_played": "2019-04-02 21:14:03 ",
+        "play_count": " 3", "play_counter": "12 ", "play_stamp": "2019-04-02  21:14:03",
+        "added": "2012-01-01 10:00:00 ",
+        "major_brand": "M4A ", "minor_version": " 512", "compatible_brands": "M4A  mp42isom",
+        "comment": ITUNNORM,
+    }
+
+
+def kept_as_written(ext: str) -> dict:
+    """Every kind of kept-as-written field `ext` can carry, each with stray spaces, as written."""
+    if ext == "mp3":
+        return {
+            "USLT": USLT(encoding=3, lang="eng", desc="", text=LRC),
+            "SYLT": SYLT(encoding=3, lang="eng", format=2, type=1, desc="",
+                         text=[("I hurt  myself today ", 12340), (" To see if I still feel", 17020)]),
+            "TXXX:LYRICS": "la  la ", "TXXX:UNSYNCED LYRICS": LRC,
+            "TXXX:first_played": "2011-07-19 20:01:44 ", "TXXX:LAST_PLAYED": "2019-04-02 21:14:03 ",
+            "TXXX:PLAY_COUNT": " 3", "TXXX:Play_Counter": "12 ", "TXXX:PLAY_STAMP": "2019-04-02  21:14:03",
+            "TXXX:ADDED": "2012-01-01 10:00:00 ",
+            "TXXX:major_brand": "M4A ", "TXXX:minor_version": " 512", "TXXX:compatible_brands": "M4A  mp42isom",
+            "COMM": COMM(encoding=3, lang="eng", desc="", text=[ITUNNORM]),
+        }
+    if ext in ("flac", "ogg"):
+        return _vorbis_kept()
+    if ext == "m4a":
+        return {
+            "\xa9lyr": "la  la ", ITUNES + "UNSYNCED LYRICS": LRC,
+            ITUNES + "LAST_PLAYED": "2019-04-02 21:14:03 ", ITUNES + "play_count": " 3",
+            ITUNES + "major_brand": "M4A ", ITUNES + "compatible_brands": "M4A  mp42isom",
+            "\xa9cmt": ITUNSMPB,
+        }
+    return {"WM/Lyrics": LRC, "UNSYNCED LYRICS": "la  la ", "LAST_PLAYED": "2019-04-02 21:14:03 ",
+            "PLAY_COUNT": " 3", "minor_version": " 512"}
+
+
+def composer(ext: str, values: list[str]) -> dict:
+    """`values` as the composer field of `ext`, several values in one field."""
+    if ext == "mp3":
+        return {"TCOM": TCOM(encoding=3, text=list(values))}
+    return {COMPOSER[ext]: list(values)}
+
+
+class Whitespace(TestCase):
+    """What the plan cleans and what it keeps as written."""
+
+    def test_single_line_values_are_trimmed_and_their_runs_of_spaces_collapsed_planned_or_not(self):
+        # The composer and copyright are not planned, the title is, and the
+        # clean reaches both. The title's triple space shows a clean that
+        # swaps one pair of spaces and stops.
+        release = builders.mb_release()
+        release["media"][1]["tracks"][2]["title"] = " Mr.   Self  Destruct "
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                track = on_file(ext, {COMPOSER[ext]: "Trent  Reznor",
+                                      COPYRIGHT[ext]: "(C) 1994 Nothing Records "})
+                target = plan(track, release).target
+                self.assertEqual(target[COMPOSER[ext]], ["Trent Reznor"])
+                self.assertEqual(target[COPYRIGHT[ext]], ["(C) 1994 Nothing Records"])
+                self.assertEqual(target[key(ext, "title")], ["Mr. Self Destruct"])
+                # What plan validation would call `whitespace`: none of it
+                # is left anywhere in the target.
+                stray = {k: v for k, values in target.items() for v in values
+                         if "\n" not in v and (v != v.strip() or "  " in v)}
+                self.assertEqual(stray, {})
+
+    def test_a_value_cleaned_to_nothing_is_dropped_and_a_field_left_with_none_is_removed(self):
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                target = plan(on_file(ext, composer(ext, ["  "]))).target
+                self.assertNotIn(COMPOSER[ext], target)
+                target = plan(on_file(ext, composer(ext, ["Billy Squier/Danny  Kortchmar", "  "]))).target
+                self.assertEqual(target[COMPOSER[ext]], ["Billy Squier/Danny Kortchmar"])
+
+    def test_every_field_kept_as_written_comes_out_byte_for_byte(self):
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                track = on_file(ext, kept_as_written(ext))
+                # The file carries nothing else, so every key it reads back
+                # with is one of the kept-as-written fields.
+                before = dict(track.tags)
+                self.assertEqual(len(before), len(kept_as_written(ext)))
+                target = plan(track).target
+                self.assertEqual({k: target.get(k) for k in before}, before)
+
+    def test_a_value_holding_a_line_break_is_kept_as_it_is(self):
+        # Neither lyrics nor machine data, so only the line break keeps it.
+        liner = "Recorded at Abbey Road.  \r\nMixed by  Alan Moulder "
+        for ext in FORMATS:
+            with self.subTest(ext):
+                tags = ({"COMM": COMM(encoding=3, lang="eng", desc="", text=[liner])} if ext == "mp3"
+                        else {COMMENT[ext]: liner})
+                target = plan(on_file(ext, tags)).target
+                self.assertEqual(target[COMMENT[ext]], [liner])
+
+    def test_a_rating_is_never_cleaned(self):
+        # A plan that changes a rating is refused at write time, so a clean
+        # that reaches one stops the whole album.
+        for ext, rating_key, value in (("flac", "rating", " 4 "), ("ogg", "fmps_rating", "0.8 "),
+                                       ("mp3", "TXXX:FMPS_RATING", "0.8 ")):
+            with self.subTest(ext):
+                target = plan(on_file(ext, {rating_key: value})).target
+                self.assertEqual(target[rating_key], [value])
+
+    def test_a_value_that_is_residue_once_cleaned_is_removed_and_recorded(self):
+        # " Track 3" passes the residue patterns, which are anchored, and
+        # "Track 3" does not. Cleaning after `residue.strip` and stopping
+        # there writes a denylisted value, and validating the plan then
+        # finds it and refuses the album.
+        for ext in FORMATS:
+            with self.subTest(ext):
+                tags = ({"COMM": COMM(encoding=3, lang="eng", desc="", text=[" Track 3"])} if ext == "mp3"
+                        else {COMMENT[ext]: " Track 3"})
+                result = plan(on_file(ext, tags))
+                self.assertNotIn(COMMENT[ext], result.target)
+                self.assertIn((COMMENT[ext], "track number"), [(r.key, r.rule) for r in result.removals])
+
+    def test_a_blank_comment_is_still_recorded_as_residue_blank(self):
+        # Cleaning before `residue.strip` empties the value first, and it
+        # vanishes with no record of why.
+        for ext in FORMATS:
+            with self.subTest(ext):
+                tags = ({"COMM": COMM(encoding=3, lang="eng", desc="", text=["  "])} if ext == "mp3"
+                        else {COMMENT[ext]: "  "})
+                result = plan(on_file(ext, tags))
+                self.assertNotIn(COMMENT[ext], result.target)
+                self.assertIn((COMMENT[ext], "  ", "blank"), [tuple(r) for r in result.removals])
+
+    def test_a_blank_lyrics_value_is_removed_under_blank_and_recorded(self):
+        blanks = {"mp3": " ", "flac": "", "ogg": "", "m4a": "\r\n", "wma": " "}
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                blank = blanks[ext]
+                tags = ({"USLT": USLT(encoding=3, lang="eng", desc="", text=blank)} if ext == "mp3"
+                        else {LYRICS[ext]: blank})
+                track = on_file(ext, tags)
+                self.assertEqual(track.tags[LYRICS[ext]], [blank])
+                result = plan(track)
+                self.assertNotIn(LYRICS[ext], result.target)
+                self.assertIn((LYRICS[ext], blank, "blank"), [tuple(r) for r in result.removals])
 
 
 if __name__ == "__main__":

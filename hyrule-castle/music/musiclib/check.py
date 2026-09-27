@@ -343,22 +343,6 @@ def _is_year_key(family: str, key: str) -> bool:
     return False
 
 
-def _skip_whitespace(family: str, key: str) -> bool:
-    """A snapshot value that is not text: a digest, an MP4 repr, an Ogg blob."""
-    if family == "id3":
-        frame_id = key.split(":", 1)[0]
-        if frame_id in ("APIC", "PRIV", "GEOB", "USER", "UFID", "POPM"):
-            return True
-        return len(frame_id) == 4 and frame_id[0] == "W"
-    if family == "mp4":
-        return key in ("trkn", "disk", "covr")
-    if family == "vorbis":
-        return key == "metadata_block_picture"
-    if family == "asf":
-        return key == "WM/Picture"
-    return False
-
-
 def _required_field_violations(track: files.Track) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for name, label in _REQUIRED:
@@ -482,9 +466,11 @@ def _residue_violations(track: files.Track) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     kept, removals = residue.strip(track.family, track.tags)
     for key, values in kept.items():
-        if _skip_whitespace(track.family, key):
+        if tagwrite.is_non_text_key(track.family, key):
             continue
         for value in values:
+            if tagwrite.keeps_whitespace(track.family, key, value) or tagwrite.has_line_break(value):
+                continue
             if value != value.strip() or "  " in value:
                 out.append(("whitespace", f"{key}={value!r}"))
     for removal in removals:

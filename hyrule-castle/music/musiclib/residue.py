@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from typing import Callable, NamedTuple
 
+from musiclib import tagwrite
+
 
 class Removal(NamedTuple):
     """One value, or one whole field (`value` is `None`), taken out by `rule`."""
@@ -79,6 +81,8 @@ _FREEFORM: dict[str, str] = {
     "itunes_cddb_tracknumber": "itunes_cddb",
     # Picard's Vorbis name for encoder settings, written with no space.
     "encodersettings": "encoder settings",
+    # AccurateRip verification output the ripper wrote in.
+    "accurateripresult": "accurateripresult",
 }
 
 # Denylist rows write "TXXX `name`" or "(TXXX and Vorbis)" for a name that
@@ -90,6 +94,7 @@ _TXXX_ONLY = {
 }
 _TXXX_AND_VORBIS = {
     "ripping tool", "itunes_cddb_1", "itunes_cddb_ids", "itunes_cddb_tracknumber",
+    "accurateripresult",
 }
 _TXXX_AND_VORBIS_MP4 = {"itunmovi", "itunnorm", "itunsmpb"}
 
@@ -303,8 +308,20 @@ def _town_match(value: str) -> str | None:
     return "TOWN" if value == "[Pirate Shovon]" else None
 
 
+def _blank_lyrics_match(value: str) -> str | None:
+    """The one residue rule for lyrics: blank or whitespace only.
+
+    No other *Removed value by value* pattern runs on lyrics: those were
+    written for rippers' comments, and would eat a "Track 3" chorus or a
+    spoken URL in a verse.
+    """
+    return "blank" if value.strip() == "" else None
+
+
 def _other_field_matcher(family: str, key: str) -> Callable[[str], str | None] | None:
     """A by-value matcher for a field that is otherwise kept, or `None`."""
+    if tagwrite.is_lyrics_field(family, key):
+        return _blank_lyrics_match
     if family == "id3":
         if key == "TCOP":
             return _tcop_match

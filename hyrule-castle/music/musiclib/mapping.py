@@ -11,8 +11,12 @@ never in the album.
 neutral names, converts the name fields with `ascii.convert`, maps them to
 each format's real keys through `PICARD`, folds in the release-specific
 removals, then runs the result through `tagwrite.merge` (so everything the
-plan does not mention survives) and `residue.strip` (so the denylist is
-enforced on the way out, same as `check`).
+plan does not mention survives), `residue.strip` (so the denylist is
+enforced on the way out, same as `check`), a whitespace clean, and
+`residue.strip` a second time - a value the first pass let through can
+become denylisted once cleaned (`" Track 3"` -> `"Track 3"`), and planning
+it clean the first time keeps a re-plan from proposing a second change on
+the next pass.
 """
 
 from __future__ import annotations
@@ -168,6 +172,34 @@ def _number_fields(family: str, track_pair: tuple[int, int], disc_pair: tuple[in
     return {}
 
 
+def _clean_whitespace(family: str, tags: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Trim, collapse runs of spaces, and drop what that empties.
+
+    Skips exactly what `check`'s `whitespace` rule skips, so a cleaned plan
+    never disagrees with `check` run over the file it writes: a rating, the
+    kept-as-written fields and a value holding a line break (all three,
+    `tagwrite.keeps_whitespace`, plus `tagwrite.has_line_break`), and the
+    shapes that are not text at all - digests, MP4 pairs, embedded pictures
+    (`tagwrite.is_non_text_key`).
+    """
+    cleaned: dict[str, list[str]] = {}
+    for key, values in tags.items():
+        if tagwrite.is_non_text_key(family, key):
+            cleaned[key] = values
+            continue
+        kept_values = []
+        for value in values:
+            if tagwrite.keeps_whitespace(family, key, value) or tagwrite.has_line_break(value):
+                kept_values.append(value)
+                continue
+            scrubbed = re.sub(r" {2,}", " ", value.strip())
+            if scrubbed:
+                kept_values.append(scrubbed)
+        if kept_values:
+            cleaned[key] = kept_values
+    return cleaned
+
+
 def _suggest_discsubtitle(folder: str | None) -> str | None:
     """The disc-subtitle suggestion: `folder` less its generic disc marker, or `None`.
 
@@ -289,6 +321,10 @@ def plan_tags(track: files.Track, release: dict, medium_position: int, track_pos
     merged = tagwrite.merge(track, planned)
     target, residue_removals = residue.strip(family, merged)
     removals.extend(residue_removals)
+
+    cleaned = _clean_whitespace(family, target)
+    target, cleanup_removals = residue.strip(family, cleaned)
+    removals.extend(cleanup_removals)
 
     return FileTags(target=target, removals=removals, problems=problems, holds=holds,
                     suggested_discsubtitle=suggested_discsubtitle)

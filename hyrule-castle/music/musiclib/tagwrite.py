@@ -6,6 +6,8 @@ forbidden duplicates, and an MP3 comes out as ID3v2.4 with no ID3v1.
 
 from __future__ import annotations
 
+import re
+
 from mutagen.id3 import COMM, Frames, POPM, TXXX, UFID, USLT
 from mutagen.mp4 import AtomDataType, MP4FreeForm
 
@@ -13,6 +15,31 @@ from musiclib import files
 
 #: Vorbis fields the docs call ratings (*Tags*, *Ratings*). MP4 has none.
 _VORBIS_RATING_KEYS = {"rating", "fmps_rating"}
+
+#: The three kept-as-written groups, each named ignoring case wherever a
+#: free-form name can be carried (an MP3 TXXX description, a Vorbis field, an
+#: MP4 `----` atom's name, or an ASF attribute) - the same reach as
+#: `residue._freeform_rule`.
+_LYRICS_NAMES = {
+    "lyrics", "unsyncedlyrics", "unsynced lyrics",
+    "unsynchronised lyrics", "unsynchronized lyrics",
+}
+_PLAY_HISTORY_NAMES = {
+    "first_played", "last_played", "play_count", "play_counter",
+    "play_stamp", "added",
+}
+_MACHINE_WRITTEN_NAMES = {"major_brand", "minor_version", "compatible_brands"}
+
+#: The native, non-freeform lyrics frame/atom/attribute a ripper or player
+#: writes itself: ID3 USLT and SYLT, MP4's own lyrics atom, ASF's own.
+_MP4_NATIVE_LYRICS = "\xa9lyr"
+_ASF_NATIVE_LYRICS = "wm/lyrics"
+
+#: iTunes normalisation and gapless data written into a plain comment:
+#: spaces, each followed by a group of 8 to 16 hexadecimal digits, and
+#: nothing else. This shape is kept in a comment only, so a copy of the same
+#: digits sitting in an unrelated field still breaks `whitespace`.
+_ITUNES_BLOB = re.compile(r"^(?: [0-9A-Fa-f]{8,16})+$")
 
 
 class VerifyError(Exception):
@@ -71,6 +98,103 @@ def is_forbidden_duplicate(family: str, key: str) -> bool:
         return name in ("year", "album artist")
     # ASF falls through to False too: no duplicate of this shape has turned
     # up in a WMA file yet, so there is nothing yet to name here.
+    return False
+
+
+def _freeform_name(family: str, key: str) -> str | None:
+    """The lower-cased free-form name `key` carries, or `None` if `key` is
+    not shaped like one in `family` (an MP3 TXXX description, a Vorbis
+    field, an MP4 `----` atom's name, or an ASF attribute)."""
+    if family == "id3":
+        if key.startswith("TXXX:"):
+            return key[len("TXXX:"):].lower()
+        return None
+    if family == "vorbis":
+        return key.lower()
+    if family == "mp4":
+        if key.startswith("----:"):
+            return key.rsplit(":", 1)[-1].lower()
+        return None
+    if family == "asf":
+        return key.lower()
+    return None
+
+
+def _is_named(family: str, key: str, names: set[str]) -> bool:
+    return _freeform_name(family, key) in names
+
+
+def is_lyrics_field(family: str, key: str) -> bool:
+    """The lyrics fields: the one list `residue` and `tagwrite` both read."""
+    if family == "id3":
+        if key.startswith("USLT:") or key.startswith("SYLT:"):
+            return True
+    elif family == "mp4":
+        if key == _MP4_NATIVE_LYRICS:
+            return True
+    elif family == "asf":
+        if key.lower() == _ASF_NATIVE_LYRICS:
+            return True
+    return _is_named(family, key, _LYRICS_NAMES)
+
+
+def _is_comment_field(family: str, key: str) -> bool:
+    """A field the docs call a comment, where iTunes also writes its
+    normalisation and gapless data as plain text, alongside the exact frames
+    the residue denylist strips whole."""
+    if family == "id3":
+        return key.startswith("COMM:") or (
+            key.startswith("TXXX:") and key[len("TXXX:"):].lower() == "comment")
+    if family == "vorbis":
+        return key == "comment"
+    if family == "mp4":
+        return key == "\xa9cmt"
+    return False
+
+
+def keeps_whitespace(family: str, key: str, value: str) -> bool:
+    """`value` in `key` is kept exactly as written: `check` and `mapping`'s
+    one shared answer to what the whitespace rules never touch.
+
+    A rating is never changed at all. Lyrics, play history and
+    machine-written values are exempt from the whitespace cleaning and from
+    `check`'s `whitespace` rule, because collapsing spaces inside a sung
+    line, a timestamp or an iTunes blob would corrupt it rather than tidy
+    it. The comment case is the one exemption that reads the value: only
+    the exact iTunes blob shape is kept, so a comment that merely starts
+    with a space still breaks `whitespace`.
+    """
+    if is_rating_key(family, key):
+        return True
+    if is_lyrics_field(family, key):
+        return True
+    if _is_named(family, key, _PLAY_HISTORY_NAMES):
+        return True
+    if _is_named(family, key, _MACHINE_WRITTEN_NAMES):
+        return True
+    return _is_comment_field(family, key) and bool(_ITUNES_BLOB.match(value))
+
+
+def has_line_break(value: str) -> bool:
+    """A value holding a line break is kept as it is."""
+    return "\n" in value or "\r" in value
+
+
+def is_non_text_key(family: str, key: str) -> bool:
+    """`check` and `mapping`'s one shared answer to whether `key` even holds
+    text: a digest, an MP4 pair, or an embedded picture, none of which the
+    whitespace rules can read as a string."""
+    if family == "id3":
+        frame_id = key.split(":", 1)[0]
+        if frame_id in ("APIC", "PRIV", "GEOB", "USER", "UFID", "POPM"):
+            return True
+        return len(frame_id) == 4 and frame_id[0] == "W"
+    if family == "mp4":
+        return key in ("trkn", "disk", "covr")
+    if family == "vorbis":
+        return key == "metadata_block_picture"
+    if family == "asf":
+        return key == "WM/Picture"
     return False
 
 
