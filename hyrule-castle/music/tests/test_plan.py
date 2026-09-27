@@ -1,10 +1,12 @@
 """Planning an album against a release: what refuses a plan before any file is touched.
 
-Criteria 6, 18, 25, 26 and 29. `test_check` covers a plan that breaks one of
-the library's rules. These are the cases where the release, the names it
-gives or the Cover Art Archive cannot be planned at all: each has to come
-back as a plan problem the owner can read, never as a crash and never as a
-plan that writes something wrong.
+`test_check` covers a plan that breaks one of the library's rules. Most of
+these are the cases where the release, the names it gives or the Cover Art
+Archive cannot be planned at all: each has to come back as a plan problem
+the owner can read, never as a crash and never as a plan that writes
+something wrong. The rest are names that look as if they should fail and
+must not: a title too long for a folder, and a title in typographic
+punctuation.
 
 The rip, the release and the MusicBrainz half of the fake services are
 `test_check`'s. `Archive` adds what the Cover Art Archive half of those
@@ -17,7 +19,7 @@ import json
 import re
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 from musiclib import caa, mb
@@ -25,6 +27,7 @@ from musiclib.cache import Cache
 from tests import builders
 from tests.test_check import (FRONT, FRONT_URL, _Planning, _plan_album, _release, _release_group, _rip,
                               _Services, _snapshot)
+from tests.test_names import FIONA, FIONA_FOLDER
 
 BACK = builders.jpeg(640, 480)
 BACK_URL = f"https://coverartarchive.org/release/{builders.RELEASE_ID}/2.jpg"
@@ -128,38 +131,136 @@ class AReleaseThatDoesNotFit(_Planning):
                 self.assertEqual(list(plan.files), [])
                 self.assertRefused(plan, said[0], root, before)
 
-    def test_a_destination_name_over_255_bytes_is_refused_and_one_of_exactly_255_is_not(self):
+    def test_a_title_over_255_bytes_is_planned_with_a_cut_name_and_one_of_exactly_255_is_not_cut(self):
         # ext4 on the box takes 255 bytes a name, whatever the characters.
         # The titles are three-byte characters, so every one of these names
-        # is well under 255 characters: a check that counts characters
-        # passes them all.
-        wide = "交"  # 交, three bytes in UTF-8
+        # is well under 255 characters: a cut that counts characters leaves
+        # them all whole. They have no spaces, so the cut is by character.
+        wide = "交"  # three bytes in UTF-8
         exactly = wide * 82  # "01. " + 246 bytes + ".flac" is 255 bytes
         over = wide * 83  # 258 bytes as a file name, 256 as "(2010) " and the title
+        self.assertEqual(len(f"01. {exactly}.flac".encode()), 255)
+        album_dir = "C/Cure, The/(2010) Disintegration"
         cases = {
-            "a track title": ("track", over, True),
-            "an album title": ("album", over, True),
-            "a track name of exactly 255 bytes": ("track", exactly, False),
+            # 80 characters are 240 bytes, and "01. ", " [...]" and ".flac" make 255.
+            "a track title": ("track", over, f"{album_dir}/01. {wide * 80} [...].flac"),
+            # "(2010) " and " [...]" leave 242 bytes, and 80 characters take 240.
+            "an album title": ("album", over, f"C/Cure, The/(2010) {wide * 80} [...]/01. Plainsong.flac"),
+            "a track name of exactly 255 bytes": ("track", exactly, f"{album_dir}/01. {exactly}.flac"),
         }
-        for case, (where, title, refused) in cases.items():
+        for case, (where, title, first_destination) in cases.items():
             with self.subTest(case):
-                self.assertEqual(len(f"01. {exactly}.flac".encode()), 255)
                 root = self.library()
                 album = _rip(root, ["Plainsong", "Pictures of You"])
                 if where == "track":
                     release = _release([title, "Pictures of You"])
                 else:
                     release = _release(["Plainsong", "Pictures of You"], title=title)
-                before = _snapshot(root)
 
                 plan = plan_with(self.tmp, self.unit(root, album), release, Archive(release), status="auto")
 
-                said = [p for p in plan.problems if "255" in p or "too long" in p.casefold()]
-                if not refused:
-                    self.assertEqual(said, [])
-                    continue
-                self.assertTrue(said, f"no problem says a name is too long: {plan.problems}")
-                self.assertRefused(plan, said[0], root, before)
+                self.assertEqual(list(plan.problems), [])
+                first = next(f for f in plan.files if PurePosixPath(str(f.source)).name == "01 plainsong.flac")
+                self.assertEqual(str(first.destination), first_destination)
+                key = "title" if where == "track" else "album"
+                self.assertEqual(first.target[key], [title])
+
+    def test_an_artist_folder_over_255_bytes_is_still_refused(self):
+        artist = "交" * 86  # 258 bytes
+        credit = builders.mb_credit("1a0b0c0d-0000-4000-8000-0000000000b1", artist, artist)
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        release = _release(["Plainsong", "Pictures of You"], credit=credit)
+        before = _snapshot(root)
+
+        plan = plan_with(self.tmp, self.unit(root, album), release, Archive(release), status="auto")
+
+        said = [p for p in plan.problems if "too long for a file name" in p]
+        self.assertTrue(said, f"no problem says the artist folder is too long: {plan.problems}")
+        self.assertRefused(plan, said[0], root, before)
+
+
+#: Fiona Apple's 1999 album as MusicBrainz gives it. Every apostrophe in the
+#: title is a right single quotation mark there, so this is `FIONA` with
+#: each one put back.
+FIONA_AS_MUSICBRAINZ = FIONA.replace("'", "\u2019")
+FIONA_CREDIT = builders.mb_credit("1a0b0c0d-0000-4000-8000-0000000000b2", "Fiona Apple", "Apple, Fiona")
+
+
+class ALongTitle(_Planning):
+    def test_fiona_apples_when_the_pawn_is_planned_to_criterion_46s_folder_with_its_full_title_in_the_tag(self):
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        release = _release(["Plainsong", "Pictures of You"], title=FIONA_AS_MUSICBRAINZ,
+                           credit=FIONA_CREDIT, date="1999-11-09")
+
+        plan = plan_with(self.tmp, self.unit(root, album), release, Archive(release), status="auto")
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(str(plan.destination), f"F/Fiona Apple/{FIONA_FOLDER}")
+        for file_plan in plan.files:
+            self.assertEqual(file_plan.target["album"], [FIONA])
+
+
+class NamesFromConvertedText(_Planning):
+    """Folders are built from the same converted text as the tag, so each agrees with the other.
+
+    A folder built from MusicBrainz's raw text keeps a curly quote the tag
+    beside it has lost, and `check` then reads the two as disagreeing.
+    """
+
+    def plan_release(self, **changes):
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        release = _release(["Plainsong", "Pictures of You"], **changes)
+        return plan_with(self.tmp, self.unit(root, album), release, Archive(release), status="auto")
+
+    def test_the_cures_hell_win_lands_in_a_folder_with_a_straight_apostrophe(self):
+        plan = self.plan_release(title="He\u2019ll Win")
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(str(plan.destination), "C/Cure, The/(2010) He'll Win")
+
+    def test_every_converted_character_in_the_album_title_reaches_the_folder_converted(self):
+        cases = {
+            "\u2018": "A'B", "\u2019": "A'B", "\u201c": "A''B", "\u201d": "A''B", "\u2026": "A...B",
+            "\u2010": "A-B", "\u2013": "A-B", "\u2014": "A-B",
+        }
+        for char, folder_title in cases.items():
+            with self.subTest(f"U+{ord(char):04X}"):
+                plan = self.plan_release(title=f"A{char}B")
+                self.assertEqual(list(plan.problems), [])
+                self.assertEqual(str(plan.destination), f"C/Cure, The/(2010) {folder_title}")
+
+    def test_a_title_ending_in_an_ellipsis_gets_a_folder_with_no_trailing_dots(self):
+        # The tag ends `...`, and the character table drops trailing full
+        # stops. The raw `\u2026` is no full stop, so a folder built from it
+        # keeps it and disagrees with its tag.
+        plan = self.plan_release(title="Wait\u2026")
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(str(plan.destination), "C/Cure, The/(2010) Wait")
+        self.assertEqual(plan.files[0].target["album"], ["Wait..."])
+
+    def test_guns_n_roses_gets_an_artist_folder_with_a_straight_apostrophe(self):
+        credit = builders.mb_credit("1a0b0c0d-0000-4000-8000-0000000000b3",
+                                    "Guns N\u2019 Roses", "Guns N\u2019 Roses")
+        plan = self.plan_release(credit=credit)
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(str(plan.destination), "G/Guns N' Roses/(2010) Disintegration")
+
+    def test_the_artist_folder_takes_the_converted_name_and_the_converted_sort_name(self):
+        # Converting the name and not the sort name (or the other way round)
+        # would make them differ, and the folder would fall back to `The A'B`.
+        cases = {
+            "\u2018": "A'B", "\u2019": "A'B", "\u201c": "A''B", "\u201d": "A''B", "\u2026": "A...B",
+            "\u2010": "A-B", "\u2013": "A-B", "\u2014": "A-B",
+        }
+        for char, folder_name in cases.items():
+            with self.subTest(f"U+{ord(char):04X}"):
+                credit = builders.mb_credit("1a0b0c0d-0000-4000-8000-0000000000b4",
+                                            f"The A{char}B", f"A{char}B, The")
+                plan = self.plan_release(credit=credit)
+                self.assertEqual(list(plan.problems), [])
+                self.assertEqual(str(plan.destination), f"A/{folder_name}, The/(2010) Disintegration")
 
 
 class ACoverArtArchiveError(_Planning):

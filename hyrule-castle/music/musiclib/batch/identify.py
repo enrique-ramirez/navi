@@ -346,6 +346,14 @@ def _finalize(entries: list[dict], plans: dict[str, Plan], root: Path) -> None:
             _check_collisions(plan, root)
         except Collision as exc:
             _add_collision(by_source[key], str(exc))
+        except Exception as exc:
+            # A name the filesystem itself refuses (an artist folder over
+            # 255 bytes raised `OSError` from `Path.is_dir` on the box's
+            # Python 3.13) rather than a collision the check found: held
+            # like any other engine crash, but every other album still gets
+            # its own check.
+            by_source[key]["holds"].append(
+                {"kind": "error", "detail": f"{type(exc).__name__}: {exc}"})
 
     for entry in entries:
         # Every condition that would hold an album for review (a non-

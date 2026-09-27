@@ -189,5 +189,110 @@ class TrackFilename(unittest.TestCase):
         self.assertEqual(names.track_filename(4, "Wait...", "m4a", 10), "04. Wait.m4a")
 
 
+#: Fiona Apple's 1999 album as MusicBrainz titles it, with its curly
+#: apostrophes already made straight: `names` is handed converted text and
+#: never converts it itself.
+FIONA = (
+    "When the Pawn Hits the Conflicts He Thinks Like a King What He Knows Throws the Blows "
+    "When He Goes to the Fight and He'll Win the Whole Thing 'Fore He Enters the Ring There's "
+    "No Body to Batter When Your Mind Is Your Might So When You Go Solo, You Hold Your Own Hand "
+    "and Remember That Depth Is the Greatest of Heights and If You Know Where You Stand, Then You "
+    "Know Where to Land and If You Fall It Won't Matter, Cuz You'll Know That You're Right"
+)
+
+FIONA_FOLDER = (
+    "(1999) When the Pawn Hits the Conflicts He Thinks Like a King What He Knows Throws the Blows "
+    "When He Goes to the Fight and He'll Win the Whole Thing 'Fore He Enters the Ring There's "
+    "No Body to Batter When Your Mind Is Your Might So When You Go Solo, [...]"
+)
+
+#: 交 is three bytes in UTF-8, so a name made of it is a third as many
+#: characters as bytes. A cut that counts characters leaves it far too long,
+#: and one that counts bytes but slices them splits a character.
+WIDE = "交"
+
+
+def words(count: int) -> str:
+    return " ".join(f"word{n:02d}" for n in range(1, count + 1))
+
+
+class Fit(unittest.TestCase):
+    def test_a_name_of_exactly_255_bytes_is_left_alone(self) -> None:
+        self.assertEqual(names.fit(WIDE * 85), WIDE * 85)
+        self.assertEqual(names.fit("a" * 250, ".flac"), "a" * 250 + ".flac")
+
+    def test_a_longer_name_is_cut_at_the_last_whole_word_and_marked(self) -> None:
+        # 36 words are 251 bytes and the mark 6, so the 35th word ends at 244
+        # and fits with it, and the 36th does not.
+        self.assertEqual(names.fit(words(36) + " tail"), words(35) + " [...]")
+
+    def test_the_suffix_is_counted_and_never_cut(self) -> None:
+        # `abcd` ends at 249 bytes, which fits beside the mark alone and not
+        # beside the mark and `.flac` as well, so it goes.
+        cut = names.fit(f"{words(35)} abcd tail", ".flac")
+        self.assertEqual(cut, words(35) + " [...].flac")
+        self.assertEqual(len(cut.encode()), 255)
+
+    def test_a_name_with_no_spaces_is_cut_at_the_last_whole_character(self) -> None:
+        # 83 characters are 249 bytes, and the mark brings it to 255.
+        self.assertEqual(names.fit(WIDE * 100), WIDE * 83 + " [...]")
+
+
+class AlbumFolderOver255Bytes(unittest.TestCase):
+    def test_fiona_apples_when_the_pawn_is_criterion_46s_folder_at_255_bytes(self) -> None:
+        # Exactly 255 with the mark, and `Solo,` keeps its comma: the cut
+        # drops the space and nothing else.
+        folder = names.album_folder("1999-11-09", FIONA)
+        self.assertEqual(folder, FIONA_FOLDER)
+        self.assertEqual(len(folder.encode()), 255)
+
+    def test_the_prefix_counts_toward_the_255_bytes(self) -> None:
+        # `(2010) ` and the title are 251 bytes, which fits. `[EP] ` adds 5,
+        # which does not, and 34 words then end exactly at 255 with the mark.
+        title = words(35)
+        self.assertEqual(names.album_folder("2010", title), f"(2010) {title}")
+        cut = names.album_folder("2010", title, "EP")
+        self.assertEqual(cut, f"(2010) [EP] {words(34)} [...]")
+        self.assertEqual(len(cut.encode()), 255)
+
+    def test_a_folder_of_exactly_255_bytes_is_left_alone_and_one_byte_more_is_cut(self) -> None:
+        self.assertEqual(names.album_folder("2010", f"{words(35)} abc"), f"(2010) {words(35)} abc")
+        self.assertEqual(names.album_folder("2010", f"{words(35)} abcd"), f"(2010) {words(34)} [...]")
+
+    def test_a_title_with_no_spaces_is_cut_at_a_whole_character_after_the_year(self) -> None:
+        self.assertEqual(names.album_folder("2010", WIDE * 100), f"(2010) {WIDE * 80} [...]")
+
+    def test_punctuation_ending_the_last_kept_word_stays(self) -> None:
+        # A cut made before the character table, or one that trims what it
+        # keeps, loses the full stop after `Mr`.
+        title = f"{'a' * 238} Mr. Jones Smith"
+        self.assertEqual(names.album_folder("2010", title), f"(2010) {'a' * 238} Mr. [...]")
+
+    def test_the_bytes_counted_are_the_ones_left_after_the_character_table(self) -> None:
+        # Each `"` becomes `''`, so this 255-byte folder is 257 once the table
+        # runs, and has to be cut. Counting before the table leaves it whole.
+        self.assertEqual(names.album_folder("2010", f'{words(35)} "b"'), f"(2010) {words(34)} [...]")
+        # And the other way: 256 bytes as given, 251 once `?` is removed.
+        self.assertEqual(names.album_folder("2010", f"{words(35)} ????"), f"(2010) {words(35)}")
+
+
+class TrackFilenameOver255Bytes(unittest.TestCase):
+    def test_is_cut_before_its_extension_which_stays_whole(self) -> None:
+        # The number, the mark and `.flac` all count, so the cut lands a word
+        # before the one the Fiona folder keeps.
+        name = names.track_filename(1, FIONA, "flac", 10)
+        self.assertEqual(name, "01. " + FIONA_FOLDER[len("(1999) "):-len(" Solo, [...]")] + " [...].flac")
+        self.assertTrue(name.endswith(" You Go [...].flac"), name)
+        self.assertLessEqual(len(name.encode()), 255)
+
+    def test_a_file_name_of_exactly_255_bytes_is_left_alone_and_one_byte_more_is_cut(self) -> None:
+        self.assertEqual(names.track_filename(1, f"{words(35)} a", "flac", 10), f"01. {words(35)} a.flac")
+        self.assertEqual(names.track_filename(1, f"{words(35)} ab", "flac", 10), f"01. {words(34)} [...].flac")
+
+    def test_a_title_with_no_spaces_is_cut_at_a_whole_character_after_the_number(self) -> None:
+        # 80 characters are 240 bytes: with `01. `, the mark and `.flac`, 255.
+        self.assertEqual(names.track_filename(1, WIDE * 100, "flac", 10), f"01. {WIDE * 80} [...].flac")
+
+
 if __name__ == "__main__":
     unittest.main()

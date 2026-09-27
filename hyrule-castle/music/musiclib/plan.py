@@ -20,6 +20,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from musiclib import ascii as ascii_
 from musiclib import check, files, genres, images, mapping, names
 from musiclib.caa import CoverArtError
 from musiclib.identify import _group_media
@@ -274,12 +275,15 @@ def plan_album(
 
     album_date = _album_date(release, unit.tracks)
     credit = release.get("artist-credit") or []
-    artist_name = mapping.join_credit(credit, "name")
-    artist_sort = mapping.join_credit(credit, "sort-name")
+    # The folder is built from the same converted text as the tag beside it,
+    # never MusicBrainz's raw name, so the two never disagree over a curly
+    # quote or an ellipsis.
+    artist_name = ascii_.to_ascii(mapping.join_credit(credit, "name"))
+    artist_sort = ascii_.to_ascii(mapping.join_credit(credit, "sort-name"))
     compilation = _is_compilation(release)
     artist_folder = names.artist_folder(artist_name, artist_sort, known=True, compilation=compilation)
     letter = names.letter(artist_folder)
-    album_title = release["title"]
+    album_title = ascii_.to_ascii(release["title"])
     if album_date:
         release_group_info = release.get("release-group", {})
         album_folder = names.album_folder(

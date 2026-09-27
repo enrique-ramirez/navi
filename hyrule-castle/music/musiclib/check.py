@@ -549,12 +549,15 @@ def _album_folder_violations(state: AlbumState) -> list[tuple[str, str]]:
     if not match:
         out.append(("album folder", f"{state.folder!r} is not shaped (YYYY) Title"))
     else:
-        year, title = match.group("year"), match.group("title")
+        year = match.group("year")
         prefixes = _PREFIX_RE.findall(match.group("prefixes"))
         album_title = _album_title(state)
         bad = not (len(year) == 4 and year.isdigit())
         bad = bad or len(prefixes) > 1 or any(p not in _ALLOWED_PREFIXES for p in prefixes)
-        bad = bad or (album_title is not None and names.sanitize(album_title) != title)
+        if album_title is not None:
+            head = f"({year}){''.join(f' [{p}]' for p in prefixes)} "
+            expected = names.fit(names.sanitize(f"{head}{album_title}"), start=len(head))
+            bad = bad or expected != state.folder
         if bad:
             out.append(("album folder", f"{state.folder!r}"))
         if len(year) == 4 and year.isdigit():

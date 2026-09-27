@@ -58,6 +58,7 @@ from musiclib.__main__ import main
 from musiclib.cache import Cache
 from musiclib.units import Unit, units
 from tests import builders
+from tests.test_names import FIONA, FIONA_FOLDER
 
 WMP = "Windows Media Player 9 Series"
 
@@ -221,6 +222,48 @@ class Layout(_Library):
                 root = self.library()
                 album = builders.library_album(root, letter=artist[0], artist=artist)
                 self.assertBreaks(root, album, {"characters"})
+
+
+#: The Fiona folder's title up to `You Go`, the word before `Solo,`. It is
+#: where the cut lands once `[EP] ` or a track number and extension take
+#: some of the 255 bytes, and one word short of where the plain folder's does.
+FIONA_TO_GO = FIONA_FOLDER[len("(1999) "):-len(" Solo, [...]")]
+
+
+class CutNames(_Library):
+    def test_an_album_whose_folder_and_file_name_are_cut_by_criterion_46_is_clean(self):
+        root = self.library()
+        builders.library_album(root, letter="F", artist="Fiona Apple", folder=FIONA_FOLDER,
+                               album=FIONA, date="1999-11-09",
+                               discs=(((FIONA, f"{FIONA_TO_GO} [...]"), "Paper Bag"),))
+        # The prefix is part of what is cut, so the same title under `[EP]`
+        # loses a word more. A check that cuts `(YYYY) Title` and then adds
+        # the prefix expects `Solo,` here.
+        builders.library_album(root, letter="F", artist="Fiona Apple",
+                               folder=f"(1999) [EP] {FIONA_TO_GO} [...]", album=FIONA, date="1999-11-09")
+        self.assertEqual(check.check(root), [])
+
+    def test_a_folder_cut_at_the_wrong_word_or_cut_when_it_fits_breaks_album_folder(self):
+        cases = [
+            ("one word short", f"(1999) {FIONA_TO_GO} [...]", FIONA),
+            ("cut when the full name fits", "(1999) The [...]", "The Fragile"),
+        ]
+        for case, folder, album_title in cases:
+            with self.subTest(case):
+                root = self.library()
+                album = builders.library_album(root, folder=folder, album=album_title, date="1999-09-21")
+                self.assertBreaks(root, album, {"album folder"})
+
+    def test_a_file_name_cut_at_the_wrong_word_or_cut_when_it_fits_breaks_file_name(self):
+        cases = [
+            ("one word short", (FIONA, f"{FIONA_TO_GO[:-len(' Go')]} [...]")),
+            ("cut when the full name fits", ("Somewhat Damaged", "Somewhat [...]")),
+        ]
+        for case, track in cases:
+            with self.subTest(case):
+                root = self.library()
+                album = builders.library_album(root, discs=((track, "Hurt"),))
+                self.assertBreaks(root, album, {"file name"})
 
 
 def _wma_album(root: Path, discs: tuple = (("Somewhat Damaged", "Hurt"),)) -> Path:

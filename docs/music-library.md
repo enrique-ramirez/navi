@@ -50,6 +50,8 @@ One prefix at most, in the order the table lists them. A plain album (an LP, in 
 | `"` | `''` |
 | trailing `.` or space | removed |
 
+**Long names.** A folder or file name is at most 255 bytes in UTF-8, prefixes, track number and extension included. A longer one is cut at the last whole word that fits, and ` [...]` marks the cut. The tag keeps the full title.
+
 ## Tags
 
 **Formats.** MP3 carries ID3v2.4 and no ID3v1. FLAC and Ogg carry Vorbis comments. M4A carries MP4 atoms. Field names are the ones Picard writes.

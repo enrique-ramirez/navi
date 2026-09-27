@@ -68,6 +68,36 @@ def artist_folder(name: str, sort_name: str | None = None, known: bool = True, c
     return sanitize(folder)
 
 
+_MAX_BYTES = 255
+
+
+def fit(stem: str, suffix: str = "", start: int = 0) -> str:
+    """Cut `stem[start:] + suffix` to 255 UTF-8 bytes, from `docs/music-library.md` *Layout*."""
+    whole = stem + suffix
+    if len(whole.encode()) <= _MAX_BYTES:
+        return whole
+
+    prefix, title = stem[:start], stem[start:]
+    mark = " [...]"
+    budget = _MAX_BYTES - len(suffix.encode()) - len(prefix.encode()) - len(mark.encode())
+
+    kept = ""
+    for word in title.split(" "):
+        candidate = f"{kept} {word}" if kept else word
+        if len(candidate.encode()) > budget:
+            break
+        kept = candidate
+
+    if not kept:
+        for ch in title:
+            candidate = kept + ch
+            if len(candidate.encode()) > budget:
+                break
+            kept = candidate
+
+    return f"{prefix}{kept}{mark}{suffix}"
+
+
 def album_folder(
     date: str,
     title: str,
@@ -81,8 +111,10 @@ def album_folder(
         if candidate == primary_type or candidate in secondary_types:
             prefix = _PREFIX_LABEL[candidate]
             break
-    name = f"[{prefix}] {title}" if prefix else title
-    return sanitize(f"({year}) {name}")
+    year_part = f"({year}) "
+    prefix_part = f"[{prefix}] " if prefix else ""
+    name = sanitize(f"{year_part}{prefix_part}{title}")
+    return fit(name, start=len(year_part) + len(prefix_part))
 
 
 def disc_folder(position: int, medium_count: int) -> str | None:
@@ -95,4 +127,6 @@ def disc_folder(position: int, medium_count: int) -> str | None:
 def track_filename(number: int, title: str, ext: str, tracks_on_medium: int) -> str:
     """`NN. Title.ext`, with three digits on a medium of 100 tracks or more."""
     digits = 3 if tracks_on_medium >= 100 else 2
-    return sanitize(f"{number:0{digits}d}. {title}") + f".{ext}"
+    number_part = f"{number:0{digits}d}. "
+    stem = sanitize(f"{number_part}{title}")
+    return fit(stem, suffix=f".{ext}", start=len(number_part))
