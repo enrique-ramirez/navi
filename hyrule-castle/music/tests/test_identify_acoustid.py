@@ -175,16 +175,19 @@ class ClientTestCase(unittest.TestCase):
 class Fingerprint(ClientTestCase):
     def setUp(self) -> None:
         super().setUp()
-        # fpcalc on a PATH of its own: it logs its arguments one per line and
-        # prints whatever answer.json holds at the time it runs.
+        # fpcalc on a PATH of its own: it logs its arguments one per line,
+        # adds a line to calls.log each time it runs, and prints whatever
+        # answer.json holds at the time.
         bin_dir = self.root / "bin"
         bin_dir.mkdir()
         self.answer = self.root / "answer.json"
         self.answer.write_text(json.dumps(FPCALC))
         self.args = self.root / "args.log"
+        self.calls_log = self.root / "calls.log"
         stub = bin_dir / "fpcalc"
         stub.write_text(
             "#!/bin/sh\n"
+            f"echo run >> '{self.calls_log}'\n"
             f"printf '%s\\n' \"$@\" >> '{self.args}'\n"
             f"cat '{self.answer}'\n"
         )
@@ -227,15 +230,72 @@ class Fingerprint(ClientTestCase):
         with self.assertRaises(acoustid.AcoustIDError):
             client.fingerprint(self.track)
 
-    def test_fingerprinting_is_local_and_never_cached(self) -> None:
-        # The file on disk can change between two runs, and a stored
-        # fingerprint would then look up a recording the file no longer is.
-        client, transport = self.client()
+    def fpcalc_calls(self) -> int:
+        return len(self.calls_log.read_text().splitlines()) if self.calls_log.exists() else 0
+
+    def test_a_second_run_over_the_unchanged_file_does_not_run_fpcalc_again(self) -> None:
+        # A new client over the same cache directory is the next run of
+        # batch identify, picking up where an interrupted one stopped.
+        # fpcalc now answering differently shows which answer was used.
+        first, _ = self.client()
+        self.assertEqual(first.fingerprint(self.track), (DURATION, FINGERPRINT))
+        self.answer.write_text(json.dumps({"duration": 180.4, "fingerprint": "AQADchanged"}))
+        second, transport = self.client()
+        self.assertEqual(second.fingerprint(self.track), (DURATION, FINGERPRINT))
+        self.assertEqual(self.fpcalc_calls(), 1)
+        self.assertEqual(transport.requests, [])
+
+    def test_a_file_with_a_new_mtime_is_fingerprinted_again(self) -> None:
+        # A re-rip or a retag in place keeps the path. A cached fingerprint
+        # would then look up a recording the file no longer is.
+        client, _ = self.client()
         client.fingerprint(self.track)
         self.answer.write_text(json.dumps({"duration": 180.4, "fingerprint": "AQADchanged"}))
+        # Set, not slept for: a filesystem with a coarse clock can give two
+        # writes a second apart the same mtime.
+        before = self.track.stat()
+        os.utime(self.track, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
         self.assertEqual(client.fingerprint(self.track), (180, "AQADchanged"))
-        self.assertEqual(transport.requests, [])
-        self.assertEqual(list(self.cache_dir.iterdir()), [])
+        self.assertEqual(self.fpcalc_calls(), 2)
+
+    def test_a_file_with_a_new_size_and_the_same_mtime_is_fingerprinted_again(self) -> None:
+        # A copy that keeps timestamps, rsync -t or cp -p, changes the
+        # content and leaves the mtime where it was.
+        client, _ = self.client()
+        client.fingerprint(self.track)
+        self.answer.write_text(json.dumps({"duration": 180.4, "fingerprint": "AQADchanged"}))
+        before = self.track.stat()
+        self.track.write_bytes(b"not really audio, and longer now")
+        os.utime(self.track, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertEqual(client.fingerprint(self.track), (180, "AQADchanged"))
+        self.assertEqual(self.fpcalc_calls(), 2)
+
+    def test_two_files_of_the_same_size_and_mtime_are_fingerprinted_once_each(self) -> None:
+        # Tracks copied from one rip can share both, so the path has to be
+        # part of what a fingerprint is stored under.
+        other = self.track.with_name("02 - Piggy.flac")
+        other.write_bytes(self.track.read_bytes())
+        stat_ = self.track.stat()
+        os.utime(other, ns=(stat_.st_atime_ns, stat_.st_mtime_ns))
+        client, _ = self.client()
+        client.fingerprint(self.track)
+        self.answer.write_text(json.dumps({"duration": 180.4, "fingerprint": "AQADchanged"}))
+        self.assertEqual(client.fingerprint(other), (180, "AQADchanged"))
+        self.assertEqual(self.fpcalc_calls(), 2)
+
+    def test_a_failing_fpcalc_leaves_nothing_cached_and_the_next_call_runs_it_again(self) -> None:
+        # A file fpcalc could not decode this time is asked about again next
+        # time, not answered from a stored failure.
+        stub = self.root / "bin" / "fpcalc"
+        working = stub.read_text()
+        stub.write_text(f"#!/bin/sh\necho run >> '{self.calls_log}'\n"
+                        "echo 'ERROR: Could not open the input file' >&2\nexit 2\n")
+        client, _ = self.client()
+        with self.assertRaises(acoustid.AcoustIDError):
+            client.fingerprint(self.track)
+        stub.write_text(working)
+        self.assertEqual(client.fingerprint(self.track), (DURATION, FINGERPRINT))
+        self.assertEqual(self.fpcalc_calls(), 2)
 
 
 class Lookup(ClientTestCase):
@@ -424,6 +484,11 @@ class IdentifyByFingerprint(unittest.TestCase):
                          album="The Downward Spiral", albumartist="Nine Inch Nails")
             for n, length in enumerate(self.FILES, start=1)
         ])
+        # On disk as well as in the unit, the way a scanned album is: the
+        # client stats a file before it fingerprints it.
+        album.mkdir(parents=True, exist_ok=True)
+        for track in self.unit.tracks:
+            Path(track.path).touch()
         # fpcalc logs the file it was asked about and names the fingerprint
         # after it, so each file can be looked up as something different.
         self.fpcalc_log = self.root / "fpcalc.log"

@@ -129,8 +129,23 @@ class Services:
         return 404, b"Not Found"
 
 
-def run_identify(root: Path, job: Path, memory: Path, transport, reopen: tuple[str, ...] = ()
-                 ) -> tuple[int, str, str]:
+class Stream(io.StringIO):
+    """A captured stream that also keeps what it held when last flushed.
+
+    `flushed` is what a reader on the other end of a pipe or a log file
+    had seen by then. Anything written after the last flush was still
+    sitting in a buffer.
+    """
+
+    flushed = ""
+
+    def flush(self) -> None:
+        super().flush()
+        self.flushed = self.getvalue()
+
+
+def run_identify(root: Path, job: Path, memory: Path, transport, reopen: tuple[str, ...] = (),
+                 err: Stream | None = None) -> tuple[int, str, str]:
     """`batch.identify.run` offline: its exit code, stdout and stderr.
 
     Imported here rather than at the top, so this file loads while the
@@ -139,7 +154,7 @@ def run_identify(root: Path, job: Path, memory: Path, transport, reopen: tuple[s
     from musiclib.batch.identify import run
     from musiclib.batch.job import Job
 
-    out, err = io.StringIO(), io.StringIO()
+    out, err = io.StringIO(), err or Stream()
     code = run(root, Job(job), memory, list(reopen), transport=transport, env={},
                which=lambda _name: None, out=out, err=err)
     return code, out.getvalue(), err.getvalue()
@@ -216,6 +231,42 @@ class Planning(_Job):
         self.assertEqual(code, 0, err.getvalue())
         self.assertEqual(self.plan_doc(), {"job": "j1", "root": str(self.root.resolve()), "albums": []})
         self.assertTrue((self.job / "review.html").is_file(), "no review.html in the job")
+
+
+class Progress(_Job):
+    def test_each_album_puts_its_number_and_key_on_stderr_flushed_as_it_starts(self):
+        # Created out of path order, so lines written in creation order show.
+        catalogue = [release(1, "Zebra", "Last", ["One", "Two"]),
+                     release(2, "Aardvark", "First", ["Three"]),
+                     release(3, "Moth", "Middle", ["Four", "Five"])]
+        keys = ["Z/Zebra/Last [rip]", "A/Aardvark/First [rip]", "M/Moth/Middle [rip]"]
+        for key, (found, _group) in zip(keys, catalogue):
+            album(self.root, key, [t["title"] for t in found["media"][0]["tracks"]],
+                  release_id=found["id"])
+        expected = [f"identify: {n}/3 {key}" for n, key in enumerate(sorted(keys), start=1)]
+        release_of = {key: found["id"] for key, (found, _group) in zip(keys, catalogue)}
+
+        # What stderr had flushed when each album's first request went out.
+        # A line printed only at the end, or printed and left in a buffer,
+        # tells the owner nothing during a run that takes hours.
+        err = Stream()
+        services = Services(catalogue)
+        seen_at_start: dict[str, list[str]] = {}
+
+        def transport(url, headers):
+            for key, rid in release_of.items():
+                if rid in url:
+                    seen_at_start.setdefault(key, err.flushed.splitlines())
+            return services(url, headers)
+
+        code, out, text = run_identify(self.root, self.job, self.memory, transport, err=err)
+
+        self.assertEqual(code, 0, text)
+        self.assertEqual(text.splitlines(), expected)
+        for n, key in enumerate(sorted(keys), start=1):
+            self.assertEqual(seen_at_start.get(key), expected[:n], f"stderr when {key} started")
+        # The counts are all stdout carries, as before this change.
+        self.assertEqual(out.splitlines(), ["status certain: 3", "state auto: 3"])
 
 
 class Resume(_Job):

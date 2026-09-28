@@ -3,9 +3,10 @@
 Without `fpcalc` on `PATH` or `ACOUSTID_API_KEY` set, an album cannot be
 identified this way at all, and `unavailable` names why before anything is
 attempted. No more than 3 requests a second, and every lookup response
-cached like a MusicBrainz one - but never the fingerprint itself, since it
-reads the file fresh each time and a stale cached one would answer for audio
-that is no longer there.
+cached like a MusicBrainz one. A file's fingerprint is cached too, keyed by
+its resolved path together with its size and mtime, so a file rewritten in
+place (a re-rip, a retag) is fingerprinted again instead of answering for
+audio that is no longer there.
 """
 
 from __future__ import annotations
@@ -66,18 +67,32 @@ class AcoustID:
         self._throttle = mb.Throttle(clock, sleep)
 
     def fingerprint(self, path: Path) -> tuple[int, str]:
-        """Run `fpcalc -json` on `path` and return its duration and fingerprint.
+        """`path`'s duration and fingerprint, from the cache if its size and mtime still match.
 
-        A list of arguments, never a shell string: album paths carry spaces,
-        brackets and apostrophes that a shell would need escaping for.
+        Keyed on the resolved path, not the one given: two different-looking
+        paths to the same file must not fingerprint it twice, and two calls
+        with an unresolved and a resolved path for the same file must agree.
+        `fpcalc` itself is still run on `path` exactly as given, since that
+        is what the caller meant fpcalc to see.
         """
-        result = subprocess.run(
-            [self.fpcalc, "-json", str(path)], capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            raise AcoustIDError(f"fpcalc failed on {path}: {result.stderr.strip()}")
-        data = json.loads(result.stdout)
-        return round(data["duration"]), data["fingerprint"]
+        path = Path(path)
+        info = path.stat()
+        cache_url = f"fpcalc:{path.resolve()}?size={info.st_size}&mtime_ns={info.st_mtime_ns}"
+
+        def run() -> bytes:
+            # A list of arguments, never a shell string: album paths carry
+            # spaces, brackets and apostrophes that a shell would need
+            # escaping for.
+            result = subprocess.run(
+                [self.fpcalc, "-json", str(path)], capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                raise AcoustIDError(f"fpcalc failed on {path}: {result.stderr.strip()}")
+            data = json.loads(result.stdout)
+            return json.dumps({"duration": round(data["duration"]), "fingerprint": data["fingerprint"]}).encode()
+
+        data = json.loads(self.cache.fetch(cache_url, run))
+        return data["duration"], data["fingerprint"]
 
     def lookup(self, duration: int, fingerprint: str) -> list[str]:
         """Recording MBIDs for `duration`/`fingerprint`, best score first, ties by MBID.

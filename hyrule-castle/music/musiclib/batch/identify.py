@@ -489,7 +489,11 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
 
     entries: list[dict] = []
     plans: dict[str, Plan] = {}
-    for unit in units:
+    for n, unit in enumerate(units, start=1):
+        # Flushed before the album's first request: a run over hundreds of
+        # albums, each possibly a network round trip, otherwise leaves the
+        # owner watching a blank terminal for hours.
+        print(f"identify: {n}/{len(units)} {unit.rel}", file=err, flush=True)
         decision = resolved_decisions.get(unit.rel, (None, None))[1]
         try:
             entry, plan = plan_entry(unit, root, built_clients, memory, decision,
