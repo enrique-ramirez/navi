@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -97,12 +98,17 @@ def release_json(release_id: str, lengths: list[list[float]], date: str = "1994-
 
 
 def search_json(*releases: dict) -> dict:
-    """A search answer listing `releases`, in the order given, with their media counts."""
+    """A search answer listing `releases`, in the order given, with their media counts.
+
+    A release with no `date` key has none in the answer either, as
+    MusicBrainz leaves it out for a release nobody dated.
+    """
     return {
         "count": len(releases), "offset": 0,
         "releases": [
             {
-                "id": r["id"], "score": 100 - i, "title": r["title"], "date": r["date"],
+                "id": r["id"], "score": 100 - i, "title": r["title"],
+                **({"date": r["date"]} if "date" in r else {}),
                 "track-count": sum(len(m["tracks"]) for m in r["media"]),
                 "media": [{"format": "CD", "track-count": len(m["tracks"])} for m in r["media"]],
             }
@@ -219,6 +225,10 @@ class IdentifyTestCase(unittest.TestCase):
 
     def identify(self, the_unit: Unit, server: Server, **kwargs):
         return identify(the_unit, self.client(server), **kwargs)
+
+    def forget(self) -> None:
+        """Empty the MusicBrainz cache, so a subtest that reuses an MBID fetches its own release."""
+        shutil.rmtree(self.root / "cache-dir", ignore_errors=True)
 
     def tagged(self, lengths: list[float], release_id: str | None = TAGGED, **tags) -> list[files.Track]:
         """One medium of FLAC tracks, numbered, each carrying `release_id` if given."""
@@ -425,21 +435,91 @@ class Search(IdentifyTestCase):
         server = Server(search=search_json(close), releases=(close,))
         self.assertEqual(self.identify(self.search_unit(), server).status, "auto")
 
-    def test_two_full_matches_from_different_years_are_review(self) -> None:
-        # The 1994 CD and a 2004 reissue with the same tracks. Which one the
-        # files are is the owner's call, since it sets the date and label.
-        original = release_json(mbid("a1"), [[200, 180, 240]], date="1994-03-08")
-        reissue = release_json(mbid("b2"), [[200.5, 180, 240]], date="2004-11-23")
-        server = Server(search=search_json(reissue, original), releases=(original, reissue))
+    def test_full_editions_from_different_years_are_auto_with_the_oldest_first(self) -> None:
+        # The 2010 and 2004 reissues fit the files more closely than the
+        # 1994 CD, so ranking alone puts the 1994 one third. The 1990 one is
+        # older still and matches the counts, but one track is 20 s off, so it
+        # is not full and never chosen. The rest keep their ranked order.
+        latest = release_json(mbid("a1"), [[200, 180, 240]], date="2010-09-14")          # 0.0
+        reissue = release_json(mbid("b2"), [[200.5, 180, 240]], date="2004-11-23")       # 0.5
+        original = release_json(mbid("c3"), [[201, 180, 240]], date="1994-03-08")        # 1.0
+        not_full = release_json(mbid("d4"), [[200, 180, 260]], date="1990-01-01")        # 20.0
+        server = Server(search=search_json(reissue, not_full, latest, original),
+                        releases=(latest, reissue, original, not_full))
+        result = self.identify(self.search_unit(), server)
+        self.assertEqual(result.status, "auto")
+        self.assertEqual([c.release_id for c in result.candidates],
+                         [mbid("c3"), mbid("a1"), mbid("b2"), mbid("d4")])
+        self.assertEqual(result.candidates[0].release, original)
+
+    def test_a_partial_date_counts_as_the_last_day_it_could_be(self) -> None:
+        # Two 1999 editions and a 2004 one, so the years differ and the oldest
+        # is chosen. `1999` is 1999-12-31 and `1999-05` is 1999-05-31, so the
+        # full date wins both times. The partial one ranks higher and sorts
+        # first as a string, so neither rank nor string order gets this right.
+        for partial in ("1999", "1999-05"):
+            with self.subTest(partial=partial):
+                self.forget()
+                top = release_json(mbid("a1"), [[200, 180, 240]], date="2004-11-23")       # 0.0
+                vague = release_json(mbid("b2"), [[200.5, 180, 240]], date=partial)        # 0.5
+                exact = release_json(mbid("c3"), [[201, 180, 240]], date="1999-05-12")     # 1.0
+                server = Server(search=search_json(exact, vague, top), releases=(top, vague, exact))
+                result = self.identify(self.search_unit(), server)
+                self.assertEqual(result.status, "auto")
+                self.assertEqual([c.release_id for c in result.candidates],
+                                 [mbid("c3"), mbid("a1"), mbid("b2")])
+
+    def test_two_oldest_editions_on_the_same_date_choose_the_lower_mbid(self) -> None:
+        # c3 fits the files better than b2, so ranked order has c3 first.
+        # The date ties, and the MBID decides.
+        top = release_json(mbid("a1"), [[200, 180, 240]], date="2004-11-23")        # 0.0
+        closer = release_json(mbid("c3"), [[200.5, 180, 240]], date="1999-05-12")   # 0.5
+        lower = release_json(mbid("b2"), [[201, 180, 240]], date="1999-05-12")      # 1.0
+        server = Server(search=search_json(top, closer, lower), releases=(top, closer, lower))
+        result = self.identify(self.search_unit(), server)
+        self.assertEqual(result.status, "auto")
+        self.assertEqual([c.release_id for c in result.candidates],
+                         [mbid("b2"), mbid("a1"), mbid("c3")])
+
+    def test_a_full_edition_with_no_date_is_never_chosen_over_a_dated_one(self) -> None:
+        # The undated one ranks first. A missing date that sorts as empty,
+        # or as year zero, would make it the oldest. MusicBrainz sends either
+        # no date key or an empty one, so both are tried.
+        for label, undated_date in (("no date key", None), ("empty date", "")):
+            with self.subTest(label):
+                self.forget()
+                undated = release_json(mbid("a1"), [[200, 180, 240]])                        # 0.0
+                if undated_date is None:
+                    del undated["date"]
+                else:
+                    undated["date"] = undated_date
+                dated = release_json(mbid("b2"), [[200.5, 180, 240]], date="2004-11-23")     # 0.5
+                server = Server(search=search_json(undated, dated), releases=(undated, dated))
+                result = self.identify(self.search_unit(), server)
+                self.assertEqual(result.status, "auto")
+                self.assertEqual([c.release_id for c in result.candidates], [mbid("b2"), mbid("a1")])
+
+    def test_two_full_editions_of_the_same_year_are_auto_with_the_top_candidate(self) -> None:
+        # The top candidate is the later of the two in 1994. The oldest-first
+        # rule is only for editions that differ in year, so it stays first.
+        top = release_json(mbid("a1"), [[200, 180, 240]], date="1994-06-01")      # 0.0
+        earlier = release_json(mbid("b2"), [[200.5, 180, 240]], date="1994-03-08")  # 0.5
+        server = Server(search=search_json(earlier, top), releases=(top, earlier))
+        result = self.identify(self.search_unit(), server)
+        self.assertEqual(result.status, "auto")
+        self.assertEqual([c.release_id for c in result.candidates], [mbid("a1"), mbid("b2")])
+
+    def test_a_top_candidate_4_seconds_off_is_review_even_with_a_full_edition_behind_it(self) -> None:
+        # a1 is 4 s off on one track, 4.0 in all. b2 is within 3 s on every
+        # track but 5.0 in all, so it ranks second. b2 is also the older one,
+        # so choosing the oldest full edition regardless of the top would
+        # make this auto.
+        off = release_json(mbid("a1"), [[204, 180, 240]], date="2004-11-23")         # 4.0
+        full = release_json(mbid("b2"), [[202.5, 177.5, 240]], date="1994-03-08")    # 5.0
+        server = Server(search=search_json(full, off), releases=(off, full))
         result = self.identify(self.search_unit(), server)
         self.assertEqual(result.status, "review")
-        self.assertEqual(result.candidates[0].release_id, mbid("a1"))
-
-    def test_two_full_matches_from_the_same_year_are_auto(self) -> None:
-        one = release_json(mbid("a1"), [[200, 180, 240]], date="1994-03-08")
-        other = release_json(mbid("b2"), [[200.5, 180, 240]], date="1994-06-01")
-        server = Server(search=search_json(other, one), releases=(one, other))
-        self.assertEqual(self.identify(self.search_unit(), server).status, "auto")
+        self.assertEqual([c.release_id for c in result.candidates], [mbid("a1"), mbid("b2")])
 
     def test_another_year_that_matches_counts_but_not_durations_does_not_stop_auto(self) -> None:
         # "Also matches" means a full match: counts and every duration.
@@ -581,6 +661,20 @@ class SoundtrackSafetyNet(IdentifyTestCase):
                     tracks.append(dataclasses.replace(files.read(path), length=200.0))
                 server = Server(releases=(release_json(TAGGED, [[200, 200]]),), release_groups=(self.soundtrack(),))
                 self.assertEqual(self.identify(unit(album, tracks), server).status, "certain")
+
+    def test_an_unsettled_soundtrack_chosen_as_the_oldest_edition_is_review(self) -> None:
+        # The top candidate is a plain album and the 1994 edition behind it is
+        # a Soundtrack. The hold reads the edition chosen, so reading the top
+        # candidate's release group would let this through as auto. It stays
+        # first, since it is still the edition chosen.
+        top = release_json(mbid("a1"), [self.FILES], date="2004-11-23")
+        oldest = release_json(mbid("b2"), [[200.5, 180, 240]], date="1994-03-08")
+        oldest["release-group"] = {**oldest["release-group"], "id": mbid("91")}
+        group = release_group_json(mbid("91"), secondary_types=("Soundtrack",))
+        server = Server(search=search_json(top, oldest), releases=(top, oldest), release_groups=(group,))
+        result = self.identify(unit(self.album, self.tagged(self.FILES, release_id=None)), server)
+        self.assertEqual((result.status, result.reason), ("review", "unsettled soundtrack"))
+        self.assertEqual([c.release_id for c in result.candidates], [mbid("b2"), mbid("a1")])
 
     def test_a_choice_remembered_under_one_artist_of_a_shared_credit_does_not_settle_it(self) -> None:
         # Two credited artists have no composer, so owner input is never

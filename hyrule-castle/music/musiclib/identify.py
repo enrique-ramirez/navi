@@ -12,6 +12,8 @@ release directly, by URL or bare MBID.
 
 from __future__ import annotations
 
+import calendar
+import datetime
 import os
 import re
 import shutil
@@ -191,6 +193,38 @@ def _max_diff(unit: Unit, release: dict) -> float:
     return max(diffs) if diffs else 0.0
 
 
+def _date_sort_value(date: str | None) -> tuple:
+    """A sortable value for a release date: earliest first, undated last.
+
+    A year or a year-month is the last day it could still mean, so a partial
+    date never looks older than a full date that actually falls within it.
+    A date that does not parse as a real calendar day counts as undated,
+    since nothing sorts a value that isn't one.
+    """
+    if not date:
+        return (1, 0, 0, 0)
+    parts = date.split("-")
+    try:
+        year = int(parts[0])
+        if len(parts) == 1:
+            month, day = 12, 31
+        elif len(parts) == 2:
+            month = int(parts[1])
+            day = calendar.monthrange(year, month)[1]
+        elif len(parts) == 3:
+            month, day = int(parts[1]), int(parts[2])
+            datetime.date(year, month, day)  # raises on a day that doesn't exist
+        else:
+            raise ValueError(date)
+    except (ValueError, IndexError):
+        return (1, 0, 0, 0)
+    return (0, year, month, day)
+
+
+def _oldest_key(candidate: Candidate):
+    return (_date_sort_value(candidate.release.get("date")), candidate.release_id)
+
+
 # --- the soundtrack safety net ----------------------------------------------
 
 
@@ -282,20 +316,25 @@ def _search(
         return _fingerprint_fallback(unit, client, candidates, acoustid_client, env, which)
 
     top_is_full = _max_diff(unit, top.release) <= _WITHIN
-    other_year_differs = False
-    if top_is_full:
-        for other in candidates[1:]:
-            if not other.matches_counts or other.release is None:
-                continue
-            if _max_diff(unit, other.release) > _WITHIN:
-                continue
-            if other.year != top.year:
-                other_year_differs = True
-                break
+    chosen = top
+    ordered = candidates
+    status = "review"
 
-    status = "auto" if top_is_full and not other_year_differs else "review"
-    hold = _soundtrack_hold(status, top, candidates, unit, client, owner_input, incoming)
-    return hold if hold is not None else Identification(status, None, candidates)
+    if top_is_full:
+        status = "auto"
+        full = [top] + [
+            other for other in candidates[1:]
+            if other.matches_counts and other.release is not None and _max_diff(unit, other.release) <= _WITHIN
+        ]
+        if any(other.year != top.year for other in full[1:]):
+            # Several full editions and not all the same year: the top of
+            # the ranking is whichever fits the files best, not necessarily
+            # the original pressing, so the earliest edition wins instead.
+            chosen = min(full, key=_oldest_key)
+            ordered = [chosen] + [c for c in candidates if c is not chosen]
+
+    hold = _soundtrack_hold(status, chosen, ordered, unit, client, owner_input, incoming)
+    return hold if hold is not None else Identification(status, None, ordered)
 
 
 # --- falling back to fingerprints when no search count matches --------------
