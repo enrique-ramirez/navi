@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -240,6 +241,60 @@ class KeepsPrivateAttributesPrivate(unittest.TestCase):
             for line in private_attributes(path.read_text(encoding="utf-8"), path.relative_to(PACKAGE).as_posix())
         )
         self.assertEqual(offenders, [], "these reach a private name of another module:\n" + "\n".join(offenders))
+
+
+#: What `musiclib` may import from outside itself : the deploy
+#: installs mutagen and Pillow beside it and nothing else.
+ALLOWED_DISTRIBUTIONS = {"mutagen", "PIL"}
+
+
+def outside_imports(source: str, relpath: str) -> list[str]:
+    """Every import in one file of a top-level module that is not the standard library's, musiclib's or allowed."""
+    allowed = set(sys.stdlib_module_names) | ALLOWED_DISTRIBUTIONS | {"musiclib", "__future__"}
+    found = []
+    for node in ast.walk(ast.parse(source, relpath)):
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            modules = [node.module or ""]
+        else:
+            continue
+        found.extend(f"{relpath}: {module}" for module in modules if module.split(".")[0] not in allowed)
+    return found
+
+
+class ImportsOnlyWhatTheDeployInstalls(unittest.TestCase):
+    def test_the_scanner_flags_a_module_outside_the_standard_library_mutagen_and_pillow(self) -> None:
+        # Without this, a scanner that matched nothing would leave the
+        # package check below green on every tree. `imagehash` and `numpy`
+        # are what an average hash is usually built on.
+        source = (
+            "import os.path, numpy as np\n"
+            "from PIL import Image\n"
+            "from mutagen.flac import FLAC\n"
+            "from . import files\n"
+            "from ..write import write_album\n"
+            "from musiclib import images\n"
+            "def late():\n"
+            "    from imagehash import average_hash\n"
+            "    import requests.adapters\n"
+        )
+        self.assertEqual(sorted(outside_imports(source, "batch/z.py")), [
+            "batch/z.py: imagehash",
+            "batch/z.py: numpy",
+            "batch/z.py: requests.adapters",
+        ])
+
+    def test_no_module_imports_anything_but_the_standard_library_mutagen_and_pillow(self) -> None:
+        files = sorted(p for p in PACKAGE.rglob("*.py") if "__pycache__" not in p.parts)
+        # An empty listing would make the check below pass on nothing.
+        self.assertIn(PACKAGE / "images.py", files)
+        offenders = sorted(
+            line
+            for path in files
+            for line in outside_imports(path.read_text(encoding="utf-8"), path.relative_to(PACKAGE).as_posix())
+        )
+        self.assertEqual(offenders, [], "the deploy does not install these:\n" + "\n".join(offenders))
 
 
 if __name__ == "__main__":

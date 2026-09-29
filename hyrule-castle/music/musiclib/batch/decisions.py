@@ -3,11 +3,10 @@
 A file for another job, one naming an album the job does not have, two keys
 that lead to the same album, an unknown action, a repoint the engine's own
 `release_ref` refuses, a `game` value outside the three the page offers
-(`not game music` from before reads as `soundtrack`), an `accept` of a
-`game_choice` album with no `game`, an `accept` with no `release_id`, an
-`accept` whose `edits` is not an object of objects of lists, an edit to a
-field the page never offers or at a position the album does not have, or
-JSON that does not parse: any of these refuses the file entire, naming
+(`not game music` from before reads as `soundtrack`), an `accept` with no
+`release_id`, an `accept` whose `edits` is not an object of objects of lists,
+an edit to a field the page never offers or at a position the album does
+not have, or JSON that does not parse: any of these refuses the file entire, naming
 every offence found rather than only the first, so the owner does not
 re-export once per problem.
 """
@@ -149,11 +148,6 @@ def read(job: Job) -> dict | None:
             entry = by_source.get(key) or by_source.get(follow_moves(key, applied)) or {}
             if game is not None and game not in _GAME_CHOICES:
                 offences.append(f"{key!r}: not a recognised game choice: {game!r}")
-            elif game is None and entry.get("game_choice"):
-                offences.append(
-                    f"{key!r}: a Soundtrack-type album must say "
-                    f"{VIDEO_GAME_MUSIC!r}, {SOUNDTRACK!r} or {NEITHER!r}"
-                )
             edits = decision.get("edits")
             if edits is not None and not _is_edits_shape(edits):
                 offences.append(f"{key!r}: edits must be positions of fields of lists, not {edits!r}")

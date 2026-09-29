@@ -33,6 +33,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from mutagen.flac import FLAC
+
 from musiclib import files, mb, tagwrite
 from musiclib.__main__ import main
 from tests import builders
@@ -397,6 +399,80 @@ class Limit(_Case):
             self.assertEqual(builders.tree(lib.root / entries[key]["destination"]), tree, key)
 
 
+class AnAlbumWrittenInPlace(_Case):
+    """A job that tagged an album where it lay can still write it again.
+
+    The album's folder is already the name its plan gives it, so its
+    `applied` line has the same `source` as the re-planned entry. A line in
+    `applied.jsonl` stands for the plan it wrote, not for the album forever:
+    the same plan is never written twice, and a new one is.
+
+    Each case runs once on the line as this apply writes it and once on the
+    line as job `t1` wrote it before this change, which is what the box has:
+    682 of `t1`'s 875 lines are in place.
+    """
+
+    IN_PLACE = "A/Alpha/(2010) First"
+    LINE_AS_T1_WROTE_IT = ("destination", "error", "outcome", "record", "source")
+
+    def written_in_place(self, as_t1_wrote_it: bool) -> Library:
+        lib = new_library(self)
+        found, group = release(1, "Alpha", "First", ["One", "Two"])
+        lib.catalogue.append((found, group))
+        album(lib.root, self.IN_PLACE, ["One", "Two"], release_id=found["id"])
+        lib.identify()
+        entry = lib.entries()[self.IN_PLACE]
+        if (entry["state"], entry["destination"]) != ("auto", self.IN_PLACE):
+            raise AssertionError(f"the fixture is not an auto album planned in place: {entry['state']}, "
+                                 f"{entry['destination']}")
+        code, _out, err = lib.apply()
+        if code != 0 or [line["outcome"] for line in lib.log()] != ["applied"]:
+            raise AssertionError(f"the first apply did not write the album: {code} {err}")
+        if as_t1_wrote_it:
+            lines = [{key: line[key] for key in self.LINE_AS_T1_WROTE_IT} for line in lib.log()]
+            (lib.job / "applied.jsonl").write_text(
+                "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines), encoding="utf-8")
+        return lib
+
+    def test_a_second_apply_with_no_new_identify_writes_nothing_and_exits_0(self):
+        # The resume rule: an apply that stopped trusting an in-place line
+        # rebuilds the plan over tags it already wrote, finds it changed, and
+        # refuses the album with exit 1.
+        for as_t1_wrote_it in (False, True):
+            with self.subTest(as_t1_wrote_it=as_t1_wrote_it):
+                lib = self.written_in_place(as_t1_wrote_it)
+                before, lines = builders.tree(lib.root), lib.log()
+
+                code, _out, err = lib.apply()
+
+                self.assertEqual((code, err), (0, ""))
+                self.assertEqual(lib.log(), lines)
+                self.assertEqual(builders.tree(lib.root), before)
+
+    def test_a_new_identify_that_plans_it_auto_to_another_release_is_written(self):
+        # The release id is changed on disk to stand in for a re-judge: apply
+        # sees the same thing either way, an auto entry for another release
+        # under a key the log already has. Today it is skipped with exit 0.
+        for as_t1_wrote_it in (False, True):
+            with self.subTest(as_t1_wrote_it=as_t1_wrote_it):
+                lib = self.written_in_place(as_t1_wrote_it)
+                other, group = release(2, "Alpha", "Second", ["One", "Two"])
+                lib.catalogue.append((other, group))
+                for path in (lib.root / self.IN_PLACE).glob("*.flac"):
+                    track = FLAC(path)
+                    track["musicbrainz_albumid"] = [other["id"]]
+                    track.save()
+                lib.identify()
+                entry = lib.entries()[self.IN_PLACE]
+                self.assertEqual((entry["state"], entry["release_id"]), ("auto", other["id"]))
+
+                code, _out, err = lib.apply()
+
+                self.assertEqual((code, err), (0, ""))
+                self.assertWrittenAsPlanned(lib, entry)
+                self.assertApplied(lib, [self.IN_PLACE, self.IN_PLACE])
+
+
 class Cli(_Case):
     def test_batch_apply_on_the_command_line_takes_the_job_limit_extras_live_root_and_systemctl(self):
         lib = new_library(self)
@@ -461,6 +537,35 @@ class AnAcceptNotWritten(_Case):
         self.assertEqual(code, 1, err)
         self.assertIn(ACCEPTED, err)
         self.assertEqual(builders.tree(lib.root), before)
+
+
+SCORE = "S/Score/Sixth [rip]"
+
+
+class AnAcceptWaitingOnItsSoundtrackChoice(_Case):
+    def test_the_other_accepted_albums_are_written_and_the_one_with_no_game_is_reported_with_exit_1(self):
+        # SCORE is a Soundtrack-type release, held for the
+        # owner's soundtrack choice, and the owner accepted it with no
+        # `game`. The rest of the file still goes. SCORE is reported, not
+        # written: written, it would carry no choice at all.
+        lib = new_library(self)
+        lib.add(FIRST, 1)
+        lib.add(ACCEPTED, 4, exact=False)
+        lib.add(SCORE, 7)
+        found, group = lib.catalogue[-1]
+        group["secondary-types"] = found["release-group"]["secondary-types"] = ["Soundtrack"]
+        lib.identify()
+        if not lib.entries()[SCORE]["game_choice"]:
+            raise AssertionError(f"the fixture is not held for a soundtrack choice: {lib.entries()[SCORE]}")
+        lib.decide({ACCEPTED: lib.accept(ACCEPTED), SCORE: lib.accept(SCORE)})
+        before = builders.tree(lib.root / SCORE)
+
+        code, _out, err = lib.apply()
+
+        self.assertEqual(code, 1, err)
+        self.assertApplied(lib, [FIRST, ACCEPTED])
+        self.assertIn(f"{SCORE}: accepted but its plan cannot be written; not applied", err)
+        self.assertEqual(builders.tree(lib.root / SCORE), before)
 
 
 class ReopenedInMemory(_Case):

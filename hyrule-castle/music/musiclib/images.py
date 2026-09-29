@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import base64
 import io
+import re
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Container, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 from mutagen.asf import ASF, ASFByteArrayAttribute
 from mutagen.flac import FLAC, Picture
@@ -25,15 +26,20 @@ class ImagePlan:
     files: dict[str, bytes]
     problems: list[str]
     consumed: str | None = None  # the folder file that became `cover.jpg`, when it was not one already
+    holds: list[str] = field(default_factory=list)
 
 
 def _is_skipped(image: dict) -> bool:
     return any(t in _SKIP_TYPES for t in image.get("types", []))
 
 
+def _type_base(type_name: str) -> str:
+    return type_name.lower().replace("/", "-")
+
+
 def _base_name(image: dict) -> str:
     types = image.get("types", [])
-    return types[0].lower().replace("/", "-") if types else "other"
+    return _type_base(types[0]) if types else "other"
 
 
 def _is_jpeg(data: bytes) -> bool:
@@ -70,6 +76,98 @@ def local_covers(folder: Path) -> list[tuple[str, bytes]]:
     return [(name, path.read_bytes()) for _rank, _key, name, path in sorted(found, key=lambda f: f[:3])]
 
 
+_COVER_TYPES = {"Front", "Booklet", "Sticker"}
+
+
+def _failures(width: int, height: int, types: Sequence[str] | None) -> int:
+    """How many of the three tests of a cover (shape, size, type) the image fails.
+
+    `types` is None for a local image, which has none; an archive image with
+    no types is judged on shape and size alone.
+    """
+    shape = 10 * width >= 9 * height and 10 * width <= 11 * height
+    return (not shape) + (min(width, height) < 500) + bool(types and not set(types) <= _COVER_TYPES)
+
+
+def passes(width: int, height: int, types: Sequence[str] | None = None) -> bool:
+    """Whether an image of this size, and an archive image of these `types`, may be the cover."""
+    return _failures(width, height, types) == 0
+
+
+def _size(data: bytes) -> tuple[int, int]:
+    with Image.open(io.BytesIO(data)) as image:
+        return image.size
+
+
+def average_hash(data: bytes) -> int:
+    """The 64-bit average hash of an image: one bit per pixel of its 8 by 8 grey thumbnail, set above the mean."""
+    with Image.open(io.BytesIO(data)) as image:
+        pixels = list(image.convert("L").resize((8, 8), Image.BOX).tobytes())
+    mean = sum(pixels) / 64
+    return sum(1 << bit for bit, pixel in enumerate(pixels) if pixel > mean)
+
+
+def hash_distance(a: int, b: int) -> int:
+    """The number of bits that differ between two hashes."""
+    return bin(a ^ b).count("1")
+
+
+#: The archive types whose images the *Images* rule names by type, apart from
+#: `Front`, which a rip's own scan may carry and which is never a copy to delete.
+#: `other` is `_base_name`'s fallback for an image with no type.
+_ARCHIVE_TYPES = ("Back", "Booklet", "Medium", "Obi", "Spine", "Track", "Tray", "Sticker", "Poster", "Liner",
+                  "Matrix/Runout", "Top", "Bottom", "Other")
+_ARCHIVE_BASES = "|".join(re.escape(_type_base(t)) for t in _ARCHIVE_TYPES)
+_ARCHIVE_NAME = re.compile(rf"(?:(?:{_ARCHIVE_BASES})(?:-\d+)?\.jpg|booklet(?:-\d+)?\.pdf)", re.IGNORECASE)
+
+
+def redundant_archive_names(folder: Mapping[str, bytes]) -> list[str]:
+    """The names in `folder` (name to bytes) named like an archive image whose bytes another file of another kind has.
+
+    The other file must have a name the *Images* rule does not give, so
+    `cover.jpg` and two archive-named files equal to each other delete nothing.
+    """
+    owned = {data for name, data in folder.items()
+             if not _ARCHIVE_NAME.fullmatch(name) and name.casefold() != "cover.jpg"}
+    return [name for name, data in folder.items() if _ARCHIVE_NAME.fullmatch(name) and data in owned]
+
+
+def _unseen(pairs: Iterable[tuple[dict, bytes]], have: set[bytes]) -> list[tuple[dict, bytes]]:
+    """The `pairs` whose bytes are not in `have` and not an earlier pair's; adds those bytes to `have`."""
+    kept = []
+    for image, data in pairs:
+        if data not in have:
+            have.add(data)
+            kept.append((image, data))
+    return kept
+
+
+def _local_over_archive(
+    front: dict, archive_cover: bytes, candidates: Sequence[tuple[str, bytes]],
+) -> tuple[tuple[str, bytes] | None, list[str]]:
+    """The local cover that replaces an archive front failing the bar, and the holds that raises.
+
+    The first passing candidate wins. When none passes, the first candidate
+    wins only if it fails fewer tests than the front, or the same number with
+    a longer short side, and the hold is raised either way. None when the front
+    passes or keeps the cover.
+    """
+    types = front.get("types", [])
+    archive_size = _size(archive_cover)
+    if passes(*archive_size, types):
+        return None, []
+    passing = next((c for c in candidates if passes(*_size(c[1]))), None)
+    if passing is not None:
+        return passing, []
+    mine = candidates[0]
+    mine_size = _size(mine[1])
+    mine_key = (_failures(*mine_size, None), -min(mine_size))
+    archive_key = (_failures(*archive_size, types), -min(archive_size))
+    hold = (f"cover: neither passes: {front['image']} ({archive_size[0]} by {archive_size[1]}), "
+            f"{mine[0]} ({mine_size[0]} by {mine_size[1]})")
+    return (mine if mine_key < archive_key else None), [hold]
+
+
 def _is_pdf(data: bytes) -> bool:
     return data[:4] == b"%PDF"
 
@@ -80,23 +178,52 @@ def _front_candidates(caa_images: list[dict]) -> list[dict]:
             + [image for image in kept if not image.get("front") and "Front" in image.get("types", [])])
 
 
+def front_thumbnail_url(caa_images: list[dict]) -> str | None:
+    """The 250 px thumbnail (else `small`) of the release's own front, as the listing gives it, or None.
+
+    The front is the one `plan_images` takes, told by the listing alone: whether
+    a front is really a PDF is only known from its bytes, which this never fetches.
+    """
+    fronts = _front_candidates(caa_images)
+    if not fronts:
+        return None
+    thumbnails = fronts[0].get("thumbnails", {})
+    return thumbnails.get("250") or thumbnails.get("small")
+
+
+def average_hash_or_none(data: bytes) -> int | None:
+    """`average_hash(data)`, or None where `data` is not an image."""
+    try:
+        return average_hash(data)
+    except _NOT_AN_IMAGE:
+        return None
+
+
 def plan_images(
     caa_images: list[dict],
     download: Callable[[str], bytes],
     group_images: Callable[[], list[dict]] | None = None,
     local: Sequence[tuple[str, bytes]] = (),
-    existing: Container[str] = (),
+    existing: Mapping[str, bytes] | None = None,
 ) -> ImagePlan:
     """The album's image files, from the Cover Art Archive's list for the release.
 
     The front is the release's own; failing that, the front of the list
-    `group_images()` returns (asked only then); failing that, the first of
-    `local` (see `local_covers`) that Pillow can open. Only the front falls back.
+    `group_images()` returns (asked only then). It is `cover.jpg` when it
+    `passes`; else the first of `local` (see `local_covers`) that Pillow can
+    open and that passes; else, with both an archive front and a local cover
+    failing, the better of the two, and the plan holds the album. With only
+    one of the two, that one is `cover.jpg` whether or not it passes. Only the
+    front falls back.
 
-    A PDF is named by its position among the list's PDFs, so the name is the same
-    on every run: skipping an existing `booklet-1.pdf` leaves `booklet-2.pdf`.
-    `existing` holds the folder's file names, lower-cased.
+    A PDF is named by its position among the PDFs saved (duplicates of the
+    folder or of an earlier PDF do not count), so the name is the same on every
+    run: skipping an existing `booklet-1.pdf` leaves `booklet-2.pdf`.
+    `existing` maps the album folder's file names to their bytes. An archive
+    image other than the cover is not saved when its bytes, as they would be
+    written, are a file in `existing` or an image saved before it.
     """
+    existing = existing or {}
     downloads: dict[str, bytes] = {}
 
     def get(image: dict) -> bytes:
@@ -118,6 +245,7 @@ def plan_images(
 
     files: dict[str, bytes] = {}
     problems: list[str] = []
+    holds: list[str] = []  # set by `_local_over_archive`
     consumed: str | None = None
 
     def fetch(image: dict) -> bytes | None:
@@ -127,32 +255,50 @@ def plan_images(
             problems.append(f"cover art archive: {image['image']} is not an image")
             return None
 
+    candidates: list[tuple[str, bytes]] = []
+    for name, data in local:
+        try:
+            candidates.append((name, _as_jpeg(data)))
+        except _NOT_AN_IMAGE:
+            continue
+
+    cover: bytes | None = None
+    chosen: tuple[str, bytes] | None = None
     if front is not None:
         cover = fetch(front)
-        if cover is not None:
-            files["cover.jpg"] = cover
+        # A broken front stays broken: it does not hand the cover to the folder.
+        if cover is not None and candidates:
+            chosen, holds = _local_over_archive(front, cover, candidates)
+    elif candidates:
+        chosen = next((c for c in candidates if passes(*_size(c[1]))), candidates[0])
     else:
-        for name, data in local:
-            try:
-                files["cover.jpg"] = _as_jpeg(data)
-            except _NOT_AN_IMAGE:
-                continue
-            if name.casefold() != "cover.jpg":
-                consumed = name
-            break
-        else:
-            problems.append(
-                "no front cover: not in the Cover Art Archive for the release or its release group, "
-                "and no cover image in the folder")
+        problems.append(
+            "no front cover: not in the Cover Art Archive for the release or its release group, "
+            "and no cover image in the folder")
+
+    if chosen is not None:
+        cover = chosen[1]
+        # `front.*` is usually a scan of the booklet and is the owner's: copied, never consumed.
+        if chosen[0].casefold() != "cover.jpg" and Path(chosen[0]).stem.casefold() != "front":
+            consumed = chosen[0]
+    if cover is not None:
+        files["cover.jpg"] = cover
+
+    have = set(existing.values())
+    if cover is not None:
+        have.add(cover)
+    folder_names = {name.casefold() for name in existing}
 
     rest = [image for image in pictures if image is not front]
+    fetched = _unseen(((image, picture) for image in rest if (picture := fetch(image)) is not None), have)
+
     counts: dict[str, int] = {}
-    for image in rest:
+    for image, _picture in fetched:
         base = _base_name(image)
         counts[base] = counts.get(base, 0) + 1
 
     seen: dict[str, int] = {}
-    for image in rest:
+    for image, picture in fetched:
         base = _base_name(image)
         seen[base] = seen.get(base, 0) + 1
         # `booklet` is always numbered, even the only one; every other type
@@ -165,16 +311,18 @@ def plan_images(
             name = f"{base}-{seen[base]}.jpg"
         else:
             name = f"{base}.jpg"
-        picture = fetch(image)
-        if picture is not None:
-            files[name] = picture
+        # A local `front.*` is never overwritten.
+        if name == "front.jpg" and name in folder_names:
+            continue
+        files[name] = picture
 
-    for number, image in enumerate(pdfs, 1):
-        name = "booklet.pdf" if len(pdfs) == 1 else f"booklet-{number}.pdf"
-        if name not in existing:
-            files[name] = get(image)
+    unique_pdfs = [data for _image, data in _unseen(((image, get(image)) for image in pdfs), have)]
+    for number, data in enumerate(unique_pdfs, 1):
+        name = "booklet.pdf" if len(unique_pdfs) == 1 else f"booklet-{number}.pdf"
+        if name.casefold() not in folder_names:
+            files[name] = data
 
-    return ImagePlan(files=files, problems=problems, consumed=consumed)
+    return ImagePlan(files=files, problems=problems, consumed=consumed, holds=holds)
 
 
 def embedded_front(cover_jpeg: bytes) -> bytes:

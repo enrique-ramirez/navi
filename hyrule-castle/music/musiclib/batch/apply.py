@@ -77,7 +77,26 @@ def run(job: Job, memory_path: Path, *, limit: int | None = None,
 
     memory_doc = memory_module.load(memory_path)
 
-    already_applied = {line["source"] for line in job_module.read_log(job) if line["outcome"] == "applied"}
+    applied_lines = [line for line in job_module.read_log(job) if line["outcome"] == "applied"]
+
+    def written(entry: dict) -> bool:
+        """Whether an `applied` line stands for this entry's plan.
+
+        A line records the plan it wrote, not the album for good: a later
+        identify may plan the same key again. A line from before digests were
+        recorded is matched by where it wrote the album.
+        """
+        for line in applied_lines:
+            if line["source"] != entry["source"]:
+                continue
+            if "plan_digest" in line:
+                if line["plan_digest"] == entry.get("plan_digest"):
+                    return True
+            elif line["destination"] == entry.get("destination"):
+                return True
+        return False
+
+    already_applied = {entry["source"] for entry in plan_doc["albums"] if written(entry)}
     # Every album the owner said yes to, whether or not apply ever gets to
     # try it: an accept identify could not plan at all must still be
     # reported, not read as nothing to do.
@@ -154,7 +173,8 @@ def run(job: Job, memory_path: Path, *, limit: int | None = None,
                 continue
 
             job_module.append_log(job, {"source": key, "destination": entry["destination"],
-                                        "outcome": "applied", "error": None, "record": record})
+                                        "outcome": "applied", "error": None, "record": record,
+                                        "plan_digest": entry.get("plan_digest")})
             written.add(key)
 
             # The memory, so a later job or a re-run of this one plans the same

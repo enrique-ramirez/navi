@@ -16,7 +16,7 @@ import base64
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple
+from typing import Iterable, NamedTuple
 
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import ID3, ID3NoHeaderError
@@ -491,7 +491,14 @@ def _disc_track_counts(state: AlbumState) -> dict[str | None, int]:
     return counts
 
 
-def _album_folder_violations(state: AlbumState) -> list[tuple[str, str]]:
+def _has_other_edition(folder: str, siblings: Iterable[str]) -> bool:
+    """Whether another of `siblings` has `folder`'s name once each one's trailing ` [..]` is removed, case aside."""
+    bare = _EDITION_RE.sub("", folder).casefold()
+    return any(other != folder and _EDITION_RE.sub("", other).casefold() == bare for other in siblings)
+
+
+def _album_folder_violations(state: AlbumState, siblings: Iterable[str],
+                             suffix_given: bool) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     match = _ALBUM_FOLDER_RE.match(state.folder)
     if not match:
@@ -506,9 +513,12 @@ def _album_folder_violations(state: AlbumState) -> list[tuple[str, str]]:
             head = f"({year}){''.join(f' [{p}]' for p in prefixes)} "
             expected = names.fit(names.sanitize(f"{head}{album_title}"), start=len(head))
             # One trailing ` [edition]` is what a job adds to editions that
-            # would share a folder; the tags do not say which field it is.
+            # would share a folder; the tags do not say which field it is, so
+            # it is believed only beside its other edition (or where a plan
+            # has just given it, the other edition not yet on disk).
             edition = _EDITION_RE.search(state.folder)
-            with_edition = edition and names.fit(
+            believed = suffix_given or _has_other_edition(state.folder, siblings)
+            with_edition = edition and believed and names.fit(
                 names.sanitize(f"{head}{album_title}"), suffix=edition.group(0), start=len(head))
             bad = bad or state.folder not in (expected, with_edition)
         if bad:
@@ -573,8 +583,13 @@ def _folder_content_violations(state: AlbumState) -> list[tuple[str, str]]:
     return out
 
 
-def check_album(state: AlbumState) -> list[Violation]:
-    """Every rule `state` breaks. Never touches disk."""
+def check_album(state: AlbumState, siblings: Iterable[str] = (), suffix_given: bool = False) -> list[Violation]:
+    """Every rule `state` breaks. Never touches disk.
+
+    `siblings` are the names of the other album folders under the same
+    artist folder; `suffix_given` is a plan saying the folder's trailing
+    ` [..]` is its own, whatever is on disk.
+    """
     found: list[tuple[str, str]] = []
 
     expected_letter = names.letter(state.artist)
@@ -583,7 +598,7 @@ def check_album(state: AlbumState) -> list[Violation]:
     if names.sanitize(state.artist) != state.artist:
         found.append(("characters", state.artist))
 
-    found.extend(_album_folder_violations(state))
+    found.extend(_album_folder_violations(state, siblings, suffix_given))
     disc_counts = _disc_track_counts(state)
     for track_state in state.tracks:
         found.extend(_track_violations(track_state, disc_counts))
@@ -597,6 +612,10 @@ def check(root: Path | str) -> list[Violation]:
     """Every rule any album under `root` breaks. Reads; never writes."""
     root = Path(root)
     violations: list[Violation] = []
-    for album_dir in walk.album_dirs(root):
-        violations.extend(check_album(read_album(album_dir, root)))
+    album_dirs = list(walk.album_dirs(root))
+    folders: dict[Path, list[str]] = {}
+    for album_dir in album_dirs:
+        folders.setdefault(album_dir.parent, []).append(album_dir.name)
+    for album_dir in album_dirs:
+        violations.extend(check_album(read_album(album_dir, root), folders[album_dir.parent]))
     return violations

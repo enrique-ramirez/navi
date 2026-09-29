@@ -20,6 +20,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Sequence
 
 from musiclib import ascii as ascii_
 from musiclib import artists, check, files, genres, images, mapping, names
@@ -221,8 +222,32 @@ def _album_genres(release_group: dict, tracks: list[files.Track], release: dict,
                           artist_genres if composer is not None else None)
 
 
-def sort_others(unit: Unit, image_names: set[str], moving: bool,
-                 consumed: str | None = None) -> tuple[list[str], list[str], list[str]]:
+#: A folder file larger than this is not read, so nothing is judged a copy of
+#: it and it stays, under its own name. The figure is a memory bound, well above any booklet scan.
+_MAX_COMPARED_BYTES = 64 * 1024 * 1024
+
+
+def _loose_files(unit: Unit) -> dict[str, bytes]:
+    """The bytes, by name, of each non-track file directly in the album folder.
+
+    A file too large to read still has its name here, so nothing is planned
+    over it. Its value is a placeholder unique to it, so it never compares
+    equal to any other file's bytes.
+    """
+    found = {}
+    for rel in unit.others:
+        path = unit.path / rel
+        try:
+            if "/" not in rel:
+                found[rel] = (path.read_bytes() if path.stat().st_size <= _MAX_COMPARED_BYTES
+                              else f"\0unread:{rel}".encode())
+        except OSError:
+            continue
+    return found
+
+
+def sort_others(unit: Unit, image_names: set[str], moving: bool, consumed: str | None = None,
+                created: Sequence[str] = ()) -> tuple[list[str], list[str], list[str]]:
     """`unit.others`, paths relative to the album, sorted into (deletions, extras, kept).
 
     An existing file whose name a planned image occupies (`image_names`,
@@ -232,12 +257,19 @@ def sort_others(unit: Unit, image_names: set[str], moving: bool,
     album that stays gets that name overwritten in place, case and all, by
     `write._write_images`, and marking it deleted as well would remove a file
     the write goes on to replace. `consumed`, a folder file that became
-    `cover.jpg` under another name, is always a deletion.
+    `cover.jpg` under another name, is always a deletion, and so is an
+    archive-named copy of the owner's own file (`images.redundant_archive_names`) and a file `created` (the earlier job's
+    images) left behind in the album's folder.
+
+    `batch.memory.lay_edits` sorts again when an edit moves the album: the two
+    sorts must delete the same files.
     """
+    redundant = {name for name in images.redundant_archive_names(_loose_files(unit))
+                 if name.casefold() not in image_names}
     deletions, extras, kept = [], [], []
     for rel in unit.others:
         full = f"{unit.rel}/{rel}"
-        if rel == consumed:
+        if rel == consumed or rel in redundant:
             deletions.append(full)
             continue
         if PurePosixPath(rel).name.casefold() in image_names:
@@ -253,7 +285,17 @@ def sort_others(unit: Unit, image_names: set[str], moving: bool,
         # `check_album` on the resulting state is what refuses the plan for
         # it, the same "unexpected file" a finished write would show.
         (deletions if kind == "delete" else extras if kind == "extra" else kept).append(full)
+    left_behind = {PurePosixPath(path).name for path in created if PurePosixPath(path).parent.as_posix() == unit.rel}
+    for name in sorted(left_behind):
+        full = f"{unit.rel}/{name}"
+        if name.casefold() not in image_names and name in unit.others:
+            extras[:] = [p for p in extras if p != full]
+            kept[:] = [p for p in kept if p != full]
+            if full not in deletions:
+                deletions.append(full)
     return deletions, extras, kept
+
+
 
 
 def _without_brackets(value: str) -> str:
@@ -288,14 +330,28 @@ def edition_fields(release: dict) -> list[str]:
     return [_without_brackets(value) for value in (release.get("disambiguation") or "", country, " + ".join(formats))]
 
 
+def folder_artist_name(credit: list[dict], mb) -> str:
+    """The name the artist folder is built from: the artist's own, not the credited one, converted to ASCII."""
+    return ascii_.to_ascii(artists.own_name(credit, mb))
+
+
 def plan_album(
     unit: Unit, release: dict, mb, caa, owner_input: dict | None = None,
     incoming: str | None = None, status: str | None = None,
     pairs: list[TrackPair] | None = None, edition: str | None = None,
+    local: Sequence[tuple[str, bytes]] | None = None, created: Sequence[str] = (),
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`.
 
     `edition` ends the album folder in brackets (`names.album_folder`).
+
+    `local` stands in for the album folder's own covers (`images.local_covers`)
+    when given: they come from another folder, so the file that becomes
+    `cover.jpg` is never `consumed`, and nothing in this folder is deleted
+    for sharing its name. `created` is the images an earlier job saved in this
+    folder (paths from the library root) that a changed release leaves behind:
+    each is deleted unless the plan writes its name again, and none counts as
+    a copy of an image the plan would save.
     """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
@@ -316,13 +372,15 @@ def plan_album(
     release_group = mb.release_group(release["release-group"]["id"])
     album_genres = _album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
 
+    folder_files = _loose_files(unit)
+    left_behind = {PurePosixPath(path).name for path in created if PurePosixPath(path).parent.as_posix() == unit.rel}
     try:
         caa_images = caa.images(release["id"])
         image_plan = images.plan_images(
             caa_images, caa.download,
             group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
-            local=images.local_covers(unit.path),
-            existing={path.name.casefold() for path in unit.path.iterdir()})
+            local=images.local_covers(unit.path) if local is None else local,
+            existing={name: data for name, data in folder_files.items() if name not in left_behind})
     except CoverArtError as exc:
         # A 500 or a timeout is not "this release has no images" (`caa`
         # itself already turns a real 404 into an empty list, cached): taking
@@ -338,7 +396,7 @@ def plan_album(
     # The folder is built from the same converted text as the tag beside it,
     # never MusicBrainz's raw name, so the two never disagree over a curly
     # quote or an ellipsis.
-    artist_name = ascii_.to_ascii(artists.own_name(credit, mb))
+    artist_name = folder_artist_name(credit, mb)
     artist_sort = ascii_.to_ascii(mapping.join_credit(credit, "sort-name"))
     compilation = is_compilation(release)
     artist_folder = names.artist_folder(artist_name, artist_sort, known=True, compilation=compilation)
@@ -361,7 +419,7 @@ def plan_album(
     if pairs is None:
         pairs = pair(unit, release)
     file_plans: list[FilePlan] = []
-    holds: list[str] = []
+    holds: list[str] = list(image_plan.holds)
     suggestions: dict[str, str] = {}
     if pairs is None:
         disk_counts = [len(tracks) for tracks in group_media(unit)]
@@ -410,18 +468,18 @@ def plan_album(
     # archive has a front for the release: with no front, the rip's own is
     # what `image_plan.files["cover.jpg"]` already carries forward.
     image_names = {"cover.jpg"} | {name.casefold() for name in image_plan.files}
-    deletions, extras, kept = sort_others(unit, image_names, moving=(source != destination),
-                                         consumed=image_plan.consumed)
+    consumed = image_plan.consumed if local is None else None
+    deletions, extras, kept = sort_others(unit, image_names, source != destination, consumed, created)
 
     plan = Plan(
         root=root, source=source, destination=destination, release_id=release.get("id"),
         status="review" if holds else (status or "review"),
         files=file_plans, images=image_plan.files, embedded=embedded,
         deletions=deletions, extras=extras, kept=kept,
-        holds=_dedupe(holds), suggestions=suggestions, problems=[], consumed=image_plan.consumed,
+        holds=_dedupe(holds), suggestions=suggestions, problems=[], consumed=consumed,
     )
 
-    problems.extend(f"{v.rule}: {v.detail}" for v in check.check_album(state_from_plan(plan)))
+    problems.extend(f"{v.rule}: {v.detail}" for v in check.check_album(state_from_plan(plan), suffix_given=edition is not None))
     plan.problems = _dedupe(problems)
     return plan
 

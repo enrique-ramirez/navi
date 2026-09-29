@@ -9,7 +9,8 @@ The rule ids below are what `check` prints and what the owner reads, so the
 test fixes them. One id per rule in the doc:
 
     letter                the letter folder is not the artist folder's first letter
-    album folder          not `(YYYY) Title` with at most one known prefix
+    album folder          not `(YYYY) Title` with at most one known prefix, or an edition
+                          suffix with no other edition beside it
     album year            the folder's year is not the year of DATE
     disc folder           CDn folders where there is one medium, none where there are several,
                           or a file in the wrong one
@@ -71,6 +72,12 @@ ITUNNORM = (" 00001539 000016E0 0000A7B6 0000C0DE 0002A1F3 0002A1F3 00007FFF 000
             " 00017B5A 00017B5A")
 #: iTunes gapless data: one 16-digit group among the 8-digit ones.
 ITUNSMPB = " 00000000 00000210 000007F4 0000000000A4E2BC 00000000 005A8B1C 00000000 00000000"
+
+
+#: 59 six-letter words, 412 bytes: `(2007) ` and this cut before ` [...]`
+#: and ` [Japan]` or ` [Europe]` leave the first 33 (`test_batch_holds`).
+LONG_TITLE = " ".join(f"Part{n:02d}" for n in range(1, 60))
+LONG_TITLE_KEPT = " ".join(LONG_TITLE.split(" ")[:33])
 
 
 def _comm(text: str) -> COMM:
@@ -177,31 +184,99 @@ class Layout(_Library):
                 album = builders.library_album(root, folder=folder)
                 self.assertBreaks(root, album, {"album folder"}, also)
 
-    def test_an_album_folder_ending_in_one_bracketed_edition_suffix_is_clean(self):
-        # Criterion 64: editions that would share a folder each end in the
-        # field that tells them apart. The tags say nothing about which
-        # field or why, so check takes any one suffix after the right name.
-        cases = [
-            ("(2007) Unia [Japan]", "Unia", "2007-05-23"),
-            ("(2008) Dear Science [Vinyl]", "Dear Science", "2008-09-23"),
-            ("(2002) [Live] And All That Could Have Been [Europe]", "And All That Could Have Been",
-             "2002-01-22"),
+    def rules_by_album(self, root: Path) -> dict[str, set[str]]:
+        """Each album folder `check` names under `root`, relative to it, with the rules it breaks."""
+        found: dict[str, set[str]] = {}
+        for v in check.check(root):
+            found.setdefault(Path(v.album).as_posix(), set()).add(v.rule)
+        return found
+
+    def test_an_edition_suffix_beside_its_other_edition_under_the_same_artist_is_clean(self):
+        # The tags do not
+        # say which edition an album is, so check believes a suffix only
+        # with the other edition beside it.
+        pairs = [
+            ("S", "Sonata Arctica", "Unia", "2007-05-23",
+             ("(2007) Unia [Japan]", "(2007) Unia [Europe]")),
+            ("T", "TV on the Radio", "Dear Science", "2008-09-23",
+             ("(2008) Dear Science [CD]", "(2008) Dear Science [Vinyl]")),
+            ("N", "Nine Inch Nails", "And All That Could Have Been", "2002-01-22",
+             ("(2002) [Live] And All That Could Have Been [Europe]",
+              "(2002) [Live] And All That Could Have Been [Japan]")),
+            # Cut to 255 bytes before the suffix. Removing the suffix leaves
+            # the cut mark, which is the tags' name and stays.
+            ("W", "Wordy Band", LONG_TITLE, "2007",
+             (f"(2007) {LONG_TITLE_KEPT} [...] [Japan]", f"(2007) {LONG_TITLE_KEPT} [...] [Europe]")),
         ]
-        for folder, album_title, date in cases:
-            with self.subTest(folder):
+        for letter, artist, album_title, date, folders in pairs:
+            with self.subTest(folders[0]):
                 root = self.library()
-                builders.library_album(root, folder=folder, album=album_title, date=date)
+                for folder in folders:
+                    builders.library_album(root, letter=letter, artist=artist, folder=folder,
+                                           album=album_title, date=date)
                 self.assertEqual(check.check(root), [])
 
-    def test_an_edition_suffix_after_the_wrong_title_or_a_second_one_breaks_album_folder(self):
-        # Green before criterion 64. They keep a check that learns to allow
-        # the suffix from allowing anything after the year.
-        for folder in ("(1999) Fragile [Japan]", "(1999) The Fragile [Japan] [CD]",
-                       "(1999) [Japan] The Fragile [CD]"):
-            with self.subTest(folder):
+    def test_an_edition_suffix_with_no_other_edition_beside_it_breaks_album_folder(self):
+        # A folder is never its own other edition. The one beside it counts
+        # only under the same artist folder and only with the same name once
+        # its own suffix is gone, so in the last two cases both break.
+        cases = {
+            "a lone suffix": [
+                ("R", "Radiohead", "(1997) OK Computer [FLAC]", "OK Computer", "1997-05-21"),
+            ],
+            "the other edition under another artist": [
+                ("S", "Sonata Arctica", "(2007) Unia [Japan]", "Unia", "2007-05-23"),
+                ("S", "Stratovarius", "(2007) Unia [Europe]", "Unia", "2007-05-23"),
+            ],
+            "a different album beside it": [
+                ("S", "Sonata Arctica", "(2007) Unia [Japan]", "Unia", "2007-05-23"),
+                ("S", "Sonata Arctica", "(2007) Unia Live [Europe]", "Unia Live", "2007-05-23"),
+            ],
+        }
+        for case, albums in cases.items():
+            with self.subTest(case):
                 root = self.library()
-                album = builders.library_album(root, folder=folder)
-                self.assertBreaks(root, album, {"album folder"})
+                for letter, artist, folder, album_title, date in albums:
+                    builders.library_album(root, letter=letter, artist=artist, folder=folder,
+                                           album=album_title, date=date)
+                self.assertEqual(self.rules_by_album(root),
+                                 {f"{letter}/{artist}/{folder}": {"album folder"}
+                                  for letter, artist, folder, _album, _date in albums})
+
+    def test_a_folder_whose_brackets_the_album_tag_gives_is_judged_by_the_tag_alone(self):
+        # The one folder on the box that has brackets from its tag. Alone in its
+        # artist folder, its album tag decides. A name cut with ` [...]` is
+        # the other shape the edition allowance leaves alone: `CutNames`.
+        folder = "(1998) Something About Airplanes (10th Anniversary Limited Edition) [FLAC]"
+        cases = [
+            ("Something About Airplanes (10th Anniversary Limited Edition) [FLAC]", {}),
+            ("Something About Airplanes (10th Anniversary Limited Edition)",
+             {f"D/Death Cab for Cutie/{folder}": {"album folder"}}),
+        ]
+        for album_title, expected in cases:
+            with self.subTest(album_title):
+                root = self.library()
+                builders.library_album(root, letter="D", artist="Death Cab for Cutie", folder=folder,
+                                       album=album_title, date="1998-08-18")
+                self.assertEqual(self.rules_by_album(root), expected)
+
+    def test_an_edition_suffix_after_the_wrong_title_or_a_second_one_breaks_album_folder(self):
+        # Each sits beside another edition whose
+        # name is the same once the last suffix is gone, so the edition
+        # allowance cannot be what passes them: what is left must
+        # still be the name the tags give.
+        cases = [
+            ("(1999) Fragile [Japan]", "(1999) Fragile [Europe]"),
+            ("(1999) The Fragile [Japan] [CD]", "(1999) The Fragile [Japan] [Vinyl]"),
+            ("(1999) [Japan] The Fragile [CD]", "(1999) [Japan] The Fragile [Vinyl]"),
+        ]
+        for folders in cases:
+            with self.subTest(folders[0]):
+                root = self.library()
+                for folder in folders:
+                    builders.library_album(root, folder=folder)
+                self.assertEqual(self.rules_by_album(root),
+                                 {f"N/Nine Inch Nails/{folder}": {"album folder"} for folder in folders})
 
     def test_an_album_folder_year_that_disagrees_with_date(self):
         root = self.library()
@@ -1090,13 +1165,15 @@ class _Services:
     """MusicBrainz and the Cover Art Archive behind one fake transport, answering by URL.
 
     `front=False` is the archive's 404 for a release it has nothing for.
-    Anything it was not given is a 404 as well.
+    Anything it was not given is a 404 as well. `front_image` is the bytes
+    behind the front's address.
     """
 
-    def __init__(self, release: dict, release_group: dict, front: bool) -> None:
+    def __init__(self, release: dict, release_group: dict, front: bool, front_image: bytes = FRONT) -> None:
         self.release = release
         self.release_group = release_group
         self.front = front
+        self.front_image = front_image
 
     def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
         parts = urlsplit(url)
@@ -1113,7 +1190,7 @@ class _Services:
                                        "image": FRONT_URL, "thumbnails": {}}]}
                 return 200, json.dumps(listing).encode()
             if url == FRONT_URL:
-                return 200, FRONT
+                return 200, self.front_image
         return 404, b"Not Found"
 
 
@@ -1181,8 +1258,8 @@ class _Planning(unittest.TestCase):
         return root
 
     def plan(self, unit: Unit, release: dict, release_group: dict | None = None, *,
-             front: bool = True, **kwargs):
-        services = _Services(release, release_group or _release_group(), front)
+             front: bool = True, front_image: bytes = FRONT, **kwargs):
+        services = _Services(release, release_group or _release_group(), front, front_image)
         # A cache of its own per plan: one shared across subtests replays the
         # last subtest's cover art to a case that has none.
         cache = Cache(Path(tempfile.mkdtemp(prefix="cache-", dir=self.tmp)))
@@ -1215,7 +1292,10 @@ class APlan(_Planning):
         # sorts by name alone shows.
         group = _release_group({"post-punk": 4, "gothic rock": 9})
 
-        plan = self.plan(self.unit(root, album), release, group, status="auto")
+        # Square and 1600 px, so it passes the cover bar and beats the
+        # rip's own 1600 by 900 `cover.jpg`, which does not.
+        front = builders.jpeg(1600, 1600)
+        plan = self.plan(self.unit(root, album), release, group, status="auto", front_image=front)
 
         self.assertEqual(list(plan.problems), [])
         self.assertEqual(Path(plan.root), root)
@@ -1238,8 +1318,8 @@ class APlan(_Planning):
 
         # cover.jpg is the archive's front byte for byte, replacing the rip's
         # own; what every track embeds is that front shrunk to 1200 px.
-        self.assertEqual(plan.images["cover.jpg"], FRONT)
-        self.assertEqual(Image.open(io.BytesIO(plan.embedded)).size, (1200, 675))
+        self.assertEqual(plan.images["cover.jpg"], front)
+        self.assertEqual(Image.open(io.BytesIO(plan.embedded)).size, (1200, 1200))
 
         # The rip's old cover.jpg may or may not be listed as deleted once
         # the archive's replaces it, so deletions is only held to a floor.

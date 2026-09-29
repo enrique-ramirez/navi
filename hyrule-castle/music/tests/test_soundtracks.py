@@ -356,6 +356,14 @@ def assertOffersTheThreeChoices(case: unittest.TestCase, section) -> None:
     case.assertEqual(len({name for name, _value in offered}), 1, offered)
 
 
+def assertHeldForADecisionNamingTheChoices(case: unittest.TestCase, entry: dict) -> None:
+    """`entry` is held, with a `decision` hold whose detail names each of the three choices."""
+    details = [hold["detail"] for hold in entry["holds"] if hold["kind"] == "decision"]
+    case.assertEqual(entry["state"], "held", entry["source"])
+    case.assertTrue(any(all(choice in detail for choice in CHOICES) for detail in details),
+                    f"{entry['source']}: no decision hold names the three choices: {entry['holds']}")
+
+
 class TheChoiceAcrossJobs(unittest.TestCase):
     """Job `j1` over `<tmp>/library`, decided and applied; then job `j2` over `<tmp>/fresh/library`.
 
@@ -493,12 +501,14 @@ REMEMBERED = {score_of(PASTED_REMEMBERED): SOUNDTRACK, score_of(ACCEPTED_REMEMBE
 
 
 class AReleaseTheOwnerNamed(unittest.TestCase):
-    """Job `j1`: identified, then decided once, then the first album accepted again with no `game`.
+    """Job `j1`: identified, then decided once, then the same decisions exported again and folded in.
 
     Before this amendment the page asked for a choice on any Soundtrack-type
     release, so a release the owner named was asked about too. Now only the
     hold asks, and `identify.chosen` plans these without going through the
-    engine's own pick. The cases only read.
+    engine's own pick. ACCEPTED is accepted with no `game` both times: the
+    first time the last plan had not asked for a choice, the second time it
+    had. The cases only read.
     """
 
     @classmethod
@@ -526,19 +536,21 @@ class AReleaseTheOwnerNamed(unittest.TestCase):
         def accept(key: str, game: str | None = None) -> dict:
             return {"action": "accept", "release_id": score_of(key), "edits": {}, "game": game}
 
-        lib.decide({
+        cls.decisions = {
             ACCEPTED: accept(ACCEPTED),
             PASTED: {"action": "repoint", "release": score_of(PASTED)},
             ACCEPTED_WITH_A_CHOICE: accept(ACCEPTED_WITH_A_CHOICE, VGM),
             PASTED_REMEMBERED: {"action": "repoint", "release": score_of(PASTED_REMEMBERED)},
             ACCEPTED_REMEMBERED: accept(ACCEPTED_REMEMBERED),
-        })
+        }
+        lib.decide(cls.decisions)
         cls.decided = lib.entries()
         cls.page = albums(parse((lib.job / "review.html").read_text(encoding="utf-8")))
 
-        (lib.job / "decisions.json").write_text(
-            json.dumps({"job": "j1", "albums": {ACCEPTED: accept(ACCEPTED)}}), encoding="utf-8")
+        # The same export again. This time `plan.json` has ACCEPTED waiting
+        # on its choice when the file is read.
         cls.accepted_again = run_identify(lib.root, lib.job, lib.memory, Services(lib.catalogue))
+        cls.again = lib.entries()
 
     def status_holds(self, key: str) -> list[str]:
         return [hold["detail"] for hold in self.decided[key]["holds"] if hold["kind"] == "status"]
@@ -557,13 +569,29 @@ class AReleaseTheOwnerNamed(unittest.TestCase):
         self.assertEqual(entry["game_choice"], True)
         assertOffersTheThreeChoices(self, self.page[PASTED])
 
-    def test_accepting_that_release_again_with_no_game_is_refused(self):
-        # What the hold is for: without it, this accept goes through and
-        # the album is applied with no choice ever made.
+    def test_an_accept_with_no_game_of_a_release_that_waits_on_the_choice_is_held_for_a_decision_naming_the_three(self):
+        # Only an album that waits on the choice gets it: an
+        # accept with no game whose release the memory settles is not held.
+        # Without this hold, apply writes the album with no choice made.
+        for key in (ACCEPTED, ACCEPTED_REMEMBERED):
+            with self.subTest(album=key):
+                self.assertEqual(self.decided[key]["decision"], "accept")
+        assertHeldForADecisionNamingTheChoices(self, self.decided[ACCEPTED])
+        self.assertNotIn("decision", [hold["kind"] for hold in self.decided[ACCEPTED_REMEMBERED]["holds"]])
+
+    def test_accepting_that_release_again_with_no_game_is_not_refused_and_the_rest_of_the_file_is_folded_in(self):
+        # Refusing the whole file for this one accept sent the owner's
+        # other decisions nowhere.
         code, _out, err = self.accepted_again
-        self.assertEqual(code, 1, err)
-        self.assertIn(ACCEPTED, err)
-        self.assertIn("Soundtrack-type", err)
+        self.assertEqual(code, 0, err)
+        self.assertEqual({key: self.again[key]["decision"] for key in NAMED},
+                         {key: decision["action"] for key, decision in self.decisions.items()})
+        assertHeldForADecisionNamingTheChoices(self, self.again[ACCEPTED])
+        # The others are folded in as they were the first time.
+        self.assertEqual(genres_of(self.again[ACCEPTED_WITH_A_CHOICE]), [GENRES_FOR[VGM]] * 2)
+        for key in (ACCEPTED_WITH_A_CHOICE, ACCEPTED_REMEMBERED):
+            with self.subTest(album=key):
+                self.assertNotIn("decision", [hold["kind"] for hold in self.again[key]["holds"]])
 
     def test_a_named_release_with_a_choice_given_or_remembered_is_not_held_for_one_and_has_its_genres(self):
         # The release group's own genre is `rock`. The two remembered ones
@@ -655,8 +683,9 @@ class ASoundtrackHeldForSomethingElse(unittest.TestCase):
     or a failing pair never reaches the soundtrack hold, and nothing asked
     about the soundtrack before an accept wrote it.
 
-    Job `j1` is identified once, then given an accept with no `game` for
-    each undecided album, which identify must refuse. Then it is decided
+    Job `j1` is identified once, then given a file that accepts each
+    undecided album with no `game` beside the accepts of every other album,
+    which identify folds in without applying anything. Then it is decided
     and applied, and job `j2` runs over an untouched copy of the rips with
     the memory `j1` left. The cases only read.
     """
@@ -696,7 +725,11 @@ class ASoundtrackHeldForSomethingElse(unittest.TestCase):
         cls.planned = lib.entries()
         cls.page = albums(parse((lib.job / "review.html").read_text(encoding="utf-8")))
 
-        cls.refused = decide({key: accept(key) for key in UNDECIDED})
+        cls.no_game = {key: accept(key) for key in UNDECIDED}
+        cls.no_game.update({key: accept(key, game) for key, game in CHOSEN.items()})
+        cls.no_game.update({key: accept(key) for key in REMEMBERED_BEFORE})
+        cls.no_game_run = decide(cls.no_game)
+        cls.no_game_entries = lib.entries()
 
         decisions = {key: accept(key, game) for key, game in CHOSEN.items()}
         decisions.update({key: accept(key) for key in REMEMBERED_BEFORE})
@@ -731,15 +764,24 @@ class ASoundtrackHeldForSomethingElse(unittest.TestCase):
                     self.assertIn({"kind": "status", "detail": held_as(key)}, entry["holds"])
                     assertOffersTheThreeChoices(self, page[key])
 
-    def test_accepting_an_unsettled_album_held_for_its_artist_or_its_pairs_with_no_game_is_refused(self):
-        # Let through, the album is written with no choice ever made and
-        # with none of the genres the choice would have put first.
-        code, _out, err = self.refused
-        self.assertEqual(code, 1, err)
-        self.assertIn("Soundtrack-type", err)
+    def test_accepting_an_unsettled_album_held_for_its_artist_or_its_pairs_with_no_game_holds_it_for_a_decision(self):
+        # The file is folded in whole. Each unsettled album
+        # keeps the hold it had and gets a decision hold naming the three
+        # choices, so apply does not write it with no choice made. The
+        # others in the same file were accepted with a choice, or with none
+        # that the memory settles, and get no decision hold.
+        code, _out, err = self.no_game_run
+        self.assertEqual(code, 0, err)
+        self.assertEqual({key: entry["decision"] for key, entry in self.no_game_entries.items()},
+                         {key: decision["action"] for key, decision in self.no_game.items()})
         for key in UNDECIDED:
             with self.subTest(album=key):
-                self.assertIn(key, err)
+                entry = self.no_game_entries[key]
+                self.assertIn({"kind": "status", "detail": held_as(key)}, entry["holds"])
+                assertHeldForADecisionNamingTheChoices(self, entry)
+        for key in (*CHOSEN, *REMEMBERED_BEFORE):
+            with self.subTest(album=key):
+                self.assertNotIn("decision", [hold["kind"] for hold in self.no_game_entries[key]["holds"]])
 
     def test_a_choice_given_or_remembered_is_written_with_its_genres_and_offered_no_choice_in_a_later_job(self):
         # The release group's own genre is `rock`. The remembered ones were

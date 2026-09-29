@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Callable, Mapping
 from urllib.parse import urlsplit
 
-from musiclib import acoustid, artists, genres, mapping, titles
+from musiclib import acoustid, artists, genres, images, mapping, titles
+from musiclib.caa import CoverArt, CoverArtError
 from musiclib.mb import MusicBrainz, MusicBrainzError, MusicBrainzUnavailable
 from musiclib.units import TrackPair, Unit, first_value, pair, position_key
 
@@ -252,22 +253,52 @@ def _judge_artists(candidates: list, unit: Unit, client: MusicBrainz) -> None:
             candidate.artist_agrees = artists.agrees(unit, candidate.release, client)
 
 
-def _choose_fitting(candidates: list, owner_input) -> Candidate:
-    """Among the candidates that fit: those whose artist agrees, then the Official release, then the oldest, then the best ranked."""
+_COVER_SHOWN_WITHIN = 10
+
+
+def _showing_cover(fitting: list, caa: CoverArt | None, local_cover: bytes | None) -> set[str]:
+    """The ids of the `fitting` candidates whose front looks like `local_cover`.
+
+    Nothing is fetched unless two or more fit and the folder has a cover that
+    is an image. A candidate whose front, listing or thumbnail cannot be had
+    does not show it.
+    """
+    local = images.average_hash_or_none(local_cover) if local_cover is not None else None
+    if caa is None or local is None or len(fitting) < 2:
+        return set()
+    shown = set()
+    for candidate in fitting:
+        try:
+            url = images.front_thumbnail_url(caa.images(candidate.release_id))
+            thumbnail = caa.download(url) if url else None
+        except CoverArtError:
+            continue
+        theirs = images.average_hash_or_none(thumbnail) if thumbnail is not None else None
+        if theirs is not None and images.hash_distance(local, theirs) <= _COVER_SHOWN_WITHIN:
+            shown.add(candidate.release_id)
+    return shown
+
+
+def _choose_fitting(candidates: list, owner_input, caa: CoverArt | None = None,
+                    local_cover: bytes | None = None) -> Candidate:
+    """Among the candidates that fit: those showing the folder's cover, then those whose artist agrees, then the Official release, then the oldest, then the best ranked."""
     fitting = [c for c in candidates if _fits(c, owner_input)]
+    shown = _showing_cover(fitting, caa, local_cover)
     return min(fitting, key=lambda c: (
-        not c.artist_agrees, c.release.get("status") != "Official", _date_sort_value(c.release.get("date")),
+        c.release_id not in shown, not c.artist_agrees, c.release.get("status") != "Official",
+        _date_sort_value(c.release.get("date")),
     ))
 
 
-def _settle(candidates: list, unit: Unit, client: MusicBrainz, owner_input, incoming) -> Identification:
+def _settle(candidates: list, unit: Unit, client: MusicBrainz, owner_input, incoming,
+            caa: CoverArt | None = None, local_cover: bytes | None = None) -> Identification:
     """`candidates` is non-empty, ranked and judged on artist.
 
     An artist that does not agree and the soundtrack hold can each turn an `auto` into a `review`.
     """
     if not _fits(candidates[0], owner_input):
         return Identification("review", None, candidates)
-    chosen = _choose_fitting(candidates, owner_input)
+    chosen = _choose_fitting(candidates, owner_input, caa, local_cover)
     ordered = [chosen] + [c for c in candidates if c is not chosen]
     if not chosen.artist_agrees:
         # Files with no artist at all have nothing to disagree with.
@@ -293,6 +324,7 @@ def _various_artists(unit: Unit) -> bool:
 def _search(
     unit: Unit, client: MusicBrainz, acoustid_client, owner_input, incoming,
     env: Mapping[str, str], which: Callable[[str], str | None],
+    caa: CoverArt | None = None, local_cover: bytes | None = None,
 ) -> Identification:
     first_track = unit.tracks[0]
     album = _album_value(first_track) or ""
@@ -300,7 +332,8 @@ def _search(
 
     various = _various_artists(unit)
     if not album and (various or not artist):
-        return _fingerprint_fallback(unit, client, [], acoustid_client, owner_input, incoming, env, which)
+        return _fingerprint_fallback(unit, client, [], acoustid_client, owner_input, incoming, env, which,
+                                     caa, local_cover)
 
     try:
         found = client.search_releases(album, artist or None, various)
@@ -327,10 +360,10 @@ def _search(
     top = candidates[0] if candidates else None
     if top is None or not top.matches_counts:
         return _fingerprint_fallback(
-            unit, client, candidates, acoustid_client, owner_input, incoming, env, which
+            unit, client, candidates, acoustid_client, owner_input, incoming, env, which, caa, local_cover
         )
 
-    return _settle(candidates, unit, client, owner_input, incoming)
+    return _settle(candidates, unit, client, owner_input, incoming, caa, local_cover)
 
 
 # --- falling back to fingerprints when no search count matches --------------
@@ -339,6 +372,7 @@ def _search(
 def _fingerprint_fallback(
     unit: Unit, client: MusicBrainz, search_candidates: list,
     acoustid_client, owner_input, incoming, env: Mapping[str, str], which: Callable[[str], str | None],
+    caa: CoverArt | None = None, local_cover: bytes | None = None,
 ) -> Identification:
     reason = acoustid.unavailable(env, which)
     if reason is not None:
@@ -377,7 +411,7 @@ def _fingerprint_fallback(
     except MusicBrainzUnavailable:
         return Identification("unidentified", "musicbrainz unavailable", search_candidates)
     fp_candidates.sort(key=lambda c: _rank_key(c, owner_input))
-    return _settle(fp_candidates, unit, client, owner_input, incoming)
+    return _settle(fp_candidates, unit, client, owner_input, incoming, caa, local_cover)
 
 
 # --- the entry point ---------------------------------------------------------
@@ -386,6 +420,7 @@ def _fingerprint_fallback(
 def identify(
     unit: Unit, mb: MusicBrainz, acoustid=None, owner_input=None, incoming=None,
     env: Mapping[str, str] = os.environ, which: Callable[[str], str | None] = shutil.which,
+    caa: CoverArt | None = None, local_cover: bytes | None = None,
 ) -> Identification:
     if unit.status:
         return Identification(unit.status, unit.reason, [])
@@ -408,7 +443,7 @@ def identify(
                 hold = _soundtrack_hold(status, candidate, [candidate], unit, mb, owner_input, incoming)
                 return hold if hold is not None else Identification(status, None, [candidate])
 
-    return _search(unit, mb, acoustid, owner_input, incoming, env, which)
+    return _search(unit, mb, acoustid, owner_input, incoming, env, which, caa, local_cover)
 
 
 # --- a release named directly ------------------------------------------------

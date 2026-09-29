@@ -346,6 +346,9 @@ class Suffixes(unittest.TestCase):
                 self.assertEqual((entry["state"], entry["holds"]), ("auto", []))
 
     def test_two_editions_from_different_countries_are_filed_under_each_country_name(self):
+        # Neither folder exists when the plan is judged. `check` takes a
+        # suffix only beside the other edition's folder, so
+        # a plan's own validation that asked the disk would hold both.
         self.assertFiledUnder({UNIA[0]: "S/Sonata Arctica/(2007) Unia [Japan]",
                                UNIA[1]: "S/Sonata Arctica/(2007) Unia [Europe]"})
 

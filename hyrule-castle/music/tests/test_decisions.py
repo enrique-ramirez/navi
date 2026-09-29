@@ -212,6 +212,68 @@ class Reading(unittest.TestCase):
         doc["albums"][ACCEPTED]["game"] = "film score"
         self.assertRejected(doc, OTHER_JOB, stranger, "approve", "film score")
 
+    def wait_on_the_choice(self, key: str) -> None:
+        """This case's `plan.json` with `key` held for its soundtrack choice, as identify leaves a Soundtrack-type album."""
+        plan = self.job / "plan.json"
+        doc = json.loads(plan.read_text(encoding="utf-8"))
+        for entry in doc["albums"]:
+            if entry["source"] == key:
+                entry["game_choice"] = True
+                entry["holds"] = [{"kind": "status", "detail": "review: soundtrack choice"}]
+                entry["state"] = "held"
+        plan.write_text(json.dumps(doc), encoding="utf-8")
+
+    def test_an_accept_with_no_game_of_an_album_waiting_on_its_soundtrack_choice_is_read(self):
+        # The page exports an accept with no `game` when
+        # the owner accepts the release and leaves the choice for later.
+        # Refusing the file for that stopped every other album in it.
+        from musiclib.batch import decisions
+
+        self.wait_on_the_choice(ACCEPTED)
+        for shape in ("null", "missing"):
+            with self.subTest(game=shape):
+                doc = self.accept_with()
+                if shape == "missing":
+                    del doc["albums"][ACCEPTED]["game"]
+                write_decisions(self.job, doc)
+                try:
+                    self.assertIsInstance(self.read(), dict)
+                except decisions.DecisionsRejected as refused:
+                    self.fail(f"refused: {refused}")
+
+    def test_an_accept_with_no_game_of_an_album_waiting_on_its_choice_is_refused_only_for_what_else_is_wrong(self):
+        # Each file has one other offence, which still refuses it. The
+        # message names that offence and not the missing choice: the old
+        # refusal named the three choices, so they must not turn up.
+        self.wait_on_the_choice(ACCEPTED)
+        no_release = self.accept_with()
+        del no_release["albums"][ACCEPTED]["release_id"]
+        other_job = self.accept_with()
+        other_job["job"] = OTHER_JOB
+        # All three at once, so each is still named, not only the first.
+        every = self.accept_with(edits={"1-3": {"title": ["Three"]}})
+        every["job"] = OTHER_JOB
+        del every["albums"][ACCEPTED]["release_id"]
+        cases = {
+            "no release_id": (no_release, [ACCEPTED]),
+            "unoffered field": (self.accept_with(edits={"1-1": {"mood": ["x"]}}), ["mood"]),
+            "missing position": (self.accept_with(edits={"1-3": {"title": ["Three"]}}), ["1-3"]),
+            "another job": (other_job, [OTHER_JOB]),
+            "all three": (every, [OTHER_JOB, "release_id", "1-3"]),
+        }
+        from musiclib.batch import decisions
+
+        for name, (doc, named) in cases.items():
+            with self.subTest(offence=name):
+                write_decisions(self.job, doc)
+                with self.assertRaises(decisions.DecisionsRejected) as raised:
+                    self.read()
+                message = str(raised.exception)
+                for offence in named:
+                    self.assertIn(offence, message)
+                for choice in ("video game music", "neither"):
+                    self.assertNotIn(choice, message)
+
 
 class _Job(unittest.TestCase):
     """The library at `<tmp>/library` and job `j1` at `<tmp>/.musiclib/jobs/j1`, planned once."""

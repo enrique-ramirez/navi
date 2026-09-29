@@ -10,19 +10,22 @@ sort fields stay as MusicBrainz gives them.
 Everything goes through `plan_album` against `test_check`'s fake MusicBrainz
 and Cover Art Archive, which here also answers artist lookups. Aliases are
 only on the artist lookup, never on the release, as on the real service.
-An owner's edit is laid over that plan by `batch.memory.lay_edits`, the way
-`batch identify` lays one.
+An album with an owner's edit is planned by `batch identify`'s `plan_entry`
+instead, the edit remembered against the release and the release pasted as
+a repoint, so the edit reaches the plan with whatever `plan_entry` hands
+`lay_edits` alongside it.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from musiclib import caa, mb
-from musiclib.batch.memory import lay_edits
+from musiclib.batch.identify import Clients, plan_entry, rebuild
 from musiclib.cache import Cache
 from musiclib.units import pair, position_key
 from tests import builders
@@ -77,10 +80,12 @@ class _WithArtists(_Services):
     """`test_check._Services`, answering the artist lookup as well, from `artists` by MBID.
 
     An artist not in `artists` is a 404, the same as any other unknown URL.
+    The release group lookup answers with the release's own group, so an
+    edit that rebuilds the album folder keeps a prefix like `[EP]`.
     """
 
     def __init__(self, release: dict, artists: list[dict]) -> None:
-        super().__init__(release, _release_group(), front=True)
+        super().__init__(release, {**_release_group(), **release["release-group"]}, front=True)
         self.artists = {a["id"]: a for a in artists}
 
     def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
@@ -103,7 +108,9 @@ class _ArtistPlanning(_Planning):
         Every track carries the release's credit unless `track_credits` gives
         one of its own, by 0-based track index. `artists` is what the artist
         lookup knows. `edit` is an owner's edit of those fields on every
-        track, laid over the plan.
+        track, laid over the plan by `plan_entry`. With an edit, the plan
+        `batch apply` rebuilds from the entry is left in `self.rebuilt`, and
+        the digest the entry carries in `self.planned_digest`.
         """
         root = self.library()
         album = _rip(root, TITLES)
@@ -115,13 +122,14 @@ class _ArtistPlanning(_Planning):
         client = mb.MusicBrainz(cache, transport=services, clock=lambda: 0.0, sleep=lambda s: None)
         art = caa.CoverArt(cache, transport=services)
         unit = self.unit(root, album)
-        plan = _plan_album(unit, release, client, art, status="auto")
         if edit is None:
-            return plan
-        pairs = pair(unit, release)
-        family_by_source = {Path(t.path).relative_to(root).as_posix(): t.family for t in unit.tracks}
-        return lay_edits(plan, {position_key(p): dict(edit) for p in pairs}, release, release["release-group"],
-                         pairs, family_by_source, unit)
+            return _plan_album(unit, release, client, art, status="auto")
+        clients = Clients(mb=client, caa=art, acoustid=None)
+        memory = {"edits": {release["id"]: {position_key(p): dict(edit) for p in pair(unit, release)}}}
+        entry, plan = plan_entry(unit, root, clients, memory, {"action": "repoint", "release": release["id"]}, False)
+        self.rebuilt = rebuild(unit, root, clients, entry["inputs"])
+        self.planned_digest = entry["plan_digest"]
+        return plan
 
     def assertPlanned(self, plan, destination: str, artist: str | list[str], albumartist: str,
                       artistsort: str, albumartistsort: str | None = None):
@@ -165,8 +173,7 @@ class TheArtistsOwnName(_ArtistPlanning):
     def test_the_article_rule_reads_the_artists_own_name_and_sort_name(self):
         # Credited without the article: only the artist's own name,
         # `Die Toten Hosen`, is its sort name with the article moved.
-        hosen = artist("1a0b0c0d-0000-4000-8000-0000000000c7", "Die Toten Hosen", "Toten Hosen, Die")
-        plan = self.plan_credit(credit(("Toten Hosen", "", hosen)), [hosen])
+        plan = self.plan_credit(credit(("Toten Hosen", "", HOSEN)), [HOSEN])
         self.assertPlanned(plan, "T/Toten Hosen, Die/(2010) Disintegration",
                            artist="Toten Hosen", albumartist="Toten Hosen", artistsort="Toten Hosen, Die")
 
@@ -283,12 +290,17 @@ RED_AND_BLUE = {"title": "Red and Blue", "date": "2006",
                                   "first-release-date": "2006", "primary-type": "EP", "secondary-types": []}}
 
 
-class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
-    """Criteria 51 and 52 after an owner's edit: the artist folder follows the artist, not the tag.
+STROKES = artist("1a0b0c0d-0000-4000-8000-0000000000ca", "The Strokes", "Strokes, The")
+HOSEN = artist("1a0b0c0d-0000-4000-8000-0000000000c7", "Die Toten Hosen", "Toten Hosen, Die")
 
-    The artist tags hold the credited name, so an edit that rebuilds the
-    folder off `ALBUMARTIST` files the album under that name instead. Only
-    an edit to `albumartist` itself says the owner wants another folder.
+
+class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
+    """After an owner's edit, the folder takes the sort name the files will carry.
+
+    An edit to `albumartistsort` alone builds the folder from the artist's
+    current name, never from `ALBUMARTIST`, which holds
+    the credited name, and reads the edited sort name by the article rule.
+    An edit to `albumartist` builds it from what the owner typed.
     """
 
     def test_an_edit_to_anything_but_the_album_artist_keeps_the_artists_own_name(self):
@@ -305,11 +317,48 @@ class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
                 self.assertEqual((plan.destination, plan.problems), (destination, []))
                 self.assertEqual(plan.files[0].target["albumartist"], ["Stefani"])
 
-    def test_an_edit_to_the_sort_name_keeps_the_folder_a_name_not_in_latin_was_given(self):
-        # Two ways the folder and `ALBUMARTIST` part under criterion 52. Her
-        # own name is Latin and the katakana credit has no English alias to
-        # take, so the tag keeps the katakana. His own name gives way to
-        # his English alias, and the credit is Latin, so the tag keeps it.
+    def test_a_sort_edit_is_read_by_the_article_rule_against_the_artists_own_name(self):
+        # `Lady` is not an article, so `Gaga, Lady` has nothing to move.
+        # The last case is the one only a rebuilt folder passes: MusicBrainz
+        # does not move the article there, so the plan starts under `T/`
+        # and only the owner's sort name sends it to `S/`.
+        strokes_unmoved = artist(STROKES["id"], "The Strokes", "The Strokes")
+        cases = {
+            "Red and Blue, sort edited to Gaga, Lady": (
+                credit(("Stefani", "", GAGA)), GAGA, "Gaga, Lady", "L/Lady Gaga/(2006) [EP] Red and Blue",
+                RED_AND_BLUE),
+            "The Strokes, sort edited to The Strokes": (
+                credit(("The Strokes", "", STROKES)), STROKES, "The Strokes", "T/The Strokes/(2010) Disintegration",
+                {}),
+            "The Strokes, sort edited to Strokes, The": (
+                credit(("The Strokes", "", STROKES)), STROKES, "Strokes, The", "S/Strokes, The/(2010) Disintegration",
+                {}),
+            "The Strokes sorted by MusicBrainz as written, sort edited to Strokes, The": (
+                credit(("The Strokes", "", strokes_unmoved)), strokes_unmoved, "Strokes, The",
+                "S/Strokes, The/(2010) Disintegration", {}),
+        }
+        for case, (release_credit, the_artist, sort_name, destination, changes) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_credit(release_credit, [the_artist], edit={"albumartistsort": [sort_name]}, **changes)
+                self.assertEqual((plan.destination, plan.problems), (destination, []))
+                self.assertEqual({str(Path(f.destination).parent) for f in plan.files}, {destination})
+                self.assertEqual(plan.files[0].target["albumartistsort"], [sort_name])
+
+    def test_a_sort_edit_builds_the_folder_from_the_artists_own_name_not_the_credited_one(self):
+        # Credited without the article, so the article rule read against
+        # `ALBUMARTIST` gives `T/Toten Hosen`, and a folder kept as planned
+        # gives `T/Toten Hosen, Die`. Only the band's own name gives `D/`.
+        plan = self.plan_credit(credit(("Toten Hosen", "", HOSEN)), [HOSEN],
+                                edit={"albumartistsort": ["Die Toten Hosen"]})
+        self.assertEqual((plan.destination, plan.problems), ("D/Die Toten Hosen/(2010) Disintegration", []))
+        self.assertEqual(plan.files[0].target["albumartist"], ["Toten Hosen"])
+
+    def test_a_sort_edit_keeps_the_folder_a_name_not_in_latin_was_given_whatever_the_sort(self):
+        # The folder is rebuilt from the artist's own name, and in both
+        # cases `ALBUMARTIST` is something else. Her own name is Latin and
+        # the katakana credit has no English alias to take, so the tag keeps
+        # the katakana. His own name gives way to his English alias, and the
+        # credit is Latin, so the tag keeps it.
         billie = artist(BILLIE_ID, "Billie Eilish", "Eilish, Billie")
         cases = {
             "katakana credit with no English alias": (
@@ -318,12 +367,41 @@ class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
                 credit(("Uematsu", "", UEMATSU)), [UEMATSU], "N/Nobuo Uematsu/(2010) Disintegration"),
         }
         for case, (release_credit, artists, destination) in cases.items():
-            with self.subTest(case):
-                plan = self.plan_credit(release_credit, artists, edit={"albumartistsort": ["Owner, Sort"]})
-                self.assertEqual((plan.destination, plan.problems), (destination, []))
+            for sort_name in ("Owner, Sort", "Eilish, Billie", "Billie Eilish", "Uematsu, Nobuo"):
+                with self.subTest(case, sort=sort_name):
+                    plan = self.plan_credit(release_credit, artists, edit={"albumartistsort": [sort_name]})
+                    self.assertEqual((plan.destination, plan.problems), (destination, []))
 
     def test_an_edit_to_the_album_artist_builds_the_folder_from_what_the_owner_typed(self):
         plan = self.plan_credit(credit(("Stefani", "", GAGA)), [GAGA], edit={"albumartist": ["Stefani Germanotta"]},
                                 **RED_AND_BLUE)
         self.assertEqual((plan.destination, plan.problems), ("S/Stefani Germanotta/(2006) [EP] Red and Blue", []))
         self.assertEqual({str(Path(f.destination).parent) for f in plan.files}, {plan.destination})
+
+    def test_an_album_artist_edit_takes_the_sort_name_the_files_will_carry(self):
+        # With `albumartist` alone the files keep MusicBrainz's sort name,
+        # which moves the typed name's article. With both edited, the
+        # owner's sort name decides, and the typed name wins over the band's own.
+        cases = {
+            "album artist alone": (
+                {"albumartist": ["Die Toten Hosen"]}, "T/Toten Hosen, Die/(2010) Disintegration"),
+            "album artist and sort name": (
+                {"albumartist": ["Die Toten Hosen"], "albumartistsort": ["Die Toten Hosen"]},
+                "D/Die Toten Hosen/(2010) Disintegration"),
+            "a typed name that is not hers, with its article moved": (
+                {"albumartist": ["Die Hosen"], "albumartistsort": ["Hosen, Die"]}, "H/Hosen, Die/(2010) Disintegration"),
+        }
+        for case, (edit, destination) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_credit(credit(("Toten Hosen", "", HOSEN)), [HOSEN], edit=edit)
+                self.assertEqual((plan.destination, plan.problems), (destination, []))
+
+    def test_batch_apply_rebuilds_the_folder_a_sort_edit_planned(self):
+        # `batch apply` rebuilds the plan from the entry's inputs and writes
+        # only when its digest matches. A folder that `plan_entry` rebuilds
+        # and `rebuild` does not makes every sort-edited album stale.
+        plan = self.plan_credit(credit(("The Strokes", "", STROKES)), [STROKES],
+                                edit={"albumartistsort": ["The Strokes"]})
+        self.assertEqual(plan.destination, "T/The Strokes/(2010) Disintegration")
+        self.assertEqual(self.rebuilt.destination, plan.destination)
+        self.assertEqual(hashlib.sha256(self.rebuilt.to_json()).hexdigest(), self.planned_digest)

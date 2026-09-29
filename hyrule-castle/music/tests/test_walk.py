@@ -207,6 +207,43 @@ class SymlinksAreNotFollowed(_Tree):
         self.assertEqual(rels(files_in(album), album), ["CD1/01. Somewhat Damaged.flac"])
 
 
+@unittest.skipUnless(hasattr(os, "symlink"), "no os.symlink on this platform")
+class ASymlinkedFileIsReadLikeAnyOther(_Tree):
+    """Only a symlinked folder is left alone; a symlinked file in an album is one of its files.
+
+    A disc ripped once and linked into a second edition's folder is still
+    that album's music. A walk that skips every link, or one that resolves a
+    link to its target's path, loses the track or plans it somewhere else.
+    """
+
+    def test_units_reads_an_album_whose_tracks_and_cover_are_links_as_it_reads_the_same_album_with_real_files(self) -> None:
+        discs = (("Mr. Self Destruct",), ("Piggy",))
+        clean, linked = self.root(), self.root()
+        for root in (clean, linked):
+            builders.library_album(root, album="The Downward Spiral", date="1994-03-08", discs=discs)
+        album = linked / "N/Nine Inch Nails/(1994) The Downward Spiral"
+        # Links at the album's top and inside a disc folder, each to a file
+        # outside the library.
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        for rel in ("CD2/01. Piggy.flac", "cover.jpg"):
+            target = outside / Path(rel).name
+            shutil.move(album / rel, target)
+            try:
+                os.symlink(target, album / rel)
+            except OSError as exc:
+                self.skipTest(f"cannot make a symlink here: {exc}")
+        self.assertTrue((album / "CD2/01. Piggy.flac").is_symlink())
+
+        def read(root: Path) -> list[tuple]:
+            """Each track's path in its album, as units gives it, with the tags and length read from it."""
+            return sorted((Path(t.path).relative_to(u.path).as_posix(), t.tags, t.length)
+                          for u in units.units(root) for t in u.tracks)
+
+        self.assertEqual(UnitsAndCheckShareTheWalk.seen(linked), UnitsAndCheckShareTheWalk.seen(clean))
+        self.assertEqual(read(linked), read(clean))
+
+
 class UnreadableFolders(_Tree):
     """A folder the walk may not list is skipped, and the walk goes on past it.
 

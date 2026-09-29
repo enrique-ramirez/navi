@@ -31,6 +31,10 @@ from tests import builders
 from tests.test_check import FRONT, _Planning, _release, _rip
 from tests.test_plan import BACK, BACK_URL, FRONT_URL, Archive, plan_with
 
+# The rips below hold a 500 px square cover of their own, which passes
+# the cover bar; an archive front beats it only if it passes too.
+SQUARE_FRONT = builders.jpeg(800, 800)
+
 ALBUM = "N/Nine Inch Nails/(1999) The Fragile"
 DESTINATION = "N/Nine Inch Nails/(1999) The Fragile (Deluxe)"
 TITLES = ("Somewhat Damaged", "The Day the World Went Away", "The Frail")
@@ -220,14 +224,14 @@ class APlannedWrite(_Planning):
         # `cover.jpg`. The next run then found an album with no tracks.
         own = builders.jpeg(500, 500)
         cases = {
-            "the archive's front replaces cover.jpg": ("cover.jpg", True, FRONT),
-            "the archive's front replaces Cover.jpg": ("Cover.jpg", True, FRONT),
+            "the archive's front replaces cover.jpg": ("cover.jpg", True, SQUARE_FRONT),
+            "the archive's front replaces Cover.jpg": ("Cover.jpg", True, SQUARE_FRONT),
             "the rip's own cover.jpg is kept": ("cover.jpg", False, own),
         }
         for case, (name, front, expected) in cases.items():
             with self.subTest(case):
                 root, album, plan, record = self.write_rip(
-                    case, images=(("Front", FRONT_URL, FRONT),) if front else (),
+                    case, images=(("Front", FRONT_URL, SQUARE_FRONT),) if front else (),
                     arrange=lambda album: (album / name).write_bytes(own))
                 destination = root / plan.destination
 
@@ -244,7 +248,7 @@ class APlannedWrite(_Planning):
         # on Wine's case-blind reading of the disk, so the write refused the
         # album as a collision. Written in place or moved, the archive's
         # image takes the slot and the rules' name.
-        images = (("Front", FRONT_URL, FRONT), ("Back", BACK_URL, BACK))
+        images = (("Front", FRONT_URL, SQUARE_FRONT), ("Back", BACK_URL, BACK))
         cases = {
             "the album moves": "C/The Cure/Disintegration [rip]",
             "the album stays where it is": "C/Cure, The/(2010) Disintegration",
@@ -263,7 +267,7 @@ class APlannedWrite(_Planning):
                 self.assertEqual(self.named(destination, "back.jpg"), ["back.jpg"])
                 self.assertEqual((destination / "back.jpg").read_bytes(), BACK)
                 self.assertEqual(self.named(destination, "cover.jpg"), ["cover.jpg"])
-                self.assertEqual((destination / "cover.jpg").read_bytes(), FRONT)
+                self.assertEqual((destination / "cover.jpg").read_bytes(), SQUARE_FRONT)
                 if plan.source != plan.destination:
                     self.assertFalse(album.exists(), f"the old folder is still there: {builders.tree(album)}")
 

@@ -82,7 +82,11 @@ No field credits whoever ripped, encoded or uploaded the file, or links to where
 
 `cover.jpg` is the front cover and every album has one. The same image is embedded in every track as the front cover picture, resized to at most 1200 px on the long side so a big scan doesn't get copied into every file. `cover.jpg` stays at full size.
 
-Everything else the Cover Art Archive has for the release is kept beside it: `back.jpg`, `booklet-01.jpg`, `medium.jpg` (`medium-1.jpg`, `medium-2.jpg` when there are several), `tray.jpg`, `spine.jpg`, `obi.jpg`, and so on. A second image of the same type is numbered.
+An image passes as a cover when it is square enough (width over height between 0.9 and 1.1) and its shorter side is at least 500 px. The Cover Art Archive's front is the cover when it passes. Failing that, the first local cover that passes is. A front the archive types as anything but Front, Booklet or Sticker never passes, whatever its size. Where both an archive front and a local cover exist and neither passes, the one that fails fewer of those tests (shape, size and, for the archive's front, its type) wins, then the one with the longer shorter side, then the archive's, and the album is held with both sizes named. Where only one of them exists, it is the cover whether or not it passes, and nothing is held. A release front that fails never sends the album to the release group's front.
+
+A local `front.*` is never deleted, moved or renamed: it is usually a scan of the booklet's front, and it is often not square. Where it is the cover, its image is copied into `cover.jpg` and `front.*` stays. Where the cover is a local `folder`, `album` or `art` image, it becomes `cover.jpg` and the original is removed.
+
+Everything else the Cover Art Archive has for the release is kept beside it: `back.jpg`, `booklet-01.jpg`, `medium.jpg` (`medium-1.jpg`, `medium-2.jpg` when there are several), `tray.jpg`, `spine.jpg`, `obi.jpg`, and so on. A second image of the same type is numbered. An image whose bytes, as they would be written, equal a file the album folder already has, or one saved before it from the archive, is not saved again, PDFs included.
 
 A PDF from the Cover Art Archive is kept in the album folder as `booklet.pdf` (`booklet-1.pdf`, `booklet-2.pdf` when there are several) and is never embedded.
 

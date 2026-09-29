@@ -19,6 +19,7 @@ same `edits` dict either way, so the two give the same `Plan.to_json()`.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from musiclib import ascii as ascii_
 from musiclib import check, mapping, names
@@ -78,8 +79,10 @@ def _dedupe(items) -> list:
     return out
 
 
-def _check_problems(plan: Plan) -> list[str]:
-    return [f"{v.rule}: {v.detail}" for v in check.check_album(state_from_plan(plan))]
+def _check_problems(plan: Plan, edition: str | None) -> list[str]:
+    """`check`'s verdict on `plan`; a plan carrying `edition` has given its own folder suffix."""
+    return [f"{v.rule}: {v.detail}"
+            for v in check.check_album(state_from_plan(plan), suffix_given=edition is not None)]
 
 
 def _value(target: dict, field: str, family: str) -> str | None:
@@ -91,24 +94,30 @@ def _value(target: dict, field: str, family: str) -> str | None:
 
 
 def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs: list[TrackPair],
-                          family_by_source: dict[str, str], touched: set[str], edition: str | None) -> None:
+                          family_by_source: dict[str, str], touched: set[str], edition: str | None,
+                          artist_name: str | None) -> None:
     """Recompute `plan.destination` and every file's destination the way `plan_album` does.
 
     Read back off the (already edited) targets rather than off `release`,
     so an edit and the engine's own value are named the same way; only the
     artist folder falls back to `release` at all, and only when an edit
-    touched `albumartist`.
+    touched `albumartist` or `albumartistsort`.
+
+    `artist_name` is the name `plan_album` builds the folder from, which
+    `ALBUMARTIST` (the credited name) is not always. An edit to
+    `albumartistsort` alone pairs the edited sort name with it.
     """
     first = plan.files[0]
     family0 = family_by_source[first.source]
 
     old_letter, old_artist_folder, _old_album_folder = (plan.destination.split("/", 2) + ["", ""])[:3]
 
-    # Only an edit to `albumartist` itself says the owner wants another
-    # folder: the artist tags hold the credited name, which the folder does
-    # not always use, so a sort-name edit leaves it be.
-    if "albumartist" in touched:
-        name = _value(first.target, "albumartist", family0) or ""
+    sort_name_only = "albumartistsort" in touched and artist_name is not None
+    if "albumartist" in touched or sort_name_only:
+        if "albumartist" in touched:
+            name = _value(first.target, "albumartist", family0) or ""
+        else:
+            name = artist_name
         sort_name = _value(first.target, "albumartistsort", family0)
         compilation = is_compilation(release)
         artist_folder = names.artist_folder(name, sort_name, known=True, compilation=compilation)
@@ -135,7 +144,8 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs:
 
 
 def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs: list[TrackPair],
-             family_by_source: dict[str, str], unit: Unit, edition: str | None = None) -> Plan:
+             family_by_source: dict[str, str], unit: Unit, edition: str | None,
+             artist_name: str | None, created: Sequence[str] = ()) -> Plan:
     """`plan`, with `edits` laid over it, mutated and returned.
 
     Each edited neutral field replaces the real key `mapping.PICARD` maps it
@@ -146,7 +156,10 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
     with the tag it is supposed to follow.
 
     `edition` is the folder suffix the plan already carries, kept when an
-    edit re-derives the folder.
+    edit re-derives the folder. `artist_name` is the artist's current name,
+    ASCII-converted as `plan_album` does (see `_rederive_destination`).
+    `created` is the earlier job's images `plan_album` was given, so the
+    second sort deletes them as the first did.
 
     A destination that moves also re-sorts `unit`'s other files exactly as
     `plan_album` does: whether the existing cover.jpg is a deletion or a file
@@ -159,7 +172,7 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
     if not edits:
         return plan
 
-    before_check = set(_check_problems(plan))
+    before_check = set(_check_problems(plan, edition))
     kept_problems = [p for p in plan.problems if p not in before_check]
 
     by_position = {position_key(pair): file_plan for pair, file_plan in zip(pairs, plan.files)}
@@ -180,13 +193,12 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
         file_plan.target = target
 
     if touched:
-        _rederive_destination(plan, release, release_group, pairs, family_by_source, touched, edition)
+        _rederive_destination(plan, release, release_group, pairs, family_by_source, touched, edition, artist_name)
         image_names = {"cover.jpg"} | {name.casefold() for name in plan.images}
         plan.deletions, plan.extras, plan.kept = sort_others(
-            unit, image_names, moving=(plan.source != plan.destination),
-            consumed=plan.consumed)
+            unit, image_names, plan.source != plan.destination, plan.consumed, created)
 
-    plan.problems = _dedupe(kept_problems + _check_problems(plan))
+    plan.problems = _dedupe(kept_problems + _check_problems(plan, edition))
     return plan
 
 

@@ -307,13 +307,18 @@ class VariousArtists(ArtistTestCase):
 
 
 class NoArtistTags(ArtistTestCase):
-    def test_files_with_no_artist_or_album_artist_tag_are_review(self) -> None:
-        # Nothing on the files to agree or disagree with. Only the status is
-        # the criterion's; it names no reason.
-        release = credited_release(mbid("a1"), credit(("Nine Inch Nails", "", NIN),))
-        result, _ = self.searched(self.files(), release)
-        self.assertEqual(result.status, "review")
-        self.assertEqual([c.release_id for c in result.candidates], [mbid("a1")])
+    def test_files_with_no_artist_or_album_artist_tag_are_review_with_no_reason(self) -> None:
+        # Nothing on the files to agree or disagree with, so `artist does not
+        # agree` would tell the owner something untrue. Various Artists is
+        # here too: files with no album artist agree with it when their track
+        # artists differ, and files with no track artist do not differ.
+        for name, credited in (("one artist", credit(("Nine Inch Nails", "", NIN),)),
+                               ("Various Artists", credit(("Various Artists", "", VARIOUS),))):
+            with self.subTest(name):
+                self.forget()
+                result, _ = self.searched(self.files(), credited_release(mbid("a1"), credited))
+                self.assertEqual((result.status, result.reason), ("review", None))
+                self.assertEqual([c.release_id for c in result.candidates], [mbid("a1")])
 
 
 # --- criterion 49: the tagged path ----------------------------------------------

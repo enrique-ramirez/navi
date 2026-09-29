@@ -26,10 +26,12 @@ from mutagen.flac import FLAC, Picture
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggvorbis import OggVorbis
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from musiclib import caa, check, images, mb
+from musiclib.batch.identify import Clients, plan_entry, rebuild
 from musiclib.cache import Cache
+from musiclib.units import pair, position_key
 from tests import builders
 from tests.test_check import (_names, _Planning, _plan_album, _release, _release_group, _rip, _Services,
                               _write_album)
@@ -237,9 +239,13 @@ NO_FRONT = ("no front cover: not in the Cover Art Archive for the release or its
 
 
 class NoFrontInTheArchive(unittest.TestCase):
-    def test_the_archive_front_replaces_the_folders_cover(self) -> None:
-        plan = images.plan_images(CAA_IMAGES, download, local=[("cover.jpg", builders.jpeg(10, 10))])
-        self.assertEqual(plan.files["cover.jpg"], BODIES[by_id(1003)["image"]])
+    def test_an_archive_front_that_passes_replaces_the_folders_cover(self) -> None:
+        # The fixture's own front is 100 by 50 and fails the cover bar,
+        # so the front here is swapped for a square one that passes.
+        front = builders.jpeg(800, 800)
+        plan = images.plan_images(CAA_IMAGES, {**BODIES, by_id(1003)["image"]: front}.__getitem__,
+                                  local=[("cover.jpg", builders.jpeg(10, 10))])
+        self.assertEqual(plan.files["cover.jpg"], front)
 
     def test_the_folders_cover_is_kept(self) -> None:
         existing = builders.jpeg(10, 10)
@@ -440,12 +446,14 @@ def webp(width: int, height: int) -> bytes:
     return out.getvalue()
 
 
-RELEASE_FRONT = ("Front", f"https://coverartarchive.org/release/{builders.RELEASE_ID}/1.jpg", builders.jpeg(301, 301))
+# Both fronts pass the cover bar (square, 500 px or more), so a front
+# that beats a folder image here beats it by rank, not by the bar.
+RELEASE_FRONT = ("Front", f"https://coverartarchive.org/release/{builders.RELEASE_ID}/1.jpg", builders.jpeg(601, 601))
 RELEASE_BACK = ("Back", f"https://coverartarchive.org/release/{builders.RELEASE_ID}/2.jpg", builders.jpeg(302, 302))
 # The release-group endpoint lists another release's images, so its URLs
 # name that release, not the one being planned.
 OTHER_RELEASE = "1a0b0c0d-0000-4000-8000-0000000000b9"
-GROUP_FRONT = ("Front", f"https://coverartarchive.org/release/{OTHER_RELEASE}/7.jpg", builders.jpeg(401, 401))
+GROUP_FRONT = ("Front", f"https://coverartarchive.org/release/{OTHER_RELEASE}/7.jpg", builders.jpeg(701, 701))
 GROUP_BACK = ("Back", f"https://coverartarchive.org/release/{OTHER_RELEASE}/8.jpg", builders.jpeg(402, 402))
 GROUP_BOOKLET = ("Booklet", f"https://coverartarchive.org/release/{OTHER_RELEASE}/9.jpg", builders.jpeg(403, 403))
 NOT_AN_IMAGE = b"<!DOCTYPE html><html><title>Service Temporarily Unavailable</title></html>"
@@ -455,7 +463,8 @@ class Archives:
     """MusicBrainz as `test_check._Services` answers it, and both Cover Art Archive listings.
 
     `release_images` and `group_images` are `(type, url, bytes)` for each
-    image the release's and the release group's listing hold, in order. An empty
+    image the release's and the release group's listing hold, in order; a
+    tuple of types in place of one gives the image all of them. An empty
     listing is the archive's 404; so is any URL neither names.
     """
 
@@ -477,9 +486,11 @@ class Archives:
             if not listing:
                 return 404, b"Not Found"
             return 200, json.dumps({"images": [
-                {"id": n, "types": [kind], "front": kind == "Front", "back": kind == "Back",
+                {"id": n, "types": types, "front": "Front" in types, "back": "Back" in types,
                  "image": image_url, "thumbnails": {}}
-                for n, (kind, image_url, _data) in enumerate(listing, start=1)]}).encode()
+                for n, (types, image_url) in enumerate(
+                    ((list(kind) if isinstance(kind, tuple) else [kind], image_url)
+                     for kind, image_url, _data in listing), start=1)]}).encode()
         for listing in self.listings.values():
             for _kind, image_url, data in listing:
                 if url == image_url:
@@ -487,22 +498,35 @@ class Archives:
         return 404, b"Not Found"
 
 
+#: Over the 64 MiB a plan reads of a folder file to compare its bytes.
+LARGE = 65 * 1024 * 1024
+
+
 class _FrontPlanning(_Planning):
     TITLES = ["Plainsong", "Pictures of You"]
 
-    def plan_rip(self, local: dict[str, bytes], **archive):
-        """A rip with no cover of its own but `local`'s files, planned against `archive`."""
+    def plan_rip(self, local: dict[str, bytes], *, large: dict[str, bytes] | None = None, **archive):
+        """A rip with no cover of its own but `local`'s files, planned against `archive`.
+
+        Each of `large` is its bytes followed by a sparse tail to `LARGE`.
+        """
         root = self.library()
         album = _rip(root, self.TITLES, cover=False)
         for name, data in local.items():
             (album / name).parent.mkdir(parents=True, exist_ok=True)
             (album / name).write_bytes(data)
+        for name, head in (large or {}).items():
+            with open(album / name, "wb") as handle:
+                handle.write(head)
+                handle.truncate(LARGE)
         release = _release(self.TITLES)
         services = self.archives = Archives(release, **archive)
         cache = Cache(Path(tempfile.mkdtemp(prefix="cache-", dir=self.tmp)))
         client = mb.MusicBrainz(cache, transport=services, clock=lambda: 0.0, sleep=lambda s: None)
         art = caa.CoverArt(cache, transport=services)
-        return _plan_album(self.unit(root, album), release, client, art, status="auto")
+        # Kept for a case that plans the same rip again through the batch.
+        self.root, self.unit_, self.release, self.client, self.art = root, self.unit(root, album), release, client, art
+        return _plan_album(self.unit_, release, client, art, status="auto")
 
 
 class TheFrontFallsBack(_FrontPlanning):
@@ -630,7 +654,9 @@ class ADownloadThatIsNotAnImage(_FrontPlanning):
         # The release has a front, so the release group is never asked; a
         # broken download is the archive failing, not the front being missing.
         # Falling back would plan a good-looking cover from another release
-        # and hide the problem that holds the album.
+        # and hide the problem that holds the album. The folder image passes
+        # the cover bar, so "the first local cover that passes" must not
+        # reach it either.
         plan = self.plan_rip({"folder.jpg": builders.jpeg(501, 501)},
                              release_images=[("Front", RELEASE_FRONT[1], NOT_AN_IMAGE)],
                              group_images=[GROUP_FRONT])
@@ -709,7 +735,7 @@ class APdfFromTheArchive(_FrontPlanning):
         plan = self.plan_rip({}, release_images=[RELEASE_FRONT, ("Booklet", RELEASE_PDF, PDF_1)])
         self.assertEqual(list(plan.problems), [])
         self.assertEqual(plan.images, {"cover.jpg": RELEASE_FRONT[2], "booklet.pdf": PDF_1})
-        # The front is 301 px, under the 1200 px limit, so what every track
+        # The front is 601 px, under the 1200 px limit, so what every track
         # carries is the front itself.
         self.assertEqual(plan.embedded, RELEASE_FRONT[2])
 
@@ -766,6 +792,18 @@ class APdfFromTheArchive(_FrontPlanning):
                 self.assertEqual(plan.problems, [])
                 self.assertEqual(plan.files, {"cover.jpg": RELEASE_FRONT[2], "booklet.pdf": PDF_1})
 
+    def test_a_pdf_typed_raw_unedited_or_watermark_is_skipped_like_any_image_of_those_types(self) -> None:
+        # The two types every archive image is skipped for apply whatever the file is. The PDF check reads bytes before types,
+        # so a skip applied only to pictures would still save these.
+        front = caa_image(1, ["Front"], f"https://coverartarchive.org/release/{builders.RELEASE_ID}/1.jpg",
+                          front=True)
+        for types in (["Raw/Unedited"], ["Back", "Watermark"]):
+            with self.subTest(types=types):
+                bodies = {front["image"]: RELEASE_FRONT[2], RELEASE_PDF: PDF_1}
+                plan = images.plan_images([front, caa_image(3, types, RELEASE_PDF)], bodies.__getitem__)
+                self.assertEqual(plan.problems, [])
+                self.assertEqual(plan.files, {"cover.jpg": RELEASE_FRONT[2]})
+
     def test_a_pdf_front_is_no_front_so_the_release_groups_front_is_the_cover_and_the_pdf_is_still_saved(
             self) -> None:
         plan = self.plan_rip({"folder.jpg": builders.jpeg(501, 501)},
@@ -795,6 +833,510 @@ class APdfFromTheArchive(_FrontPlanning):
         self.assertEqual(list(plan.problems), [])
         self.assertEqual(plan.images, {"cover.jpg": mine, "booklet.pdf": PDF_1})
         self.assertIn("folder.jpg", _names(plan.deletions))
+
+
+def _needs(test: unittest.TestCase, name: str):
+    """`images.<name>`, or a failure saying it is missing, so one absent name fails its own tests only."""
+    found = getattr(images, name, None)
+    if found is None:
+        test.fail(f"musiclib.images has no {name} yet")
+    return found
+
+
+def encoded(image: Image.Image, kind: str = "PNG") -> bytes:
+    out = io.BytesIO()
+    image.save(out, kind)
+    return out.getvalue()
+
+
+def scene(width: int, height: int) -> Image.Image:
+    """Shapes of different brightness on a pale ground, drawn in proportion, so any size is the same picture."""
+    image = Image.new("RGB", (width, height), (230, 220, 200))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0.05 * width, 0.1 * height, 0.45 * width, 0.6 * height), fill=(20, 30, 120))
+    draw.ellipse((0.5 * width, 0.45 * height, 0.95 * width, 0.95 * height), fill=(150, 20, 20))
+    draw.polygon([(0.6 * width, 0.05 * height), (0.95 * width, 0.05 * height), (0.6 * width, 0.35 * height)],
+                 fill=(10, 10, 10))
+    return image
+
+
+def stripes(width: int, height: int) -> Image.Image:
+    """Dark and pale horizontal bands: a different picture from `scene`."""
+    image = Image.new("RGB", (width, height), (240, 240, 240))
+    draw = ImageDraw.Draw(image)
+    for band in range(0, 8, 2):
+        draw.rectangle((0, band * height / 8, width, (band + 1) * height / 8), fill=(15, 15, 15))
+    return image
+
+
+def halves(left: tuple[int, int, int], right: tuple[int, int, int], size: int = 800) -> bytes:
+    image = Image.new("RGB", (size, size), right)
+    image.paste(left, (0, 0, size // 2, size))
+    return encoded(image)
+
+
+WHITE, BLACK = (255, 255, 255), (0, 0, 0)
+# Grey 117 against 105, and 76 against 59.
+GREEN, MAGENTA = (0, 200, 0), (255, 0, 255)
+RED, DARK_GREEN = (255, 0, 0), (0, 100, 0)
+
+
+class AverageHash(unittest.TestCase):
+    """64 bits, one per pixel of the image in grey at 8 by 8, set above the mean."""
+
+    def hash(self, data: bytes) -> int:
+        return _needs(self, "average_hash")(data)
+
+    def distance(self, a: int, b: int) -> int:
+        return _needs(self, "hash_distance")(a, b)
+
+    def test_the_distance_is_the_number_of_bits_that_differ(self) -> None:
+        for a, b, expected in ((0, 0, 0), (0b1010, 0b0110, 2), (0, 2 ** 64 - 1, 64), (2 ** 63, 1, 2)):
+            with self.subTest(a=a, b=b):
+                self.assertEqual(self.distance(a, b), expected)
+                self.assertEqual(self.distance(b, a), expected)
+
+    def test_a_bit_is_set_only_where_the_pixel_is_above_the_mean(self) -> None:
+        # Bit order is the implementation's, so only the count of set bits is
+        # read. A flat image has no pixel above its mean: counting "at or
+        # above" sets all 64. Eight bands, darkest at the top, set the four
+        # lower rows against the mean of all 64; a mean taken from fewer
+        # pixels sets more.
+        quadrant = Image.new("RGB", (800, 800), BLACK)
+        quadrant.paste(WHITE, (0, 0, 400, 400))
+        bands = Image.new("RGB", (800, 800))
+        for row in range(8):
+            bands.paste((row * 32,) * 3, (0, row * 100, 800, row * 100 + 100))
+        for case, data, bits in (("flat", encoded(Image.new("RGB", (800, 800), (90, 90, 90))), 0),
+                                 ("left half white", halves(WHITE, BLACK), 32),
+                                 ("top-left quarter white", encoded(quadrant), 16),
+                                 ("eight bands, brighter downwards", encoded(bands), 32)):
+            with self.subTest(case):
+                value = self.hash(data)
+                self.assertTrue(0 <= value < 2 ** 64, value)
+                self.assertEqual(bin(value).count("1"), bits)
+
+    def test_brightness_is_read_in_grey_not_from_one_colour_channel_or_their_average(self) -> None:
+        # In each pair the left side is the brighter in grey, so each hashes
+        # like white beside black. Green is darker than magenta in red, in
+        # blue and on average; red is darker than dark green in green. Any
+        # one channel, or the plain mean of the three, reads a pair backwards.
+        reference = self.hash(halves(WHITE, BLACK))
+        for left, right in ((GREEN, MAGENTA), (RED, DARK_GREEN)):
+            with self.subTest(left=left, right=right):
+                self.assertEqual(self.distance(self.hash(halves(left, right)), reference), 0)
+                self.assertEqual(self.distance(self.hash(halves(right, left)), reference), 64)
+
+    def test_an_image_is_0_from_itself_and_10_or_less_from_its_250_px_thumbnail(self) -> None:
+        # The archive's 250 px thumbnail of a front is set against the full
+        # size cover in the folder, so the two must come out
+        # close though the bytes, size and format all differ.
+        full = scene(1000, 1000)
+        thumbnail = full.resize((250, 250), Image.LANCZOS)
+        original = self.hash(encoded(full, "JPEG"))
+        self.assertEqual(self.distance(original, self.hash(encoded(full, "JPEG"))), 0)
+        self.assertLessEqual(self.distance(original, self.hash(encoded(thumbnail, "JPEG"))), 10)
+
+    def test_two_different_pictures_are_more_than_10_apart(self) -> None:
+        self.assertGreater(
+            self.distance(self.hash(encoded(scene(600, 600))), self.hash(encoded(stripes(600, 600)))), 10)
+
+
+class TheBarACoverMustPass(unittest.TestCase):
+    """Width over height from 0.9 to 1.1, both ends included, and 500 px on the shorter side."""
+
+    def passes(self, width: int, height: int, types=None) -> bool:
+        return _needs(self, "passes")(width, height, types)
+
+    def test_square_enough_and_500_px_on_the_shorter_side_passes(self) -> None:
+        for width, height in ((500, 500), (550, 500), (500, 550), (540, 600), (1000, 1000)):
+            with self.subTest(size=(width, height)):
+                self.assertIs(self.passes(width, height), True)
+
+    def test_too_small_or_too_far_from_square_fails(self) -> None:
+        # 551 by 500 and 539 by 600 sit just outside 1.1 and 0.9. The rest are
+        # the owner's: Final Fantasy V's book front and Born to Die - The Remix
+        # EP on shape, 10cc's Windows in the Jungle on size.
+        for width, height in ((499, 499), (551, 500), (539, 600), (1600, 646), (2497, 3483), (317, 320)):
+            with self.subTest(size=(width, height)):
+                self.assertIs(self.passes(width, height), False)
+
+    def test_an_archive_front_typed_anything_but_front_booklet_or_sticker_fails_whatever_its_size(self) -> None:
+        # The Final Fantasy V and VI book fronts are typed `Front, Medium`:
+        # a disc photographed as the front.
+        for types, expected in ((["Front"], True), (["Front", "Booklet"], True), (["Front", "Sticker"], True),
+                                (["Front", "Medium"], False), (["Front", "Back"], False),
+                                # No types: judged on size and shape alone
+                                # (an assumption the doc does not state).
+                                ([], True)):
+            with self.subTest(types=types):
+                self.assertIs(self.passes(1000, 1000, types), expected)
+
+
+def shade(width: int, height: int, grey: int) -> bytes:
+    """A flat JPEG, so two images of one size can still be told apart by their bytes."""
+    return encoded(Image.new("RGB", (width, height), (grey, grey, grey)), "JPEG")
+
+
+def describe(data: bytes | None) -> str:
+    if data is None:
+        return "no image"
+    with Image.open(io.BytesIO(data)) as image:
+        width, height = image.size
+        return f"{width} by {height}, grey {image.convert('L').getpixel((0, 0))}"
+
+
+def assert_image(test: unittest.TestCase, actual: bytes | None, expected: bytes) -> None:
+    """The same bytes, and a failure that names each image by size and shade rather than printing JPEG."""
+    if actual != expected:
+        test.fail(f"got {describe(actual)}, expected {describe(expected)}")
+
+
+ARCHIVE_BASE = f"https://coverartarchive.org/release/{builders.RELEASE_ID}"
+
+
+def archive(*entries: tuple[list[str], bytes]) -> tuple[list[dict], dict[str, bytes]]:
+    """A release listing, the first entry marked front, and the bytes behind each address."""
+    listing, bodies = [], {}
+    for number, (types, data) in enumerate(entries, start=1):
+        url = f"{ARCHIVE_BASE}/{number}.jpg"
+        listing.append(caa_image(number, types, url, front=number == 1 and "Front" in types))
+        bodies[url] = data
+    return listing, bodies
+
+
+class WhichImageBecomesTheCover(_FrontPlanning):
+    """The archive's front only when it passes the bar."""
+
+    def cover(self, archive_front: bytes | None, local: list[tuple[str, bytes]], types=("Front",)) -> bytes:
+        listing, bodies = archive((list(types), archive_front)) if archive_front is not None else ([], {})
+        return images.plan_images(listing, bodies.__getitem__, local=local).files.get("cover.jpg")
+
+    def test_an_archive_front_that_passes_beats_a_folder_cover_that_passes(self) -> None:
+        front = shade(600, 600, 10)
+        assert_image(self, self.cover(front, [("folder.jpg", shade(900, 900, 20))]), front)
+
+    def test_a_folder_cover_that_passes_beats_an_archive_front_that_fails(self) -> None:
+        # Born to Die - The Remix EP's archive front is 1600 by 646.
+        mine = shade(600, 600, 20)
+        assert_image(self, self.cover(shade(1600, 646, 10), [("folder.jpg", mine)]), mine)
+
+    def test_the_first_folder_cover_that_passes_wins_not_the_first_folder_cover(self) -> None:
+        # `cover` comes before `front` and `folder` in the local-cover order,
+        # and fails; `front` passes and comes before `folder`, which is larger.
+        # With no archive front at all the same holds.
+        mine = shade(600, 600, 30)
+        local = [("cover.jpg", shade(300, 300, 20)), ("front.jpg", mine), ("folder.jpg", shade(900, 900, 40))]
+        for case, front in (("a failing archive front", shade(1600, 646, 10)), ("no archive front", None)):
+            with self.subTest(case):
+                assert_image(self, self.cover(front, local), mine)
+
+    def test_an_archive_front_typed_front_medium_loses_to_a_folder_cover_that_passes(self) -> None:
+        mine = shade(600, 600, 20)
+        for types, winner in ((("Front", "Medium"), mine), (("Front", "Booklet"), None)):
+            with self.subTest(types=types):
+                front = shade(1000, 1000, 10)
+                assert_image(self, self.cover(front, [("folder.jpg", mine)], types), winner or front)
+
+    def test_with_both_failing_the_one_failing_fewer_tests_then_the_longer_shorter_side_then_the_archives(
+            self) -> None:
+        # Each case is built so the next rule down would pick the other image:
+        # the image failing fewer tests has the shorter shorter side, and the
+        # longer shorter side is the folder's.
+        url = RELEASE_FRONT[1]
+        cases = {
+            "the folder's fails fewer": (shade(1600, 480, 10), shade(300, 300, 20), "folder"),
+            "the archive's fails fewer": (shade(300, 300, 10), shade(1000, 480, 20), "archive"),
+            "one test each, the folder's shorter side is longer": (shade(400, 400, 10), shade(450, 450, 20),
+                                                                   "folder"),
+            "one test each, the archive's shorter side is longer": (shade(450, 450, 10), shade(400, 400, 20),
+                                                                    "archive"),
+            "a tie on both": (shade(400, 400, 10), shade(400, 400, 20), "archive"),
+        }
+        for case, (front, mine, winner) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip({"folder.jpg": mine}, release_images=[("Front", url, front)])
+                assert_image(self, plan.images.get("cover.jpg"), front if winner == "archive" else mine)
+                (fw, fh), (mw, mh) = size(front), size(mine)
+                self.assertIn(f"cover: neither passes: {url} ({fw} by {fh}), folder.jpg ({mw} by {mh})",
+                              plan.holds)
+                self.assertEqual(plan.status, "review")
+                self.assertEqual(list(plan.problems), [])
+
+    def test_with_both_failing_a_wrong_type_counts_as_a_failed_test_and_the_first_folder_cover_is_compared(
+            self) -> None:
+        # The cover tests are three, where the doc says two: counting only shape and
+        # size ties these at one each and the archive's longer side wins.
+        # And of several folder covers, none passing, only the first in
+        # the local-cover order is weighed: `folder.jpg` would beat the front.
+        url = RELEASE_FRONT[1]
+        front, mine = shade(450, 450, 10), shade(300, 300, 20)
+        cases = {
+            "a front typed Front, Medium": (("Front", "Medium"), {"folder.jpg": mine}, "folder.jpg", mine),
+            "several folder covers": ("Front", {"cover.jpg": shade(300, 300, 30), "folder.jpg": shade(480, 480, 40)},
+                                      "cover.jpg", front),
+        }
+        for case, (types, local, compared, winner) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip(local, release_images=[(types, url, front)])
+                assert_image(self, plan.images.get("cover.jpg"), winner)
+                (mw, mh) = size(local[compared])
+                self.assertIn(f"cover: neither passes: {url} (450 by 450), {compared} ({mw} by {mh})", plan.holds)
+
+    def test_a_lone_image_is_the_cover_whether_or_not_it_passes_and_nothing_is_held(self) -> None:
+        front, mine = shade(1600, 646, 10), shade(300, 300, 20)
+        cases = {
+            "only an archive front": ({}, dict(release_images=[("Front", RELEASE_FRONT[1], front)]), front),
+            "only a folder cover": ({"folder.jpg": mine}, dict(release_images=[RELEASE_BACK]), mine),
+        }
+        for case, (local, archives, expected) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip(local, **archives)
+                assert_image(self, plan.images.get("cover.jpg"), expected)
+                self.assertEqual(plan.holds, [])
+                self.assertEqual(plan.status, "auto")
+
+    def test_a_release_front_that_fails_never_sends_the_system_to_the_release_groups_front(self) -> None:
+        # The release group's front passes, so reaching it would look like the
+        # better cover. It belongs to another release of the album.
+        front = shade(1600, 646, 10)
+        for case, local, expected in (("no folder cover", {}, front),
+                                      ("a folder cover that passes", {"folder.jpg": shade(600, 600, 20)}, None)):
+            with self.subTest(case):
+                plan = self.plan_rip(local, release_images=[("Front", RELEASE_FRONT[1], front)],
+                                     group_images=[GROUP_FRONT])
+                assert_image(self, plan.images.get("cover.jpg"), expected or local.get("folder.jpg"))
+                self.assertEqual([url for url in self.archives.asked if "/release-group/" in url], [])
+
+
+class AFrontInTheFolderStays(_FrontPlanning):
+    """`front.*` is copied into `cover.jpg` and kept; `folder`, `album` and `art` are consumed."""
+
+    def test_a_front_that_becomes_the_cover_is_copied_and_kept_in_any_case_and_extension(self) -> None:
+        # It is usually a scan of the booklet's front, and jobs deleted 16 of
+        # them when it was consumed like `folder.jpg`.
+        for name, data in (("front.jpg", shade(600, 600, 20)), ("Front.PNG", png(600, 600, (0, 128, 0, 255)))):
+            with self.subTest(name):
+                plan = self.plan_rip({name: data}, release_images=[RELEASE_BACK])
+                cover = plan.images.get("cover.jpg")
+                self.assertIsNotNone(cover, plan.problems)
+                self.assertEqual(size(cover), (600, 600))
+                self.assertIn(name, _names(plan.kept))
+                self.assertNotIn(name, _names(plan.deletions))
+                self.assertEqual(list(plan.problems), [])
+
+    def test_folder_album_and_art_that_become_the_cover_are_still_consumed(self) -> None:
+        for name in ("folder.jpg", "Album.png", "art.jpeg"):
+            with self.subTest(name):
+                plan = self.plan_rip({name: png(600, 600, (0, 0, 200, 255))}, release_images=[RELEASE_BACK])
+                self.assertIn("cover.jpg", plan.images, plan.problems)
+                self.assertIn(name, _names(plan.deletions))
+                self.assertNotIn(name, _names(plan.kept))
+
+
+PDF_URL = f"{ARCHIVE_BASE}/9.pdf"
+
+
+class ImagesTheFolderAlreadyHas(_FrontPlanning):
+    """An archive image is not saved again when the folder, or the plan, already has its bytes."""
+
+    def test_an_archive_booklet_equal_to_front_jpg_in_the_folder_is_not_saved(self) -> None:
+        # Piano Collections KINGDOM HEARTS: the archive's booklet scans are the
+        # owner's own `front.jpg` and `inside*.jpg`, uploaded.
+        scan = shade(420, 600, 70)
+        other = shade(420, 600, 90)
+        plan = self.plan_rip({"front.jpg": scan},
+                             release_images=[RELEASE_FRONT, ("Booklet", f"{ARCHIVE_BASE}/3.jpg", scan),
+                                             ("Booklet", f"{ARCHIVE_BASE}/4.jpg", other)])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual([name for name, data in plan.images.items() if data == scan], [])
+        # Numbering runs over what is saved, so the
+        # one booklet saved is `-01`, never `-02` beside a gap.
+        self.assertEqual([name for name, data in plan.images.items() if data == other], ["booklet-01.jpg"])
+        self.assertIn("front.jpg", _names(plan.kept))
+
+    def test_two_archive_images_with_equal_bytes_are_saved_once(self) -> None:
+        scan = shade(420, 600, 70)
+        plan = self.plan_rip({}, release_images=[RELEASE_FRONT, ("Booklet", f"{ARCHIVE_BASE}/3.jpg", scan),
+                                                 ("Booklet", f"{ARCHIVE_BASE}/4.jpg", scan)])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual([name for name, data in plan.images.items() if data == scan], ["booklet-01.jpg"])
+
+    def test_an_archive_image_equal_to_the_cover_is_not_saved_again(self) -> None:
+        # The cover is the first image the plan saves,
+        # so a back that is the front uploaded twice is a copy of it.
+        plan = self.plan_rip({}, release_images=[RELEASE_FRONT, ("Back", f"{ARCHIVE_BASE}/3.jpg", RELEASE_FRONT[2]),
+                                                 RELEASE_BACK])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual([name for name, data in plan.images.items() if data == RELEASE_FRONT[2]], ["cover.jpg"])
+        self.assertEqual(plan.images.get("back.jpg"), RELEASE_BACK[2])
+
+    def test_a_file_in_a_disc_folder_is_not_one_the_album_folder_already_has(self) -> None:
+        # "The album folder" is the folder itself, so a
+        # scan kept beside one disc's tracks does not stop the booklet.
+        scan = shade(420, 600, 70)
+        plan = self.plan_rip({"CD1/scan.jpg": scan},
+                             release_images=[RELEASE_FRONT, ("Booklet", f"{ARCHIVE_BASE}/3.jpg", scan)])
+        self.assertEqual(plan.images.get("booklet-01.jpg"), scan)
+
+    def test_an_archive_image_is_not_saved_over_a_file_of_the_same_name_and_front_jpg_is_never_deleted(
+            self) -> None:
+        # A second Front-typed image is named `front.jpg` by the Images rule,
+        # the name of the owner's own scan, which is never deleted,
+        # moved aside or overwritten. The owner's file
+        # wins and the archive's image is not saved. The album moves, where
+        # a name the plan writes is otherwise a deletion.
+        second = shade(420, 600, 90)
+        for name in ("front.jpg", "Front.JPG"):
+            with self.subTest(name):
+                mine = shade(400, 560, 50)
+                plan = self.plan_rip({name: mine},
+                                     release_images=[RELEASE_FRONT, ("Front", f"{ARCHIVE_BASE}/3.jpg", second)])
+                self.assertNotEqual(plan.source, plan.destination)
+                self.assertEqual(list(plan.problems), [])
+                assert_image(self, plan.images.get("cover.jpg"), RELEASE_FRONT[2])
+                self.assertEqual([n for n, data in plan.images.items() if data == second], [])
+                self.assertNotIn("front.jpg", {n.casefold() for n in plan.images})
+                self.assertIn(name, _names(plan.kept))
+                self.assertNotIn(name, _names(plan.deletions))
+
+    def test_the_bytes_compared_are_the_ones_that_would_be_written(self) -> None:
+        # The archive's spine is a PNG and is written as a JPEG. A folder file
+        # equal to that JPEG is the same image; one equal to the PNG as
+        # downloaded is not what would be written, so the spine is still saved.
+        spine = png(64, 32, (0, 128, 0, 255))
+        archives = dict(release_images=[RELEASE_FRONT, ("Spine", f"{ARCHIVE_BASE}/5.png", spine)])
+        written = self.plan_rip({}, **archives).images["spine.jpg"]
+        for case, local, saved in (("the JPEG it becomes", {"spine scan.jpg": written}, False),
+                                   ("the PNG as downloaded", {"spine scan.png": spine}, True)):
+            with self.subTest(case):
+                plan = self.plan_rip(local, **archives)
+                self.assertEqual(list(plan.problems), [])
+                self.assertIs("spine.jpg" in plan.images, saved)
+
+    def test_a_pdf_equal_to_a_file_in_the_folder_or_to_one_saved_before_it_is_not_saved(self) -> None:
+        cases = {
+            "in the folder": ({"liner notes.pdf": PDF_1}, [("Booklet", PDF_URL, PDF_1)]),
+            "saved before it": ({}, [("Booklet", PDF_URL, PDF_1), ("Booklet", f"{ARCHIVE_BASE}/10.pdf", PDF_1)]),
+        }
+        for case, (local, pdfs) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip(local, release_images=[RELEASE_FRONT, *pdfs])
+                self.assertEqual(list(plan.problems), [])
+                expected = 0 if local else 1
+                self.assertEqual(len([name for name, data in plan.images.items() if data == PDF_1]), expected)
+
+    def test_cover_jpg_is_written_even_when_it_equals_front_jpg_and_front_jpg_stays(self) -> None:
+        # The cover is the one archive image the folder may already hold:
+        # without `cover.jpg` the album has no cover at all.
+        front = RELEASE_FRONT[2]
+        plan = self.plan_rip({"front.jpg": front}, release_images=[RELEASE_FRONT])
+        assert_image(self, plan.images.get("cover.jpg"), front)
+        self.assertIn("front.jpg", _names(plan.kept))
+        self.assertNotIn("front.jpg", _names(plan.deletions))
+        self.assertEqual(list(plan.problems), [])
+
+
+class AFileTooLargeToCompare(_FrontPlanning):
+    """A folder file too large for the plan to read.
+
+    Its bytes are never compared, but its name is still the owner's: it
+    stops an archive image of that name as a small file does, so the plan
+    neither writes over it nor deletes it when the album moves. Each case
+    plans the rip twice, with the owner's file small and large, and wants
+    the same images both times.
+    """
+
+    def assert_kept_like_a_small_file(self, name: str, head: bytes, **archive) -> None:
+        small = self.plan_rip({name: head}, **archive)
+        self.assertNotIn(name, {n.casefold() for n in small.images}, "the small case no longer blocks the name")
+        plan = self.plan_rip({}, large={name: head}, **archive)
+        self.assertNotEqual(plan.source, plan.destination)
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(sorted(plan.images), sorted(small.images))
+        self.assertNotIn(name, {n.casefold() for n in plan.images})
+        self.assertIn(name, _names(plan.kept))
+        self.assertNotIn(name, _names(plan.deletions))
+
+    def test_an_owners_booklet_pdf_too_large_to_compare_is_kept_and_the_archives_is_not_saved_over_it(self) -> None:
+        self.assert_kept_like_a_small_file("booklet.pdf", PDF_2, release_images=[RELEASE_FRONT, ("Booklet", PDF_URL, PDF_1)])
+
+    def test_an_owners_front_jpg_too_large_to_compare_is_kept_and_no_archive_image_is_saved_as_front_jpg(self) -> None:
+        # The archive's second Front-typed image is named `front.jpg`.
+        self.assert_kept_like_a_small_file("front.jpg", shade(400, 560, 50),
+                                           release_images=[RELEASE_FRONT, ("Front", f"{ARCHIVE_BASE}/3.jpg",
+                                                                            shade(420, 600, 90))])
+
+
+class CopiesAnEarlierJobSaved(_FrontPlanning):
+    """A file with an archive image's name, equal to a file of the owner's, is deleted."""
+
+    def test_an_archive_named_copy_of_an_owners_file_is_deleted_and_the_owners_file_kept(self) -> None:
+        # What job `t1` left in Piano Collections KINGDOM HEARTS. The plan
+        # writes none of these names itself: the archive has only a front.
+        # The PDFs are covered too.
+        for copy, owners, data in (("booklet-01.jpg", "inside1.jpg", shade(420, 600, 70)),
+                                   ("back.jpg", "tray card.jpg", shade(420, 600, 70)),
+                                   ("medium-2.jpg", "cd.jpg", shade(420, 600, 70)),
+                                   ("booklet.pdf", "liner notes.pdf", PDF_1),
+                                   ("booklet-2.pdf", "scan.pdf", PDF_2)):
+            with self.subTest(copy):
+                plan = self.plan_rip({copy: data, owners: data}, release_images=[RELEASE_FRONT])
+                self.assertIn(copy, _names(plan.deletions))
+                self.assertIn(owners, _names(plan.kept))
+                self.assertNotIn(owners, _names(plan.deletions))
+
+    def test_equal_files_are_left_alone_unless_one_has_an_archive_name_and_the_other_does_not(self) -> None:
+        # `cover.jpg` is a name the Images rule gives, so a `back.jpg` equal to
+        # it has no owner's file to be a copy of.
+        data = shade(420, 600, 70)
+        for local in ({"back.jpg": data, "booklet-01.jpg": data},
+                      {"inside1.jpg": data, "inside2.jpg": data},
+                      {"cover.jpg": data, "back.jpg": data}):
+            with self.subTest(sorted(local)):
+                plan = self.plan_rip(local, release_images=[RELEASE_FRONT])
+                self.assertEqual(_names(plan.deletions) & (set(local) - {"cover.jpg"}), set())
+
+    def test_cover_jpg_equal_to_front_jpg_deletes_neither(self) -> None:
+        # Both are the owner's. `cover.jpg` is never deleted as a copy, and
+        # `front.jpg` is never deleted at all.
+        data = shade(600, 600, 70)
+        plan = self.plan_rip({"cover.jpg": data, "front.jpg": data}, release_images=[RELEASE_BACK])
+        assert_image(self, plan.images.get("cover.jpg"), data)
+        self.assertNotIn("front.jpg", _names(plan.deletions))
+        self.assertIn("front.jpg", _names(plan.kept))
+
+
+class CopiesInAnAlbumAnEditMoves(_FrontPlanning):
+    """The same deletion on an album an owner's edit moves.
+
+    An edit to `album`, `date` or `albumartist` rebuilds the destination and
+    sorts the rip's other files again for it. That second sort has to delete
+    the same archive-named copies `plan_album` does, in the entry identify
+    writes and in the plan apply rebuilds from it.
+    """
+
+    def test_an_album_edit_that_moves_the_album_still_deletes_the_copy_and_keeps_the_owners_file(self) -> None:
+        data = shade(420, 600, 70)
+        # The archive has only a front, so no plan writes `booklet-01.jpg`
+        # itself. A plan that did would delete the rip's one for moving,
+        # copy or not, and the case would pass without the rule.
+        self.plan_rip({"booklet-01.jpg": data, "inside1.jpg": data}, release_images=[RELEASE_FRONT])
+        root, unit, release = self.root, self.unit_, self.release
+        clients = Clients(mb=self.client, caa=self.art, acoustid=None)
+        memory = {"edits": {release["id"]: {position_key(p): {"album": ["Moved Record"]}
+                                            for p in pair(unit, release)}}}
+        entry, _plan = plan_entry(unit, root, clients, memory, {"action": "repoint", "release": release["id"]}, False)
+        rebuilt = rebuild(unit, root, clients, entry["inputs"])
+
+        for where, destination, deletions, kept in (
+                ("plan_entry", entry["destination"], entry["deletions"], entry["kept"]),
+                ("rebuild", rebuilt.destination, rebuilt.deletions, rebuilt.kept)):
+            with self.subTest(where):
+                self.assertEqual(destination, "C/Cure, The/(2010) Moved Record", "the edit did not move the album")
+                self.assertIn("booklet-01.jpg", _names(deletions))
+                self.assertIn("inside1.jpg", _names(kept))
+                self.assertNotIn("inside1.jpg", _names(deletions))
 
 
 if __name__ == "__main__":
