@@ -23,7 +23,7 @@ from mutagen.id3 import ID3, ID3NoHeaderError
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 
-from musiclib import files, genres, names, residue, tagwrite
+from musiclib import files, genres, mapping, names, residue, tagwrite, units, walk
 
 #: MP3's documented rating: one POPM from this email, on the WMP byte scale.
 _WMP_EMAIL = "Windows Media Player 9 Series"
@@ -32,53 +32,12 @@ _WMP_RATINGS = {1, 64, 128, 196, 255}
 #: The two genres MusicBrainz has no genre for (docs *Tags*, *Genres*).
 _CUSTOM_GENRES = {"video game music", "soundtrack"}
 
-#: Real tag keys per format for the fields *check* judges. Picard's names,
-#: same as `tests.builders.library_tags` and `docs/music-library.md` *Tags*.
-_KEYS: dict[str, dict[str, str]] = {
-    "id3": {
-        "title": "TIT2", "artist": "TPE1", "album": "TALB", "albumartist": "TPE2",
-        "date": "TDRC", "trck": "TRCK", "tpos": "TPOS", "genre": "TCON",
-        "release_id": "TXXX:MusicBrainz Album Id",
-        "releasegroup_id": "TXXX:MusicBrainz Release Group Id",
-        "artist_id": "TXXX:MusicBrainz Artist Id",
-        # UFID's HashKey is "UFID:<owner>"; MusicBrainz's recording ID always
-        # carries this owner string.
-        "recording_id": "UFID:http://musicbrainz.org",
-    },
-    "vorbis": {
-        "title": "title", "artist": "artist", "album": "album", "albumartist": "albumartist",
-        "date": "date", "tracknumber": "tracknumber", "tracktotal": "tracktotal",
-        "discnumber": "discnumber", "disctotal": "disctotal", "genre": "genre",
-        "release_id": "musicbrainz_albumid",
-        "releasegroup_id": "musicbrainz_releasegroupid",
-        "artist_id": "musicbrainz_artistid",
-        "recording_id": "musicbrainz_trackid",
-    },
-    "mp4": {
-        "title": "\xa9nam", "artist": "\xa9ART", "album": "\xa9alb", "albumartist": "aART",
-        "date": "\xa9day", "trkn": "trkn", "disk": "disk", "genre": "\xa9gen",
-        "release_id": "----:com.apple.iTunes:MusicBrainz Album Id",
-        "releasegroup_id": "----:com.apple.iTunes:MusicBrainz Release Group Id",
-        "artist_id": "----:com.apple.iTunes:MusicBrainz Artist Id",
-        "recording_id": "----:com.apple.iTunes:MusicBrainz Track Id",
-    },
-    "asf": {
-        "title": "Title", "artist": "Author", "album": "WM/AlbumTitle", "albumartist": "WM/AlbumArtist",
-        "date": "WM/Year", "tracknumber": "WM/TrackNumber", "discnumber": "WM/PartOfSet",
-        "genre": "WM/Genre",
-        "release_id": "MusicBrainz/Album Id",
-        "releasegroup_id": "MusicBrainz/Release Group Id",
-        "artist_id": "MusicBrainz/Artist Id",
-        "recording_id": "MusicBrainz/Track Id",
-    },
-}
-
-#: (internal name, the label a person reads) for *Every track has*.
+#: (`mapping.PICARD` name, the label a person reads) for *Every track has*.
 _REQUIRED = [
     ("title", "title"), ("artist", "artist"), ("album", "album"),
     ("albumartist", "album artist"), ("date", "date"),
-    ("release_id", "release id"), ("releasegroup_id", "release group id"),
-    ("artist_id", "artist id"), ("recording_id", "recording id"),
+    ("release id", "release id"), ("release group id", "release group id"),
+    ("artist id", "artist id"), ("recording id", "recording id"),
 ]
 
 _DISC_DIR_RE = re.compile(r"^CD\d+$")
@@ -96,7 +55,7 @@ _REMOVED_NAMES = {
     ".ds_store", "thumbs.db", "desktop.ini", ".directory", "icon\r", "albumartsmall.jpg",
 }
 _REMOVED_EXTS = {".cue", ".m3u", ".m3u8", ".sfv", ".accurip", ".ffp", ".md5",
-                 ".nfo", ".url", ".ini", ".ico"}
+                 ".nfo", ".url", ".ini", ".ico", ".lrc"}
 #: Extensions for videos, disc images and CD-ROM software (decision: the doc
 #: names the kinds, not the extensions; `.mp4` is deliberately not here since
 #: the library holds `.mp4` audio too).
@@ -109,8 +68,7 @@ _EXTRA_EXTS = {
 #: cover.jpg's own type plus the other formats the Cover Art Archive and rip
 #: scans turn up in (decision).
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
-#: The other file types that section names: a booklet, a rip log, notes, lyrics.
-_OTHER_KEPT_EXTS = {".pdf", ".log", ".txt", ".lrc"}
+_OTHER_KEPT_EXTS = {".pdf", ".log", ".txt"}
 
 
 class Violation(NamedTuple):
@@ -243,14 +201,13 @@ def read_album(album_dir: Path, root: Path) -> AlbumState:
 
     tracks: list[TrackState] = []
     other_files: list[tuple[str, str]] = []
-    subdirs: list[str] = []
     unreadable: list[tuple[str, str]] = []
-    for entry in sorted(album_dir.rglob("*")):
+    subdirs = [p.name for p in walk.child_dirs(album_dir)]
+    entries, unlistable = walk.album_contents(album_dir)
+    for folder, reason in unlistable:
+        unreadable.append((folder.relative_to(album_dir).as_posix(), reason))
+    for entry in entries:
         entry_rel = PurePosixPath(entry.relative_to(album_dir).as_posix())
-        if entry.is_dir():
-            if len(entry_rel.parts) == 1:
-                subdirs.append(entry_rel.name)
-            continue
         # `files.is_track` is the one place this and `units.units` agree on
         # what a track is: a video-carrying `.mp4` reads its content to say
         # so, which only works while the file is still here to read - the
@@ -279,13 +236,17 @@ def read_album(album_dir: Path, root: Path) -> AlbumState:
 # --- field access --------------------------------------------------------
 
 def _field(track: files.Track, name: str) -> list[str] | None:
-    key = _KEYS.get(track.family, {}).get(name)
+    key = mapping.PICARD[name].get(track.family)
     return None if key is None else track.tags.get(key)
 
 
 def _first(track: files.Track, name: str) -> str | None:
     values = _field(track, name)
     return values[0] if values else None
+
+
+def _number_text(track: files.Track, key_map: dict[str, str]) -> str:
+    return units.first_value(track, key_map) or ""
 
 
 def _int_or_none(value: str | None) -> int | None:
@@ -304,25 +265,25 @@ def _split_pair(value: str) -> tuple[int | None, int | None]:
 def _numbers(track: files.Track) -> tuple[int | None, int | None, int | None, int | None]:
     """`(track number, track total, disc number, disc total)`, per format."""
     if track.family == "id3":
-        number, total = _split_pair(_first(track, "trck") or "")
-        disc, discs = _split_pair(_first(track, "tpos") or "")
+        number, total = _split_pair(_number_text(track, units.TRACK_NUMBER_KEY))
+        disc, discs = _split_pair(_number_text(track, units.DISC_NUMBER_KEY))
     elif track.family == "vorbis":
-        number = _int_or_none(_first(track, "tracknumber"))
-        total = _int_or_none(_first(track, "tracktotal"))
-        disc = _int_or_none(_first(track, "discnumber"))
-        discs = _int_or_none(_first(track, "disctotal"))
+        number = _int_or_none(_number_text(track, units.TRACK_NUMBER_KEY))
+        total = _int_or_none(units.first_value(track, units.TRACK_TOTAL_KEY))
+        disc = _int_or_none(_number_text(track, units.DISC_NUMBER_KEY))
+        discs = _int_or_none(units.first_value(track, units.DISC_TOTAL_KEY))
     elif track.family == "mp4":
         # files.mp4_pair_text renders trkn/disk the same "n" or "n/total"
         # shape as ID3's TRCK/TPOS, so the same parser reads both.
-        number, total = _split_pair(_first(track, "trkn") or "")
-        disc, discs = _split_pair(_first(track, "disk") or "")
+        number, total = _split_pair(_number_text(track, units.TRACK_NUMBER_KEY))
+        disc, discs = _split_pair(_number_text(track, units.DISC_NUMBER_KEY))
     elif track.family == "asf":
         # Picard has no ASF name for the track total (decision: a WMA carries
         # none), so there is nothing to read back into it. WM/PartOfSet does
         # hold a disc total, the same "n/total" shape as TPOS.
-        number = _int_or_none(_first(track, "tracknumber"))
+        number = _int_or_none(_number_text(track, units.TRACK_NUMBER_KEY))
         total = None
-        disc, discs = _split_pair(_first(track, "discnumber") or "")
+        disc, discs = _split_pair(_number_text(track, units.DISC_NUMBER_KEY))
     else:
         number = total = disc = discs = None
     return number, total, disc, discs
@@ -560,12 +521,12 @@ def classify_other(path: Path | None, rel: str) -> str:
     before anything is written, so a plan and a finished write agree on what
     disappears, what moves to extras, and what stays. `"unexpected"` is a
     type *What an album folder may contain* neither allows, removes nor
-    moves to extras: a file kept silently before this, that check now names.
+    moves to extras, so `check` names it.
 
     `path` is the file's absolute path, needed only to tell an `.mp4` video
     (an extra) from `.mp4` audio: every other rule here is name-only.
     `None` is for a caller that already knows the answer without it - only
-    `state_from_plan` (`plan.py`), classifying a file `plan._sort_others`
+    `state_from_plan` (`plan.py`), classifying a file `plan.sort_others`
     already sorted out of `extras` with the real file in hand, so any `.mp4`
     reaching it here is never a video.
     """
@@ -630,8 +591,6 @@ def check(root: Path | str) -> list[Violation]:
     """Every rule any album under `root` breaks. Reads; never writes."""
     root = Path(root)
     violations: list[Violation] = []
-    for letter_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        for artist_dir in sorted(p for p in letter_dir.iterdir() if p.is_dir()):
-            for album_dir in sorted(p for p in artist_dir.iterdir() if p.is_dir()):
-                violations.extend(check_album(read_album(album_dir, root)))
+    for album_dir in walk.album_dirs(root):
+        violations.extend(check_album(read_album(album_dir, root)))
     return violations

@@ -390,7 +390,7 @@ def library_album(root: Path | str, *, ext: str = "flac", letter: str = "N",
     (base / "booklet.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
     (base / "rip.log").write_text("Exact Audio Copy V1.6 extraction logfile\n")
     (base / "notes.txt").write_text("Bought at Rough Trade.\n")
-    (base / "lyrics.lrc").write_text("[00:00.00] Hurt\n")
+    (base / "credits.txt").write_text("Produced by Trent Reznor and Alan Moulder.\n")
     return base
 
 

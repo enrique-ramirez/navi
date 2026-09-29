@@ -23,11 +23,16 @@ def sanitize(s: str) -> str:
     return s.rstrip(". ")
 
 
+#: These letters have no decomposition, so NFKD alone leaves them as they are.
+_STROKED = {"Ø": "O", "ø": "o", "Ł": "L", "ł": "l"}
+
+
 def letter(folder: str) -> str:
     """The first character of `folder`, decomposed and uppercased, or `#`."""
     if not folder:
         return "#"
-    base = unicodedata.normalize("NFKD", folder[0])[0].upper()
+    base = _STROKED.get(folder[0], folder[0])
+    base = unicodedata.normalize("NFKD", base)[0].upper()
     return base if "A" <= base <= "Z" else "#"
 
 
@@ -62,10 +67,18 @@ def artist_folder(name: str, sort_name: str | None = None, known: bool = True, c
                 # (Sabina, Joaquin) must not be mistaken for one.
                 if sort_name == f"{rest}, {first}" and first.casefold() in _FALLBACK_CASEFOLD:
                     folder = sort_name
-        return sanitize(folder)
-    split = _split_leading_article(name)
-    folder = f"{split[1]}, {split[0]}" if split else name
-    return sanitize(folder)
+    else:
+        split = _split_leading_article(name)
+        folder = f"{split[1]}, {split[0]}" if split else name
+    cleaned = sanitize(folder)
+    if not cleaned and folder and set(folder) == {"."}:
+        return "_"
+    return _underscore_leading_dot_or_dash(cleaned)
+
+
+def _underscore_leading_dot_or_dash(folder: str) -> str:
+    """`folder` with a leading `.` or `-` replaced by `_`, as beets does."""
+    return f"_{folder[1:]}" if folder[:1] in (".", "-") else folder
 
 
 _MAX_BYTES = 255
@@ -129,4 +142,4 @@ def track_filename(number: int, title: str, ext: str, tracks_on_medium: int) -> 
     digits = 3 if tracks_on_medium >= 100 else 2
     number_part = f"{number:0{digits}d}. "
     stem = sanitize(f"{number_part}{title}")
-    return fit(stem, suffix=f".{ext}", start=len(number_part))
+    return fit(stem, suffix=f".{ext.lower()}", start=len(number_part))

@@ -21,8 +21,8 @@ from pathlib import Path
 from musiclib import ascii as ascii_
 from musiclib import check, mapping, names
 from musiclib.batch import job as job_module
-from musiclib.plan import Plan, _is_compilation, _sort_others, state_from_plan
-from musiclib.units import Unit
+from musiclib.plan import Plan, is_compilation, sort_others, state_from_plan
+from musiclib.units import TrackPair, Unit, position_key
 
 #: The two choices the page offers for a Soundtrack-type or `video game
 #: music` album.
@@ -99,7 +99,7 @@ def _value(target: dict, field: str, family: str) -> str | None:
     return values[0] if values else None
 
 
-def _rederive_destination(plan: Plan, release: dict, release_group: dict, positions: list[str],
+def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs: list[TrackPair],
                           family_by_source: dict[str, str], touched: set[str]) -> None:
     """Recompute `plan.destination` and every file's destination the way `plan_album` does.
 
@@ -116,7 +116,7 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, positi
     if touched & {"albumartist", "albumartistsort"}:
         name = _value(first.target, "albumartist", family0) or ""
         sort_name = _value(first.target, "albumartistsort", family0)
-        compilation = _is_compilation(release)
+        compilation = is_compilation(release)
         artist_folder = names.artist_folder(name, sort_name, known=True, compilation=compilation)
         letter = names.letter(artist_folder)
     else:
@@ -131,31 +131,22 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, positi
     destination = f"{letter}/{artist_folder}/{album_folder}"
     plan.destination = destination
 
-    medium_tracks: dict[int, list[int]] = {}
-    for position in positions:
-        medium_str, track_str = position.split("-")
-        medium_tracks.setdefault(int(medium_str), []).append(int(track_str))
-    medium_count = len(medium_tracks)
-
-    for file_plan, position in zip(plan.files, positions):
-        medium_str, track_str = position.split("-")
-        medium_index, track_index = int(medium_str), int(track_str)
+    for file_plan, pair in zip(plan.files, pairs):
         family = family_by_source[file_plan.source]
         title = _value(file_plan.target, "title", family) or ""
         ext = Path(file_plan.destination).suffix.lstrip(".")
-        tracks_on_medium = len(medium_tracks[medium_index])
-        filename = names.track_filename(track_index, title, ext, tracks_on_medium)
-        disc_dir = names.disc_folder(medium_index, medium_count)
+        filename = names.track_filename(pair.number, title, ext, pair.total)
+        disc_dir = names.disc_folder(pair.disc, pair.discs)
         file_plan.destination = f"{destination}/{disc_dir}/{filename}" if disc_dir else f"{destination}/{filename}"
 
 
-def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, positions: list[str],
+def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs: list[TrackPair],
              family_by_source: dict[str, str], unit: Unit) -> Plan:
     """`plan`, with `edits` laid over it, mutated and returned.
 
     Each edited neutral field replaces the real key `mapping.PICARD` maps it
-    to, run through `ascii.convert` the way `mapping.plan_tags` does. A field
-    the destination is built from re-derives it, and the whole plan is
+    to, run through `ascii.convert` the way `mapping.plan_tags` does and then
+    composed to NFC. A field the destination is built from re-derives it, and the whole plan is
     validated again: an edit laid without that re-derivation gives a plan
     `check` refuses, because a filename or album folder would then disagree
     with the tag it is supposed to follow.
@@ -174,27 +165,29 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, posit
     before_check = set(_check_problems(plan))
     kept_problems = [p for p in plan.problems if p not in before_check]
 
-    by_position = dict(zip(positions, plan.files))
+    by_position = {position_key(pair): file_plan for pair, file_plan in zip(pairs, plan.files)}
     touched: set[str] = set()
-    for position, fields in edits.items():
-        file_plan = by_position.get(position)
+    for key, fields in edits.items():
+        file_plan = by_position.get(key)
         if file_plan is None:
             continue
         family = family_by_source[file_plan.source]
-        converted = ascii_.convert(fields)
+        converted = {field: [ascii_.nfc(value) for value in values]
+                     for field, values in ascii_.convert(fields).items()}
         target = dict(file_plan.target)
         for field, values in converted.items():
-            key = mapping.PICARD[field][family]
-            target[key] = list(values)
+            tag = mapping.PICARD[field][family]
+            target[tag] = list(values)
             if field in _PATH_FIELDS:
                 touched.add(field)
         file_plan.target = target
 
     if touched:
-        _rederive_destination(plan, release, release_group, positions, family_by_source, touched)
+        _rederive_destination(plan, release, release_group, pairs, family_by_source, touched)
         image_names = {"cover.jpg"} | {name.casefold() for name in plan.images}
-        plan.deletions, plan.extras, plan.kept = _sort_others(
-            unit, image_names, moving=(plan.source != plan.destination))
+        plan.deletions, plan.extras, plan.kept = sort_others(
+            unit, image_names, moving=(plan.source != plan.destination),
+            consumed=plan.consumed)
 
     plan.problems = _dedupe(kept_problems + _check_problems(plan))
     return plan

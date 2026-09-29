@@ -1,4 +1,4 @@
-"""Typographic punctuation in the name fields.
+"""Typographic punctuation in the name fields, and Unicode NFC for text.
 
 The table is built from code points, not literal characters, so the file
 stays plain ASCII: every one of these has a plain-ASCII look-alike close
@@ -6,6 +6,8 @@ enough that a literal curly quote in the source would be easy to misread.
 """
 
 from __future__ import annotations
+
+import unicodedata
 
 FIELDS = ("title", "album", "artist", "albumartist", "artistsort", "albumartistsort", "discsubtitle")
 
@@ -21,11 +23,16 @@ _CONVERSIONS = {
 }
 
 
+def nfc(s: str) -> str:
+    """`s` in Unicode NFC (not NFKC: compatibility forms such as U+2161 stay as they are)."""
+    return unicodedata.normalize("NFC", s)
+
+
 def to_ascii(s: str) -> str:
-    """Replace every listed character in `s`; leave everything else as it is."""
+    """Replace every listed character in `s` and compose it to NFC; leave everything else as it is."""
     for char, replacement in _CONVERSIONS.items():
         s = s.replace(char, replacement)
-    return s
+    return nfc(s)
 
 
 def convert(fields: dict[str, list[str]]) -> dict[str, list[str]]:

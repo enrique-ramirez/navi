@@ -1,11 +1,11 @@
 """Which MusicBrainz release an album unit is, and how sure the engine is.
 
 An album unit with a release ID tagged on every file is looked up directly
-and never searched. Anything else is searched by album title, album artist
-and track count, and the candidates ranked so the top one can be trusted
-automatically only when nothing about it is in doubt. A unit that cannot be
-planned at all - because a person has to look at it, because a file could not
-be read, or because MusicBrainz itself is down - comes back with a status
+and never searched. Anything else is searched by album title and album
+artist, and the candidates ranked so the top one can be trusted automatically
+only when nothing about it is in doubt. A unit that cannot be planned at all -
+because a person has to look at it, because a file could not be read, or
+because MusicBrainz itself is down - comes back with a status
 instead of asking anything. `release_ref` and `chosen` let an owner name the
 release directly, by URL or bare MBID.
 """
@@ -17,28 +17,19 @@ import datetime
 import os
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 from urllib.parse import urlsplit
 
-from musiclib import acoustid, genres, mapping
+from musiclib import acoustid, genres, mapping, titles
 from musiclib.mb import MusicBrainz, MusicBrainzError, MusicBrainzUnavailable
-from musiclib.units import Unit
-
-# Track and disc number have no place in mapping.PICARD (their shape differs
-# per format, so plan_tags builds them directly instead); everything else
-# this module reads off a file's own tags is already there under its neutral
-# name, so it is read from there rather than re-tabulated here.
-_TRACK_NUMBER_KEY = {"id3": "TRCK", "vorbis": "tracknumber", "mp4": "trkn", "asf": "WM/TrackNumber"}
-_DISC_NUMBER_KEY = {"id3": "TPOS", "vorbis": "discnumber", "mp4": "disk", "asf": "WM/PartOfSet"}
-
-_CD_FOLDER = re.compile(r"^CD(\d+)$")
-_LEADING_NUMBER = re.compile(r"\d+")
-_WITHIN = 3.0  # seconds: the per-track duration tolerance for a tagged or searched match.
+from musiclib.units import TrackPair, Unit, first_value, pair, position_key
 
 _MBID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 _MB_HOSTS = {"musicbrainz.org", "beta.musicbrainz.org"}
+_MIN_TRACK_SHARE = 0.6
 
 
 @dataclass
@@ -50,6 +41,7 @@ class Candidate:
     matches_counts: bool
     duration_diff: float | None
     year: str | None
+    pairs: list[TrackPair] | None = None
 
 
 @dataclass
@@ -64,24 +56,8 @@ class Identification:
 # --- reading what the files already say ------------------------------------
 
 
-def _first(track, key_map: dict[str, str | None]) -> str | None:
-    key = key_map.get(track.family)
-    if not key:
-        return None
-    values = track.tags.get(key)
-    return values[0] if values else None
-
-
 def _release_id(track) -> str | None:
-    return _first(track, mapping.PICARD["release id"])
-
-
-def _leading_number(track, key_map: dict[str, str]) -> int | None:
-    value = _first(track, key_map)
-    if value is None:
-        return None
-    found = _LEADING_NUMBER.search(value)
-    return int(found.group()) if found else None
+    return first_value(track, mapping.PICARD["release id"])
 
 
 def _consistent_release_id(tracks: list) -> str | None:
@@ -94,44 +70,12 @@ def _consistent_release_id(tracks: list) -> str | None:
     return first if all(i == first for i in ids) else None
 
 
-def _folder_medium(track, album_path: Path) -> int | None:
-    rel = Path(track.path).relative_to(album_path)
-    if len(rel.parts) == 2:
-        match = _CD_FOLDER.match(rel.parts[0])
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def _sort_key(track):
-    number = _leading_number(track, _TRACK_NUMBER_KEY)
-    filename = Path(track.path).name
-    # A track-number tag sorts before its filename fallback so a rip named
-    # out of order still pairs with the right recording.
-    return (0, number, filename) if number is not None else (1, 0, filename)
-
-
-def _group_media(unit: Unit) -> list[list]:
-    """The unit's tracks split into media, in medium order: `CDn` folder, then disc number, then one medium."""
-    folder_keys = [_folder_medium(t, unit.path) for t in unit.tracks]
-    if unit.tracks and all(k is not None for k in folder_keys):
-        keys = folder_keys
-    else:
-        disc_keys = [_leading_number(t, _DISC_NUMBER_KEY) for t in unit.tracks]
-        keys = disc_keys if unit.tracks and all(k is not None for k in disc_keys) else [1] * len(unit.tracks)
-
-    grouped: dict[int, list] = {}
-    for key, track in zip(keys, unit.tracks):
-        grouped.setdefault(key, []).append(track)
-    return [sorted(grouped[key], key=_sort_key) for key in sorted(grouped)]
-
-
 def _album_value(track) -> str | None:
-    return _first(track, mapping.PICARD["album"])
+    return first_value(track, mapping.PICARD["album"])
 
 
 def _album_artist_value(track) -> str | None:
-    return _first(track, mapping.PICARD["albumartist"]) or _first(track, mapping.PICARD["artist"])
+    return first_value(track, mapping.PICARD["albumartist"]) or first_value(track, mapping.PICARD["artist"])
 
 
 def _file_genres(unit: Unit) -> list[str]:
@@ -154,43 +98,45 @@ def _file_genres(unit: Unit) -> list[str]:
 # --- comparing files against a fetched release ------------------------------
 
 
-def _track_seconds(mb_track: dict) -> float:
+def _mb_length(mb_track: dict) -> float | None:
     length_ms = mb_track.get("length")
     if length_ms is None:
         length_ms = mb_track.get("recording", {}).get("length")
-    return (length_ms or 0) / 1000.0
+    return None if length_ms is None else length_ms / 1000.0
 
 
-def _compare(unit: Unit, release: dict) -> tuple[bool, list[float] | None]:
-    """Whether `release`'s medium and per-medium track counts match the unit's files.
+def _pair_fits(p: TrackPair, edited: dict) -> bool:
+    wanted = [p.mb_track["title"], *edited.get(position_key(p), {}).get("title", [])[:1]]
+    title = titles.file_title(p.file)
+    mb_length = _mb_length(p.mb_track)
+    return any(titles.pair_passes(title, p.file.length, w, mb_length) for w in wanted)
 
-    Returns the counts match and, only when they do, the per-track absolute
-    duration differences in seconds, pairing each medium's files with that
-    medium's recordings in order.
+
+def _failing_pairs(candidate: Candidate, owner_input: dict | None) -> int:
+    edited = ((owner_input or {}).get("edits") or {}).get(candidate.release_id, {})
+    return sum(not _pair_fits(p, edited) for p in candidate.pairs or [])
+
+
+def _fits(candidate: Candidate, owner_input: dict | None = None) -> bool:
+    return candidate.pairs is not None and _failing_pairs(candidate, owner_input) == 0
+
+
+def _candidate(release_id: str, release: dict, unit: Unit) -> Candidate:
+    """`release` paired against the unit's files, with the seconds the pairs are off by in total.
+
+    `duration_diff` is `None` when the medium or per-medium track counts do not
+    match, and `0.0` when they do but MusicBrainz has no lengths to compare.
     """
-    media = _group_media(unit)
-    release_media = release.get("media", [])
-    if len(media) != len(release_media):
-        return False, None
-    for tracks, medium in zip(media, release_media):
-        if len(tracks) != len(medium.get("tracks", [])):
-            return False, None
-    diffs = []
-    for tracks, medium in zip(media, release_media):
-        mb_tracks = sorted(medium.get("tracks", []), key=lambda t: t.get("position", 0))
-        for track, mb_track in zip(tracks, mb_tracks):
-            diffs.append(abs(track.length - _track_seconds(mb_track)))
-    return True, diffs
+    pairs = pair(unit, release)
+    diff = None
+    if pairs is not None:
+        diff = float(sum(abs(p.file.length - length) for p in pairs if (length := _mb_length(p.mb_track)) is not None))
+    return Candidate(release_id, release, pairs is not None, diff, _year(release), pairs)
 
 
 def _year(release: dict) -> str | None:
     date = release.get("date")
     return date[:4] if date else None
-
-
-def _max_diff(unit: Unit, release: dict) -> float:
-    _, diffs = _compare(unit, release)
-    return max(diffs) if diffs else 0.0
 
 
 def _date_sort_value(date: str | None) -> tuple:
@@ -219,10 +165,6 @@ def _date_sort_value(date: str | None) -> tuple:
     except (ValueError, IndexError):
         return (1, 0, 0, 0)
     return (0, year, month, day)
-
-
-def _oldest_key(candidate: Candidate):
-    return (_date_sort_value(candidate.release.get("date")), candidate.release_id)
 
 
 # --- the soundtrack safety net ----------------------------------------------
@@ -270,71 +212,81 @@ def _soundtrack_hold(
 # --- search and ranking ------------------------------------------------------
 
 
-def _rank_key(candidate: Candidate):
+def _rank_key(candidate: Candidate, owner_input: dict | None = None):
     return (
         0 if candidate.matches_counts else 1,
+        _failing_pairs(candidate, owner_input),
         candidate.duration_diff if candidate.duration_diff is not None else float("inf"),
         candidate.release_id,
     )
+
+
+def _choose_fitting(candidates: list, owner_input) -> Candidate:
+    """Among the candidates that fit: the Official release first, then the oldest, then the best ranked."""
+    fitting = [c for c in candidates if _fits(c, owner_input)]
+    return min(fitting, key=lambda c: (c.release.get("status") != "Official", _date_sort_value(c.release.get("date"))))
+
+
+def _settle(candidates: list, unit: Unit, client: MusicBrainz, owner_input, incoming) -> Identification:
+    """`candidates` is non-empty and already ranked. The soundtrack hold can still turn an `auto` into a `review`."""
+    if not _fits(candidates[0], owner_input):
+        return Identification("review", None, candidates)
+    chosen = _choose_fitting(candidates, owner_input)
+    ordered = [chosen] + [c for c in candidates if c is not chosen]
+    hold = _soundtrack_hold("auto", chosen, ordered, unit, client, owner_input, incoming)
+    return hold if hold is not None else Identification("auto", None, ordered)
+
+
+def _listed_too_short(entry: dict, files: int) -> bool:
+    # A result's listed counts include data tracks and pregap, so a count above the
+    # files' proves nothing; only a total below does.
+    listed = [medium.get("track-count") for medium in entry.get("media", [])]
+    return sum(have or 0 for have in listed) < files
+
+
+def _various_artists(unit: Unit) -> bool:
+    artists = {a for t in unit.tracks if (a := first_value(t, mapping.PICARD["artist"])) is not None}
+    album_artists = (first_value(t, mapping.PICARD["albumartist"]) for t in unit.tracks)
+    return len(artists) > 1 and all(a is None or a.strip().casefold() == "various artists" for a in album_artists)
 
 
 def _search(
     unit: Unit, client: MusicBrainz, acoustid_client, owner_input, incoming,
     env: Mapping[str, str], which: Callable[[str], str | None],
 ) -> Identification:
-    media = _group_media(unit)
     first_track = unit.tracks[0]
-    # A file with no album or artist tag at all still gets searched, on
-    # whatever it does have, rather than crash the lucene query builder.
     album = _album_value(first_track) or ""
     artist = _album_artist_value(first_track) or ""
-    tracks = sum(len(medium) for medium in media)
-    counts = [len(medium) for medium in media]
+
+    various = _various_artists(unit)
+    if not album and (various or not artist):
+        return _fingerprint_fallback(unit, client, [], acoustid_client, owner_input, incoming, env, which)
 
     try:
-        found = client.search_releases(album, artist, tracks)
+        found = client.search_releases(album, artist or None, various)
     except MusicBrainzUnavailable:
         return Identification("unidentified", "musicbrainz unavailable", [])
 
     candidates = []
     for entry in found.get("releases", []):
-        entry_counts = [medium.get("track-count") for medium in entry.get("media", [])]
-        if entry_counts != counts:
+        if _listed_too_short(entry, len(unit.tracks)):
             candidates.append(Candidate(entry["id"], None, False, None, None))
             continue
         try:
             release = client.release(entry["id"])
         except MusicBrainzUnavailable:
             return Identification("unidentified", "musicbrainz unavailable", [])
-        matches, diffs = _compare(unit, release)
-        candidates.append(Candidate(entry["id"], release, matches, sum(diffs) if diffs else 0.0, _year(release)))
+        candidates.append(_candidate(entry["id"], release, unit))
 
-    candidates.sort(key=_rank_key)
+    candidates.sort(key=lambda c: _rank_key(c, owner_input))
 
     top = candidates[0] if candidates else None
     if top is None or not top.matches_counts:
-        return _fingerprint_fallback(unit, client, candidates, acoustid_client, env, which)
+        return _fingerprint_fallback(
+            unit, client, candidates, acoustid_client, owner_input, incoming, env, which
+        )
 
-    top_is_full = _max_diff(unit, top.release) <= _WITHIN
-    chosen = top
-    ordered = candidates
-    status = "review"
-
-    if top_is_full:
-        status = "auto"
-        full = [top] + [
-            other for other in candidates[1:]
-            if other.matches_counts and other.release is not None and _max_diff(unit, other.release) <= _WITHIN
-        ]
-        if any(other.year != top.year for other in full[1:]):
-            # Several full editions and not all the same year: the top of
-            # the ranking is whichever fits the files best, not necessarily
-            # the original pressing, so the earliest edition wins instead.
-            chosen = min(full, key=_oldest_key)
-            ordered = [chosen] + [c for c in candidates if c is not chosen]
-
-    hold = _soundtrack_hold(status, chosen, ordered, unit, client, owner_input, incoming)
-    return hold if hold is not None else Identification(status, None, ordered)
+    return _settle(candidates, unit, client, owner_input, incoming)
 
 
 # --- falling back to fingerprints when no search count matches --------------
@@ -342,7 +294,7 @@ def _search(
 
 def _fingerprint_fallback(
     unit: Unit, client: MusicBrainz, search_candidates: list,
-    acoustid_client, env: Mapping[str, str], which: Callable[[str], str | None],
+    acoustid_client, owner_input, incoming, env: Mapping[str, str], which: Callable[[str], str | None],
 ) -> Identification:
     reason = acoustid.unavailable(env, which)
     if reason is not None:
@@ -350,46 +302,34 @@ def _fingerprint_fallback(
     if acoustid_client is None:
         return Identification("unidentified", "no match", search_candidates)
 
-    # Every recording any track's fingerprint matches, released on any
-    # release: a laundered rip can have a wrong or missing tag on every
-    # file, so nothing here trusts the tags at all.
-    release_ids: dict[str, None] = {}
+    # A laundered rip can have a wrong or missing tag on every file, so
+    # nothing here trusts the tags.
+    votes: Counter[str] = Counter()
     for track in unit.tracks:
         try:
             duration, fingerprint = acoustid_client.fingerprint(Path(track.path))
-            recordings = acoustid_client.lookup(duration, fingerprint)
+            releases = acoustid_client.lookup(duration, fingerprint)
         except acoustid.AcoustIDError:
             return Identification("unidentified", "fingerprint failed", search_candidates)
-        for recording_id in recordings:
-            try:
-                found = client.recording_releases(recording_id)
-            except MusicBrainzUnavailable:
-                return Identification("unidentified", "musicbrainz unavailable", search_candidates)
-            except MusicBrainzError:
-                continue  # a recording MusicBrainz no longer has is skipped
-            for release_id in found:
-                release_ids.setdefault(release_id, None)
+        votes.update(set(releases))
 
     fp_candidates = []
-    for release_id in release_ids:
+    for release_id, count in votes.items():
+        if count / len(unit.tracks) <= _MIN_TRACK_SHARE:
+            continue
         try:
             release = client.release(release_id)
         except MusicBrainzUnavailable:
             return Identification("unidentified", "musicbrainz unavailable", search_candidates)
         except MusicBrainzError:
             continue
-        matches, diffs = _compare(unit, release)
-        fp_candidates.append(
-            Candidate(release_id, release, matches, sum(diffs) if diffs else None, _year(release))
-        )
+        fp_candidates.append(_candidate(release_id, release, unit))
 
     if not fp_candidates:
         return Identification("unidentified", "no match", search_candidates)
 
-    fp_candidates.sort(key=_rank_key)
-    # A fingerprint match is never certain enough to skip a person: it never
-    # comes from the files' own tags, only from what they sound like.
-    return Identification("review", None, fp_candidates)
+    fp_candidates.sort(key=lambda c: _rank_key(c, owner_input))
+    return _settle(fp_candidates, unit, client, owner_input, incoming)
 
 
 # --- the entry point ---------------------------------------------------------
@@ -414,10 +354,9 @@ def identify(
             # A tagged ID MusicBrainz no longer knows is no ID at all.
             release = None
         if release is not None:
-            matches, diffs = _compare(unit, release)
-            if matches:
-                candidate = Candidate(tagged_id, release, True, sum(diffs), _year(release))
-                status = "certain" if all(d <= _WITHIN for d in diffs) else "review"
+            candidate = _candidate(tagged_id, release, unit)
+            if candidate.matches_counts:
+                status = "certain" if _fits(candidate, owner_input) else "review"
                 hold = _soundtrack_hold(status, candidate, [candidate], unit, mb, owner_input, incoming)
                 return hold if hold is not None else Identification(status, None, [candidate])
 
@@ -453,8 +392,7 @@ def chosen(unit: Unit, mb: MusicBrainz, value: str) -> Identification:
         release = mb.release(release_id)
     except MusicBrainzUnavailable:
         return Identification("unidentified", "musicbrainz unavailable", [])
-    matches, diffs = _compare(unit, release)
-    candidate = Candidate(release_id, release, matches, sum(diffs) if diffs else None, _year(release))
+    candidate = _candidate(release_id, release, unit)
     # An owner's own pick is still reviewed before it is written, never auto
     # or certain: the album might still be the wrong one.
     return Identification("review", None, [candidate])

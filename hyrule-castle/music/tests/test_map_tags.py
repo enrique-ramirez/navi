@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import itertools
 import tempfile
+import unicodedata
 import unittest
 
 from mutagen.id3 import COMM, SYLT, TCOM, USLT
 
 from musiclib import files, genres, mapping
 from tests import builders
+from tests.test_check import _Planning, _release, _rip
 
 FORMATS = ("mp3", "flac", "ogg", "m4a")
 
@@ -215,11 +217,14 @@ class Dates(TestCase):
 
     def test_with_no_date_on_the_release_or_the_file_the_plan_fails_validation(self):
         # The album folder is named after the year, so there is nothing to
-        # name it with.
+        # name it with. The release group has no first date either, which
+        # would otherwise date an undated release.
         for missing in ("", None):
             for ext in FORMATS:
                 with self.subTest(ext=ext, date=missing):
-                    result = plan(on_file(ext), builders.mb_release(date=missing))
+                    release = builders.mb_release(date=missing)
+                    release["release-group"]["first-release-date"] = ""
+                    result = plan(on_file(ext), release)
                     self.assertNotIn(key(ext, "date"), result.target)
                     self.assertTrue(result.problems)
                     self.assertIn("date", " ".join(map(str, result.problems)).lower())
@@ -501,6 +506,140 @@ class Whitespace(TestCase):
                 result = plan(track)
                 self.assertNotIn(LYRICS[ext], result.target)
                 self.assertIn((LYRICS[ext], blank, "blank"), [tuple(r) for r in result.removals])
+
+
+def nfd(text: str) -> str:
+    """`text` decomposed, an accent as its own combining code point, the way some MusicBrainz data arrives."""
+    return unicodedata.normalize("NFD", text)
+
+
+def shown(value):
+    """`value` with every non-ASCII character escaped, so a failure shows `e\\u0301` against `\\xe9`.
+
+    The two render the same, and a diff of the raw strings reads as equal.
+    """
+    return ascii(value)
+
+
+#: Composed, as the plan must write them. `nfd` of each is what the tests
+#: feed in, so every one of these has a character that decomposes.
+CAFE, BJORK, DEBRIS = "Caf\u00e9", "Bj\u00f6rk", "D\u00e9bris"
+TACVBA = "Caf\u00e9 Tacvba"
+MUSICA, MU_14, ENTREE = "M\u00fasica Records", "M\u00dc 14", "Entr\u00e9e Plus"
+MPB = "m\u00fasica popular brasileira"
+#: Already NFC but not NFKC: NFKC would turn the numeral into "II".
+ROMAN_TWO = chr(0x2161)
+
+
+class UnicodeNormalisation(TestCase):
+    """Criteria 23 and 28: what the plan writes is NFC, and what it leaves alone is left alone."""
+
+    @staticmethod
+    def decomposed_release() -> dict:
+        """`mb_release()` with a decomposed accent in every text field `plan_tags` takes from it.
+
+        Disc 3 track 1, so the medium title fills the disc subtitle. Its
+        track credit differs from the release credit, so a plan that
+        normalises one credit and not the other shows.
+        """
+        release = builders.mb_release(title=nfd(DEBRIS))
+        release["artist-credit"] = builders.mb_credit(builders.CURE_ID, nfd(TACVBA), nfd(TACVBA))
+        release["label-info"] = [{"catalog-number": nfd(MU_14),
+                                  "label": {"id": "4d0e0f10-0000-4000-8000-0000000000b1",
+                                            "name": nfd(MUSICA)}}]
+        medium = release["media"][2]
+        medium["title"] = nfd(ENTREE)
+        medium["tracks"][0]["title"] = nfd(CAFE)
+        medium["tracks"][0]["artist-credit"] = builders.mb_credit(builders.SMITH_ID, nfd(BJORK), nfd(BJORK))
+        return release
+
+    def test_a_decomposed_accent_from_musicbrainz_is_planned_as_one_code_point_in_every_field(self):
+        # `e` + U+0301 and U+00E9 render the same, so nobody sees the
+        # difference until a search typed with the composed accent misses
+        # the file. The genre list is handed in by `genres.compose` rather
+        # than read off the release, and is held to the same rule.
+        composed = {"title": [CAFE], "artist": [BJORK], "artistsort": [BJORK], "album": [DEBRIS],
+                    "albumartist": [TACVBA], "albumartistsort": [TACVBA], "label": [MUSICA],
+                    "catalognumber": [MU_14], "discsubtitle": [ENTREE], "genre": [MPB, "gothic rock"]}
+        release = self.decomposed_release()
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                target = plan(on_file(ext), release, medium=3, position=1,
+                              genres=[nfd(MPB), "gothic rock"]).target
+                expected = read_back(ext, composed)
+                for field in composed:
+                    self.assertEqual(shown(target[key(ext, field)]), shown(expected[key(ext, field)]), field)
+
+    def test_a_files_own_disc_subtitle_kept_where_musicbrainz_has_none_is_planned_nfc(self):
+        # The plan writes this value, so it is held to the same rule as
+        # one from MusicBrainz even though it came from the file.
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                track = on_file(ext, builders.picard_tags(ext, {"discsubtitle": [nfd(ENTREE)]}))
+                self.assertEqual(shown(track.tags[key(ext, "discsubtitle")]), shown([nfd(ENTREE)]))
+                target = plan(track, medium=2, position=1).target
+                self.assertEqual(shown(target[key(ext, "discsubtitle")]), shown([ENTREE]))
+
+    def test_a_decomposed_comment_or_lyrics_the_plan_does_not_set_is_kept_decomposed(self):
+        # Normalising the whole merged target would pass the cases above
+        # and quietly rewrite text the plan never set, which 001 keeps as
+        # written. WMA has no comment field under `COMMENT`, so it is
+        # checked on lyrics alone.
+        liner = nfd("Enregistr\u00e9 au Studio Guillaume Tell")
+        lyric = nfd("[00:12.34]Caf\u00e9 au lait\r\n")
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                if ext == "mp3":
+                    tags = {"COMM": COMM(encoding=3, lang="eng", desc="", text=[liner]),
+                            "USLT": USLT(encoding=3, lang="eng", desc="", text=lyric)}
+                else:
+                    tags = {LYRICS[ext]: lyric}
+                    if ext in COMMENT:
+                        tags[COMMENT[ext]] = liner
+                track = on_file(ext, tags)
+                before = {k: track.tags[k] for k in (COMMENT.get(ext), LYRICS[ext]) if k}
+                self.assertIn(lyric, before[LYRICS[ext]])
+                target = plan(track, self.decomposed_release(), medium=3, position=1).target
+                self.assertEqual(shown({k: target.get(k) for k in before}), shown(before))
+
+    def test_replanning_a_file_already_written_nfc_proposes_no_change_to_its_text(self):
+        # Criterion 28. The file was written by this engine, so it holds
+        # the composed text, while MusicBrainz still gives it decomposed.
+        # A plan that passes MusicBrainz's form through proposes rewriting
+        # every accented field on every run. The roman numeral is NFC
+        # already, and must survive too: NFKC would make it "II".
+        release = self.decomposed_release()
+        release["media"][2]["tracks"][0]["title"] = nfd(CAFE) + " " + ROMAN_TWO
+        written = {"title": [CAFE + " " + ROMAN_TWO], "artist": [BJORK], "album": [DEBRIS],
+                   "albumartist": [TACVBA], "label": [MUSICA], "discsubtitle": [ENTREE]}
+        for ext in ALL_FORMATS:
+            with self.subTest(ext):
+                track = on_file(ext, builders.picard_tags(ext, written))
+                target = plan(track, release, medium=3, position=1).target
+                for field in written:
+                    self.assertEqual(shown(target[key(ext, field)]), shown(track.tags[key(ext, field)]), field)
+
+
+class UnicodeNormalisedNames(_Planning):
+    """Criterion 23 reaching the destination: the folder and file names come from the same text as the tags."""
+
+    def test_a_decomposed_artist_album_and_title_give_nfc_folder_and_file_names(self):
+        # A decomposed name next to a composed one is two different folders
+        # on ext4 that look like one in every file manager, and the second
+        # album by the artist lands in the one nobody expected.
+        credit = builders.mb_credit(builders.CURE_ID, nfd(TACVBA), nfd(TACVBA))
+        root = self.library()
+        album = _rip(root, ["Plainsong"])
+        release = _release([nfd(CAFE)], title=nfd(DEBRIS), credit=credit)
+
+        result = self.plan(self.unit(root, album), release, status="auto")
+
+        self.assertEqual(shown(str(result.destination)), shown(f"C/{TACVBA}/(2010) {DEBRIS}"))
+        self.assertEqual(shown([str(f.destination) for f in result.files]),
+                         shown([f"C/{TACVBA}/(2010) {DEBRIS}/01. {CAFE}.flac"]))
+        (file_plan,) = result.files
+        self.assertEqual(shown(file_plan.target["artist"]), shown([TACVBA]))
+        self.assertEqual(shown(file_plan.target["title"]), shown([CAFE]))
 
 
 if __name__ == "__main__":

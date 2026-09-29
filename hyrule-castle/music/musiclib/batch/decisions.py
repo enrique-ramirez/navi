@@ -27,16 +27,16 @@ _GAME_CHOICES = {VIDEO_GAME_MUSIC, NOT_GAME_MUSIC}
 
 #: MusicBrainz identifiers, never offered as an editable field on the page:
 #: every other `mapping.PICARD` key is a neutral field an `accept` may edit.
-_ID_FIELDS = {"release id", "release group id", "recording id", "release track id",
+ID_FIELDS = {"release id", "release group id", "recording id", "release track id",
              "artist id", "album artist id"}
-_OFFERED_FIELDS = set(mapping.PICARD) - _ID_FIELDS
+_OFFERED_FIELDS = set(mapping.PICARD) - ID_FIELDS
 
 
 class DecisionsRejected(Exception):
     """`decisions.json` does not fit this job. Its message names every offence, not only the first."""
 
 
-def _decisions_sha256(job: Job) -> str | None:
+def decisions_sha256(job: Job) -> str | None:
     """The sha256 hex of `job.decisions`'s bytes, or `None` where there is no file.
 
     `batch identify` folds this into `plan.json`'s `decisions_sha256`, and
@@ -55,29 +55,29 @@ def _plan_albums(job: Job) -> list[dict]:
     return doc.get("albums", [])
 
 
-def _applied_map(job: Job) -> dict[str, str]:
+def applied_map(job: Job) -> dict[str, str]:
     """`{source: destination}` for every `applied.jsonl` line this job actually wrote."""
     return {line["source"]: line["destination"]
            for line in job_module.read_log(job) if line.get("outcome") == "applied"}
 
 
-def _follow(key: str, applied_map: dict[str, str]) -> str:
-    """`key`, followed source to destination through `applied_map` until nothing moves it further.
+def follow_moves(key: str, applied: dict[str, str]) -> str:
+    """`key`, followed source to destination through `applied` (from `applied_map`) until nothing moves it further.
 
     `seen` guards against a cycle that should never exist (an album cannot
     apply back to its own earlier path) rather than looping forever if one
     somehow did.
     """
     seen: set[str] = set()
-    while key in applied_map and key not in seen:
+    while key in applied and key not in seen:
         seen.add(key)
-        key = applied_map[key]
+        key = applied[key]
     return key
 
 
-def _known_albums(albums: list[dict], applied_map: dict[str, str]) -> set[str]:
+def _known_albums(albums: list[dict], applied: dict[str, str]) -> set[str]:
     """Every album key this job "has": a current `plan.json` source, or one `applied.jsonl` moved."""
-    return {entry["source"] for entry in albums} | set(applied_map)
+    return {entry["source"] for entry in albums} | set(applied)
 
 
 def _is_edits_shape(edits) -> bool:
@@ -108,8 +108,8 @@ def read(job: Job) -> dict | None:
         raise DecisionsRejected(f"decisions.json is not valid JSON: {exc}") from exc
 
     albums = _plan_albums(job)
-    applied_map = _applied_map(job)
-    known = _known_albums(albums, applied_map)
+    applied = applied_map(job)
+    known = _known_albums(albums, applied)
     by_source = {entry["source"]: entry for entry in albums}
 
     offences: list[str] = []
@@ -122,7 +122,7 @@ def read(job: Job) -> dict | None:
     by_identity: dict[str, list[str]] = {}
     for key in given_albums:
         if key in known:
-            by_identity.setdefault(_follow(key, applied_map), []).append(key)
+            by_identity.setdefault(follow_moves(key, applied), []).append(key)
     for keys in by_identity.values():
         if len(keys) > 1:
             offences.append(f"{sorted(keys)!r} all name the same album")
@@ -144,7 +144,7 @@ def read(job: Job) -> dict | None:
             if not decision.get("release_id"):
                 offences.append(f"{key!r}: an accept needs a release_id")
             game = decision.get("game")
-            entry = by_source.get(key) or by_source.get(_follow(key, applied_map)) or {}
+            entry = by_source.get(key) or by_source.get(follow_moves(key, applied)) or {}
             if game is not None and game not in _GAME_CHOICES:
                 offences.append(f"{key!r}: not a recognised game choice: {game!r}")
             elif game is None and entry.get("game_choice"):

@@ -12,13 +12,13 @@ What rollback cannot give back is listed rather than silently dropped: a
 `cover.jpg` `write_album` wrote or replaced (`created`), a file it deleted
 (`deleted`), and every track's embedded picture. A picture is never
 restored - `files.read` keeps only a digest of one, never its bytes
-(`write._rollback_target`) - and FLAC does not even keep that digest in the
+(`write.rollback_target`) - and FLAC does not even keep that digest in the
 tags this module can compare (`tagwrite.is_picture_key`'s own docstring), so
 every track write_album touched is listed for its picture regardless of
 whether the picture actually changed: rollback has no way to tell, for every
 format, that it did not.
 
-An album's library moves always go through `write._undo_moves` as one batch,
+An album's library moves always go through `write.undo_moves` as one batch,
 the same as `write_album` itself moves a whole album at once: that is what
 lets a chain of renames or a swap between two tracks undo correctly, since a
 move partway through either one can leave a track's own old name occupied by
@@ -46,7 +46,7 @@ from pathlib import Path
 from musiclib import files, tagwrite
 from musiclib.batch import job as job_module
 from musiclib.batch.job import Job
-from musiclib.write import FoobarRunning, _guard_foobar, _prune_empty, _rollback_target, _undo_moves
+from musiclib.write import FoobarRunning, guard_foobar, prune_empty, rollback_target, undo_moves
 
 
 def _cannot_restore(out, not_restored: list[str], path: str, reason: str) -> None:
@@ -66,7 +66,7 @@ def _undo_extras(moves: list, root: Path, extras_root: Path, out, not_restored: 
     Undone on its own rather than batched with the library moves
     (`_library_pairs`), so one extra somebody deleted from the extras folder
     never blocks the tracks or the tags behind it. Skipped once it is already
-    back at its source, so a retry does not ask `_undo_moves` to move a
+    back at its source, so a retry does not ask `undo_moves` to move a
     destination an earlier attempt already emptied.
     """
     for source, destination, kind in moves:
@@ -76,7 +76,7 @@ def _undo_extras(moves: list, root: Path, extras_root: Path, out, not_restored: 
         if from_path.exists():
             continue
         try:
-            _undo_moves([(from_path, extras_root / destination)])
+            undo_moves([(from_path, extras_root / destination)])
         except OSError as exc:
             _cannot_restore(out, not_restored, destination, f"could not move back from extras ({exc})")
 
@@ -88,7 +88,7 @@ def _write_tags(record: dict, root: Path, out, not_restored: list[str]) -> None:
         if kind != "library" or destination not in tags:
             continue
         current = files.read(root / source)
-        tagwrite.write(current, _rollback_target(current, tags[destination]))
+        tagwrite.write(current, rollback_target(current, tags[destination]))
         _cannot_restore(out, not_restored, destination, "embedded picture not restored")
 
     for path in record["created"]:
@@ -104,7 +104,7 @@ def _undo_album(entry: dict, root: Path, extras_root: Path, moves_done: bool,
     """
     record = entry["record"]
     if not moves_done:
-        _undo_moves(_library_pairs(record["moves"], root))
+        undo_moves(_library_pairs(record["moves"], root))
         job_module.append_log(job, {"source": entry["source"], "destination": entry["destination"],
                                     "outcome": "moves undone", "error": None, "record": None})
 
@@ -112,8 +112,8 @@ def _undo_album(entry: dict, root: Path, extras_root: Path, moves_done: bool,
 
     _write_tags(record, root, out, not_restored)
 
-    _prune_empty(root / entry["destination"], root)
-    _prune_empty(extras_root / entry["destination"], extras_root)
+    prune_empty(root / entry["destination"], root)
+    prune_empty(extras_root / entry["destination"], extras_root)
 
 
 def run(job: Job, *, extras_root: Path = Path("/srv/music/extras"),
@@ -130,7 +130,7 @@ def run(job: Job, *, extras_root: Path = Path("/srv/music/extras"),
     live_root = Path(live_root)
 
     try:
-        _guard_foobar(root, live_root, systemctl)
+        guard_foobar(root, live_root, systemctl)
     except FoobarRunning as exc:
         print(str(exc), file=err)
         return 1

@@ -34,8 +34,12 @@ class CoverArt:
 
     def images(self, release_id: str) -> list[dict]:
         """The release's images, or `[]` for a release the archive has none for."""
-        url = f"{_BASE}/release/{release_id}"
+        return self._listing(f"{_BASE}/release/{release_id}")
 
+    def release_group_images(self, release_group_id: str) -> list[dict]:
+        return self._listing(f"{_BASE}/release-group/{release_group_id}")
+
+    def _listing(self, url: str) -> list[dict]:
         def fetch() -> bytes:
             status, body = self.transport(url, {"User-Agent": mb.USER_AGENT})
             if status == 404:

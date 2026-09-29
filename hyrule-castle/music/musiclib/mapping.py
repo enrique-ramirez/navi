@@ -4,8 +4,8 @@
 Picard writes for each format; a release-specific field removed where the
 matched release has none; the file's own value kept where MusicBrainz has
 none for `DATE`, `ORIGINALDATE`, genre and `DISCSUBTITLE`; curly punctuation
-made plain in the name fields; a medium's title in the disc subtitle and
-never in the album.
+made plain in the name fields; every value the plan sets in NFC; a medium's
+title in the disc subtitle and never in the album.
 
 `plan_tags` never touches the disk. It builds those fields under their
 neutral names, converts the name fields with `ascii.convert`, maps them to
@@ -133,6 +133,12 @@ def join_credit(credits: list[dict], name_key: str) -> str:
     return out
 
 
+def release_date(release: dict) -> str | None:
+    """The release's own date, else its release group's first, else `None`."""
+    group = release.get("release-group") or {}
+    return release.get("date") or group.get("first-release-date") or None
+
+
 def _credit_ids(credits: list[dict]) -> list[str]:
     return [credit["artist"]["id"] for credit in credits]
 
@@ -215,13 +221,19 @@ def _suggest_discsubtitle(folder: str | None) -> str | None:
 
 
 def plan_tags(track: files.Track, release: dict, medium_position: int, track_position: int,
-             genres: list[str], disc_folder: str | None = None) -> FileTags:
-    """The tag plan for one track of `release`, at `medium_position`/`track_position` (both 1-based)."""
+             genres: list[str], disc_folder: str | None = None, *, number: int | None = None,
+             total: int | None = None, disc: int | None = None, discs: int | None = None) -> FileTags:
+    """The tag plan for one track of `release`, at `medium_position`/`track_position` (both 1-based).
+
+    Track position 0 is the medium's pregap. `number`, `total`, `disc` and
+    `discs` are what gets written as the track and disc pairs; each falls
+    back to the position or count the release gives.
+    """
     family = track.family
     media = release["media"]
     medium = media[medium_position - 1]
     tracks_on_medium = medium["tracks"]
-    mb_track = tracks_on_medium[track_position - 1]
+    mb_track = medium["pregap"] if track_position == 0 else tracks_on_medium[track_position - 1]
 
     track_credit = mb_track.get("artist-credit") or release["artist-credit"]
     release_credit = release["artist-credit"]
@@ -259,7 +271,8 @@ def plan_tags(track: files.Track, release: dict, medium_position: int, track_pos
         fields["media"] = [medium["format"]]
 
     problems: list[str] = []
-    date_values = _kept_or_mb("date", [release["date"]] if release.get("date") else [], track, family)
+    mb_date = release_date(release)
+    date_values = _kept_or_mb("date", [mb_date] if mb_date else [], track, family)
     if date_values:
         fields["date"] = date_values
     else:
@@ -296,9 +309,11 @@ def plan_tags(track: files.Track, release: dict, medium_position: int, track_pos
     for neutral, values in fields.items():
         key = PICARD[neutral].get(family)
         if key is not None:
-            planned[key] = values
-    planned.update(_number_fields(family, (track_position, len(tracks_on_medium)),
-                                  (medium_position, len(media))))
+            planned[key] = [ascii_.nfc(value) for value in values]
+    planned.update(_number_fields(family, (track_position if number is None else number,
+                                           len(tracks_on_medium) if total is None else total),
+                                  (medium_position if disc is None else disc,
+                                   len(media) if discs is None else discs)))
 
     removals: list[residue.Removal] = []
     for neutral in RELEASE_SPECIFIC:

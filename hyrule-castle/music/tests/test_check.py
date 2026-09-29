@@ -699,6 +699,20 @@ class FolderContents(_Library):
                 (album / name).write_bytes(b"x")
                 self.assertBreaks(root, album, {"removed file"})
 
+    def test_an_lrc_beside_the_tracks_is_a_removed_file_like_a_cue(self):
+        # An .lrc is named after the track file it was saved with, so once
+        # the track is renamed it matches nothing and no player finds it.
+        # The library's two are under F/Foo Fighters/, named like this one.
+        for name in ("Foo Fighters - In Your Honor (CD2) - 08 - Virginia Moon.lrc",
+                     "Foo Fighters - In Your Honor (CD2) - 08 - Virginia Moon.LRC"):
+            with self.subTest(name=name):
+                root = self.library()
+                album = builders.library_album(root)
+                (album / name).write_text("[00:00.00] Virginia Moon\n")
+                self.assertBreaks(root, album, {"removed file"})
+                details = [v.detail for v in check.check(root) if v.rule == "removed file"]
+                self.assertIn(name, details)
+
     def test_junk_inside_a_disc_folder_and_a_macosx_folder(self):
         for name in ("CD1/.DS_Store", "__MACOSX/._cover.jpg"):
             with self.subTest(name):
@@ -754,7 +768,7 @@ class FolderContents(_Library):
         album = builders.library_album(root)
         shutil.copyfile(builders.FIXTURES / "cover.jpg", album / "Inlay.JPEG")
         (album / "Back.PNG").write_bytes(builders.jpeg(10, 10))
-        for name in ("Booklet.PDF", "EAC.LOG", "Notes.TXT", "Hurt.LRC"):
+        for name in ("Booklet.PDF", "EAC.LOG", "Notes.TXT"):
             (album / name).write_bytes(b"x")
         self.assertEqual(check.check(root), [])
 
@@ -1194,6 +1208,23 @@ class APlan(_Planning):
         self.assertIn("rip.log", _names(plan.kept))
         self.assertFalse({"rip.log", "Making of.mkv"} & _names(plan.deletions))
 
+    def test_an_lrc_beside_the_tracks_is_planned_for_deletion_not_carried_along(self):
+        # Carried along, it would land beside tracks whose new names it no
+        # longer matches. Upper case too, since a Windows rip writes `.LRC`.
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        lrc = ("Foo Fighters - In Your Honor (CD2) - 08 - Virginia Moon.lrc",
+               "01 plainsong.LRC")
+        for name in lrc:
+            (album / name).write_text("[00:00.00] x\n")
+
+        plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]),
+                         status="auto")
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertLessEqual(set(lrc), _names(plan.deletions))
+        self.assertFalse(set(lrc) & (_names(plan.kept) | _names(plan.extras)))
+
     def test_a_plan_given_no_status_is_review(self):
         root = self.library()
         album = _rip(root, ["Plainsong", "Pictures of You"])
@@ -1245,9 +1276,11 @@ class APlan(_Planning):
 class APlanThatBreaksARule(_Planning):
     def test_carries_the_reason_and_write_album_refuses_it_touching_nothing(self):
         cases = [
-            # No DATE on the release or the files, so there is
-            # no year to name the album folder with.
-            ("no DATE anywhere", "date", dict(date=None), dict(date=None), True),
+            # No DATE on the release, its release group or the files, so
+            # there is no year to name the album folder with.
+            ("no DATE anywhere", "date", dict(date=None),
+             dict(date=None, **{"release-group": {**builders.mb_release()["release-group"],
+                                                  "first-release-date": ""}}), True),
             # No front in the archive and no cover.jpg to keep.
             ("no cover at all", "cover.jpg", dict(cover=False), {}, False),
             # A title the character table strips to nothing leaves a folder
@@ -1334,18 +1367,18 @@ class APlanLeftWithNoGenre(_Planning):
             # is on the list. "Rock; Pop" is two listed genres in one value.
             ("no musicbrainz genres and only off-list file genres", {},
              ("made-up genre", "Rock; Pop")),
-            # MusicBrainz has genres, so the files' are never consulted, even
-            # though "gothic rock" would have survived the fallback.
-            ("musicbrainz genres all off the list", {"seen live": 5, "anime": 2},
-             ("gothic rock",)),
+            # MusicBrainz's genres are all off the list, so the files get
+            # their turn, and theirs are off it too.
+            ("musicbrainz genres all off the list and only off-list file genres",
+             {"seen live": 5, "anime": 2}, ("made-up genre",)),
         ]
         for case, group_genres, file_genres in cases:
             with self.subTest(case):
                 root = self.library()
                 album = _rip(root, ["Plainsong", "Pictures of You"], genre=file_genres)
                 unit = self.unit(root, album)
-                # Without the genres on the files, the second case no longer
-                # shows the fallback staying shut.
+                # The files carry what the case says, so it is their genres
+                # that were judged and dropped.
                 self.assertEqual(unit.tracks[0].tags.get("genre"), list(file_genres))
                 release = _release(["Plainsong", "Pictures of You"])
                 before = _snapshot(root)
@@ -1356,6 +1389,21 @@ class APlanLeftWithNoGenre(_Planning):
                 self.assertTrue(said, f"no problem under 'no genre': {plan.problems}")
                 self.assertEqual([f.target["genre"] for f in plan.files if "genre" in f.target], [])
                 self.assertRefused(plan, said[0], root, before)
+
+    def test_takes_the_files_listed_genre_when_every_musicbrainz_genre_is_off_the_list(self):
+        # Off-list genres from MusicBrainz leave the album as short of a
+        # genre as none at all, so the files' "gothic rock" applies. It is
+        # the whole list: "seen live" and "anime" are never written.
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"], genre=("gothic rock",))
+        release = _release(["Plainsong", "Pictures of You"])
+
+        plan = self.plan(self.unit(root, album), release, _release_group({"seen live": 5, "anime": 2}),
+                         status="auto")
+
+        self.assertFalse([p for p in plan.problems if p.split(":", 1)[0].strip() == "no genre"],
+                         plan.problems)
+        self.assertEqual([f.target.get("genre") for f in plan.files], [["gothic rock"]] * 2)
 
 
 class APlanOfARipWithStraySpaces(_Planning):

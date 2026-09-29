@@ -29,13 +29,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
 from tests import builders
 from tests.test_batch_apply import Library, new_library
 from tests.test_batch_identify import TONE_MS, Services, album, release, run_identify
-from tests.test_memory import NOT_GAME, VGM, entries, soundtrack
+from tests.test_memory import NOT_GAME, VGM, entries, key_of, soundtrack
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -182,6 +183,12 @@ def applied_sources(job: Path) -> list[str]:
     return [line["source"] for line in log(job) if line["outcome"] == "applied"]
 
 
+def identify_second_job(lib: Library) -> tuple[Path, tuple[int, str, str], dict]:
+    job = lib.base / ".musiclib" / "jobs" / "j2"
+    said = run_identify(lib.root, job, lib.memory, Services(lib.catalogue))
+    return job, said, entries(job) if (job / "plan.json").exists() else {}
+
+
 def read_memory(lib: Library) -> dict:
     return json.loads(lib.memory.read_text(encoding="utf-8")) if lib.memory.exists() else {}
 
@@ -295,9 +302,7 @@ class TheSecondTime(unittest.TestCase):
         cls.decided = lib.entries()
         cls.applied = lib.apply()
 
-        cls.j2 = lib.base / ".musiclib" / "jobs" / "j2"
-        cls.identified = run_identify(lib.root, cls.j2, lib.memory, Services(lib.catalogue))
-        cls.again = entries(cls.j2) if (cls.j2 / "plan.json").exists() else {}
+        cls.j2, cls.identified, cls.again = identify_second_job(lib)
         cls.before = builders.tree(lib.root), builders.tree(lib.extras)
         cls.second_apply = apply_job(lib, cls.j2)
         cls.after = builders.tree(lib.root), builders.tree(lib.extras)
@@ -355,6 +360,101 @@ class TheSecondTime(unittest.TestCase):
         root_after, extras_after = self.after
         self.assertEqual(root_after, root_before)
         self.assertEqual(extras_after, extras_before)
+
+
+# The rips for AFixedNameTheSecondTime. Neither source folder starts with
+# `.`, so the first job's walk finds them whatever it does with dot folders
+# (criterion 26); only the name the engine gives them is under test.
+DOTTED = "3/38 Special/Wild-Eyed Southern Boys [rip]"
+ACCENTED = "C/Cafe Tacvba/Reves [rip]"
+
+DOT_ARTIST = ".38 Special"
+
+# ACCENTED's release as MusicBrainz might send it (letter plus combining acute,
+# U+0301) and the same text composed, as the engine must write it. Escapes,
+# because an editor on macOS may normalise a literal without saying so.
+NFD_ARTIST = "Cafe\u0301 Tacvba"
+NFD_TITLE = "Re\u0301ves"
+NFD_TRACKS = ["E\u0301te\u0301", "Two"]
+NFC_ARTIST = "Caf\u00e9 Tacvba"
+NFC_TITLE = "R\u00e9ves"
+NFC_TRACKS = ["\u00c9t\u00e9", "Two"]
+
+
+def written_tracks(root: Path) -> dict[str, dict]:
+    return {path.relative_to(root).as_posix(): builders.read_tags(path) for path in sorted(root.rglob("*.flac"))}
+
+
+class AFixedNameTheSecondTime(unittest.TestCase):
+    """`.38 Special` and decomposed text applied by `j1`, then `j2` over the written library.
+
+    The first job has to change both albums, or "no change" in the second
+    proves nothing: DOTTED moves to `#/_38 Special` and ACCENTED's tags go
+    from the rip's loose text to MusicBrainz's, composed. The cases only read.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        lib = cls.lib = new_library(cls)
+        dotted = release(1, DOT_ARTIST, "Wild-Eyed Southern Boys", TITLES)
+        accented = release(2, NFD_ARTIST, NFD_TITLE, NFD_TRACKS)
+        lib.catalogue.extend([dotted, accented])
+        album(lib.root, DOTTED, TITLES, release_id=release_id(dotted))
+        # The rip's titles equal the release's, still decomposed, so the files
+        # match the release as well as DOTTED's do.
+        album(lib.root, ACCENTED, NFD_TRACKS, release_id=release_id(accented))
+        lib.identify()
+        cls.first = lib.entries()
+        cls.applied = lib.apply()
+        # Read now, before the second job runs, so a case sees what the
+        # first apply wrote and nothing a later step did to it.
+        cls.written = written_tracks(lib.root)
+        _, cls.identified, cls.again = identify_second_job(lib)
+
+    def destination(self, key: str) -> str:
+        """Where the first job put `key`, after checking it applied `key` at all."""
+        self.assertIn(key, applied_sources(self.lib.job), f"the first job did not apply {key}: {self.applied}")
+        return self.first[key]["destination"]
+
+    def tracks_in(self, destination: str) -> list[dict]:
+            return [tags for path, tags in self.written.items() if path.rpartition("/")[0] == destination]
+
+    def assertProposesNothing(self, destination: str) -> None:
+        self.assertIn(destination, self.again, f"not in the new job; identify said: {self.identified}")
+        entry = self.again[destination]
+        # `changes` carries every move, tag rewrite, image and deletion.
+        self.assertEqual((entry["state"], entry["holds"], entry["changes"]), ("unchanged", [], []))
+
+    def test_the_first_job_files_dot_38_special_under_hash_underscore_and_keeps_the_dot_in_the_tag(self):
+        destination = self.destination(DOTTED)
+        self.assertEqual(destination.split("/")[:2], ["#", "_38 Special"])
+        tracks = self.tracks_in(destination)
+        self.assertEqual(len(tracks), len(TITLES), f"{destination} is not on disk as planned: {list(self.written)}")
+        for number, tags in enumerate(tracks, start=1):
+            with self.subTest(track=number):
+                self.assertEqual((tags.get(key_of("artist")), tags.get(key_of("albumartist"))),
+                                 ([DOT_ARTIST], [DOT_ARTIST]))
+        # The rip's own folder is emptied, so the new job sees only the renamed one.
+        self.assertEqual([path for path in self.written if path.startswith(DOTTED + "/")], [])
+
+    def test_the_first_job_writes_decomposed_musicbrainz_text_to_the_tags_composed(self):
+        destination = self.destination(ACCENTED)
+        tracks = self.tracks_in(destination)
+        self.assertEqual(len(tracks), len(NFC_TRACKS), f"{destination} is not on disk as planned: {list(self.written)}")
+        for number, (tags, title) in enumerate(zip(tracks, NFC_TRACKS), start=1):
+            with self.subTest(track=number):
+                self.assertEqual((tags.get(key_of("artist")), tags.get(key_of("album")), tags.get(key_of("title"))),
+                                 ([NFC_ARTIST], [NFC_TITLE], [title]))
+                # Not only the three above: an artist sort name or a
+                # release-group title copied from MusicBrainz is text too.
+                decomposed = [value for values in tags.values() for value in values
+                              if isinstance(value, str) and not unicodedata.is_normalized("NFC", value)]
+                self.assertEqual(decomposed, [])
+
+    def test_a_new_job_proposes_no_change_to_hash_underscore_38_special_or_to_composed_text(self):
+        for key in (DOTTED, ACCENTED):
+            with self.subTest(album=key):
+                self.assertProposesNothing(self.destination(key))
 
 
 FIRST = "A/Alpha/First [rip]"

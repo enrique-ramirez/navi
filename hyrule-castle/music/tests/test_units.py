@@ -23,6 +23,7 @@ from pathlib import Path
 from mutagen.id3 import Frames
 
 from musiclib import units
+from musiclib.identify import identify
 from tests import builders
 
 NEEDS_A_PERSON = "needs a person"
@@ -153,6 +154,60 @@ class Finding(UnitsTestCase):
         self.assertEqual(rel, "02. The Day the World Went Away.flac")
         self.assertTrue(str(error).strip())
         self.assertIsNone(unit.status)
+
+    def lock(self, folder: Path) -> None:
+        """Make `folder` unlistable until the case ends, or skip the case where that cannot be done."""
+        folder.chmod(0)
+        # Registered after the temporary directory, so it runs first.
+        self.addCleanup(folder.chmod, 0o755)
+        try:
+            list(folder.iterdir())
+        except PermissionError:
+            return
+        self.skipTest("chmod 000 does not stop this user listing a folder (root?)")
+
+    def test_an_unreadable_folder_inside_an_album_is_listed_as_unreadable_and_holds_it(self) -> None:
+        # Skipped silently, the album is planned and moved, and whatever the
+        # folder holds is left behind in the old one. A disc folder, and a
+        # folder two levels down, which only a walk at every depth reaches.
+        for locked in ("CD2", "Scans", "Scans/extra"):
+            with self.subTest(locked):
+                self.root = Path(tempfile.mkdtemp(dir=self.root)).resolve()
+                album = self.album("N/Nine Inch Nails/(1999) The Fragile")
+                add(album, "CD1/01. Somewhat Damaged.flac", "The Fragile")
+                add(album, "CD2/01. The Wretched.flac", "The Fragile")
+                (album / "Scans/extra").mkdir(parents=True)
+                (album / "Scans/extra/back.jpg").write_bytes(b"x")
+                self.lock(album / locked)
+                unit = self.only_unit()
+                self.assertIn("CD1/01. Somewhat Damaged.flac", track_names(unit))
+                self.assertEqual([rel for rel, _reason in unit.unreadable], [locked])
+                self.assertTrue(str(unit.unreadable[0][1]).strip())
+                # Identify holds a unit with anything unreadable before it
+                # asks MusicBrainz, so no client is needed to see it held.
+                held = identify(unit, None)
+                self.assertEqual((held.status, held.reason), ("unidentified", "unreadable files"))
+
+    def test_an_unreadable_letter_or_artist_folder_is_skipped_and_holds_nothing(self) -> None:
+        # Nothing above the album folder belongs to an album, so there is
+        # nothing to hold. The other albums are found as before.
+        for locked in ("A", "N/A Perfect Circle"):
+            with self.subTest(locked):
+                self.root = Path(tempfile.mkdtemp(dir=self.root)).resolve()
+                add(self.album("A/A Perfect Circle/(2000) Mer de Noms"), "01. The Hollow.flac", "Mer de Noms")
+                add(self.album("N/A Perfect Circle/(2003) Thirteenth Step"), "01. The Package.flac", "Thirteenth Step")
+                add(self.album("N/Nine Inch Nails/(1999) The Fragile"), "01. Somewhat Damaged.flac", "The Fragile")
+                self.lock(self.root / locked)
+                found = units.units(self.root)
+                self.assertIn("N/Nine Inch Nails/(1999) The Fragile", [u.rel for u in found])
+                self.assertFalse([u.rel for u in found if u.rel.startswith(locked + "/")])
+                self.assertEqual([u.unreadable for u in found], [[]] * len(found))
+
+    def test_a_root_that_cannot_be_listed_raises_rather_than_reading_as_an_empty_library(self) -> None:
+        # An empty library and a misspelt path are not the same answer: the
+        # first plans nothing, the second must stop the command.
+        with self.assertRaises(FileNotFoundError):
+            units.units(self.root / "libary")
 
     def test_finding_units_writes_nothing(self) -> None:
         # An MP3 with no ID3 tag is the likely victim: reading one gives it an

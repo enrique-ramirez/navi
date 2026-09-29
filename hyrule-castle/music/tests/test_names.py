@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
-from musiclib import names
+from musiclib import caa, check, mb, names
+from musiclib.cache import Cache
+from musiclib.units import units
+from tests import builders
 
 FALLBACK_ARTICLES = ("The", "A", "An", "Los", "Las", "La", "El", "Die", "Der", "Das", "Les", "Le")
 
@@ -292,6 +297,145 @@ class TrackFilenameOver255Bytes(unittest.TestCase):
     def test_a_title_with_no_spaces_is_cut_at_a_whole_character_after_the_number(self) -> None:
         # 80 characters are 240 bytes: with `01. `, the mark and `.flac`, 255.
         self.assertEqual(names.track_filename(1, WIDE * 100, "flac", 10), f"01. {WIDE * 80} [...].flac")
+
+
+class ALeadingFullStopOrHyphen(unittest.TestCase):
+    """Criterion 21: a leading `.` or `-` in an artist folder becomes `_`, as beets does it.
+
+    A folder starting with `.` is hidden on the box and on a Mac, and one
+    starting with `-` reads as an option to half the tools that touch it.
+    """
+
+    def test_criterion_21s_three_examples_land_under_hash_with_only_the_first_character_replaced(self) -> None:
+        # The ellipsis and the trailing hyphen guard the "only the first"
+        # half: replacing every leading run, or every hyphen, fails them.
+        for name, path in (
+            (".38 Special", "#/_38 Special"),
+            ("...And You Will Know Us by the Trail of Dead", "#/_..And You Will Know Us by the Trail of Dead"),
+            ("-M-", "#/_M-"),
+        ):
+            for known in (True, False):
+                with self.subTest(name=name, known=known):
+                    folder = names.artist_folder(name, name, known=known)
+                    self.assertEqual(f"{names.letter(folder)}/{folder}", path)
+
+    def test_a_hyphen_left_at_the_front_by_the_character_table_is_replaced_too(self) -> None:
+        # `:wumpscut:` only starts with a hyphen once the colon has been
+        # through the table. Replacing before the table leaves `-wumpscut-`.
+        self.assertEqual(names.artist_folder(":wumpscut:", ":wumpscut:"), "_wumpscut-")
+
+    def test_an_artist_named_only_full_stops_gets_the_folder_underscore_under_hash(self) -> None:
+        # The character table strips trailing full stops, which for these
+        # names is all of them. An empty artist folder would put the albums
+        # straight into the letter folder.
+        for name in (".", "..", "..."):
+            for known in (True, False):
+                with self.subTest(name=name, known=known):
+                    folder = names.artist_folder(name, name, known=known)
+                    self.assertEqual(f"{names.letter(folder)}/{folder}", "#/_")
+
+    def test_a_full_stop_or_hyphen_anywhere_but_the_front_is_left_alone(self) -> None:
+        for name in ("Mr. Bungle", "Jay-Z", "t.A.T.u."):
+            with self.subTest(name=name):
+                self.assertEqual(names.artist_folder(name, name), names.sanitize(name))
+
+
+class AnUpperCaseExtension(unittest.TestCase):
+    """Criterion 22: a planned file name carries its extension in lower case."""
+
+    def test_the_extension_is_lowercased_and_the_title_is_not(self) -> None:
+        self.assertEqual(names.track_filename(1, "Title", "MP3", 10), "01. Title.mp3")
+        self.assertEqual(names.track_filename(2, "LOUD", "Flac", 10), "02. LOUD.flac")
+
+
+class LettersWithAStroke(unittest.TestCase):
+    """Criterion 24: `Ø` and `Ł` have no decomposition, so stripping accents alone files them under `#`."""
+
+    def test_o_with_a_stroke_goes_under_o_and_l_with_a_stroke_under_l(self) -> None:
+        for folder, expected in (
+            ("Øystein Sevåg", "O"),
+            ("østkyst", "O"),
+            ("Łona", "L"),
+            ("łzy", "L"),
+        ):
+            with self.subTest(folder=folder):
+                self.assertEqual(names.letter(folder), expected)
+
+
+def _planning():
+    """`test_check`'s planning helpers, imported late.
+
+    `test_check` imports `FIONA` from this module, so importing it at the
+    top would be circular whichever module loads first.
+    """
+    from tests import test_check
+
+    return test_check
+
+
+class PlannedNames(unittest.TestCase):
+    """Criteria 21 and 22 through `plan_album`, where the folder and file names are actually chosen."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+    def plan(self, root: Path, album: Path, release: dict):
+        tc = _planning()
+        services = tc._Services(release, tc._release_group(), front=False)
+        cache = Cache(self.tmp / "cache")
+        client = mb.MusicBrainz(cache, transport=services, clock=lambda: 0.0, sleep=lambda s: None)
+        art = caa.CoverArt(cache, transport=services)
+        unit = next(u for u in units(root) if u.path == album)
+        return tc._plan_album(unit, release, client, art, status="auto")
+
+    def test_38_special_is_planned_under_hash_underscore_and_its_tags_keep_the_full_stop(self) -> None:
+        tc = _planning()
+        root = self.tmp / "library"
+        album = tc._rip(root, ["Plainsong"])
+        credit = builders.mb_credit("1a0b0c0d-0000-4000-8000-0000000000c1", ".38 Special", ".38 Special")
+        plan = self.plan(root, album, tc._release(["Plainsong"], credit=credit))
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(str(plan.destination), "#/_38 Special/(2010) Disintegration")
+        self.assertEqual(plan.files[0].target["artist"], [".38 Special"])
+        self.assertEqual(plan.files[0].target["albumartist"], [".38 Special"])
+
+    def test_a_rip_with_upper_case_extensions_is_planned_to_lower_case_ones_and_tagged_as_its_format(self) -> None:
+        # The format has to come from the file whatever the case of its
+        # name: an MP3 planned with Vorbis keys, or refused as unreadable,
+        # would show here as a missing TIT2 or a problem.
+        tc = _planning()
+        for ext, upper, title_key in (("mp3", "MP3", "TIT2"), ("flac", "FLAC", "title")):
+            with self.subTest(ext=upper):
+                root = self.tmp / f"library-{ext}"
+                album = tc._rip(root, ["Plainsong", "Pictures of You"], ext=ext)
+                for path in sorted(album.glob(f"*.{ext}")):
+                    path.rename(path.with_name(f"{path.stem}.{upper}"))
+                plan = self.plan(root, album, tc._release(["Plainsong", "Pictures of You"]))
+
+                self.assertEqual(list(plan.problems), [])
+                self.assertEqual(
+                    sorted(f.destination for f in plan.files),
+                    [f"C/Cure, The/(2010) Disintegration/01. Plainsong.{ext}",
+                     f"C/Cure, The/(2010) Disintegration/02. Pictures of You.{ext}"],
+                )
+                for file_plan in plan.files:
+                    self.assertTrue(file_plan.source.endswith(f".{upper}"), file_plan.source)
+                    self.assertIn(title_key, file_plan.target)
+
+
+class CheckAgrees(unittest.TestCase):
+    """`check` passes an album already where criteria 21 and 24 put it, so a planned album is not flagged."""
+
+    def test_albums_under_hash_underscore_and_under_o_for_o_with_a_stroke_are_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            builders.library_album(root, letter="#", artist="_38 Special", ext="mp3",
+                                   album="Special Forces", date="1982")
+            builders.library_album(root, letter="O", artist="Øystein Sevåg", album="Link", date="1993")
+            self.assertEqual(check.check(root), [])
 
 
 if __name__ == "__main__":

@@ -160,20 +160,51 @@ class Lookups(ClientTestCase):
         self.assertEqual(query(request.url)["fmt"], "json")
         self.assertLessEqual({"genres", "tags"}, inc(request.url))
 
-    def test_a_search_asks_by_title_artist_and_track_count(self) -> None:
-        # Lucene escaping is the client's
-        # business, so backslashes are dropped and case is ignored before
-        # looking for each value under its field.
+    def test_a_search_sends_title_and_artist_as_lowercase_unquoted_terms_and_no_track_count(self) -> None:
+        # A search result's track count takes in data tracks, which the
+        # files never have, so a count filter hides every enhanced CD.
         client, transport = self.client((200, SEARCH))
-        result = client.search_releases("The Downward Spiral", "Nine Inch Nails", 14)
+        result = client.search_releases("The Downward Spiral", "Nine Inch Nails")
         self.assertEqual(result, json.loads(SEARCH))
         [request] = transport.requests
         self.assertEqual(urlsplit(request.url).path.rstrip("/"), "/ws/2/release")
         self.assertEqual(query(request.url)["fmt"], "json")
-        lucene = query(request.url)["query"].replace("\\", "").lower()
-        self.assertRegex(lucene, r'\brelease:[\s("]*the downward spiral')
-        self.assertRegex(lucene, r'\bartist:[\s("]*nine inch nails')
-        self.assertRegex(lucene, r'\btracks:[\s("]*14\b')
+        lucene = query(request.url)["query"]
+        self.assertIn("release:(the downward spiral)", lucene)
+        self.assertIn("artist:(nine inch nails)", lucene)
+        self.assertNotIn("tracks:", lucene)
+        self.assertNotIn('"', lucene)
+
+    def test_lucene_characters_in_a_search_term_are_still_escaped(self) -> None:
+        # Unescaped, the brackets in the title would close `release:(` early.
+        client, transport = self.client((200, SEARCH))
+        client.search_releases("Pretty Hate Machine (2010 Remaster)", "AC/DC")
+        lucene = query(transport.requests[0].url)["query"]
+        self.assertIn(r"release:(pretty hate machine \(2010 remaster\))", lucene)
+        self.assertIn(r"artist:(ac\/dc)", lucene)
+
+    def test_a_various_artists_search_asks_by_the_various_artists_mbid_and_no_artist_name(self) -> None:
+        client, transport = self.client((200, SEARCH))
+        client.search_releases("Nothing Records Sampler", None, various_artists=True)
+        lucene = query(transport.requests[0].url)["query"]
+        self.assertIn("release:(nothing records sampler)", lucene)
+        self.assertIn("arid:89ad4ac3-39f7-470e-963a-56509c546377", lucene)
+        self.assertNotIn("artist:", lucene)
+        self.assertNotIn("tracks:", lucene)
+
+
+    def test_a_search_with_no_album_title_sends_no_release_term(self) -> None:
+        # `release:()` is not a match-anything term: MusicBrainz reads it as
+        # a query of its own and answers with releases that have nothing to
+        # do with the album.
+        for label, artist, various, wanted in (
+            ("an artist", "Nirvana", False, "artist:(nirvana)"),
+            ("various artists", None, True, "arid:89ad4ac3-39f7-470e-963a-56509c546377"),
+        ):
+            with self.subTest(label):
+                client, transport = self.client((200, SEARCH))
+                client.search_releases("", artist, various_artists=various)
+                self.assertEqual(query(transport.requests[0].url)["query"].strip(), wanted)
 
 
 class UserAgent(ClientTestCase):
@@ -190,7 +221,7 @@ class UserAgent(ClientTestCase):
         )
         client.release(RELEASE_MBID)
         client.release_group(RELEASE_GROUP_MBID)
-        client.search_releases("The Downward Spiral", "Nine Inch Nails", 14)
+        client.search_releases("The Downward Spiral", "Nine Inch Nails")
         self.assertEqual(len(transport.requests), 4)
         for request in transport.requests:
             with self.subTest(url=request.url):
@@ -202,7 +233,7 @@ class RateLimit(ClientTestCase):
         client, transport = self.client((200, RELEASE), (200, RELEASE_GROUP), (200, SEARCH))
         client.release(RELEASE_MBID)
         client.release_group(RELEASE_GROUP_MBID)
-        client.search_releases("The Downward Spiral", "Nine Inch Nails", 14)
+        client.search_releases("The Downward Spiral", "Nine Inch Nails")
         self.assertEqual(len(transport.requests), 3)
         for gap in gaps(transport.starts()):
             self.assertGreaterEqual(gap, 1.0)
@@ -372,14 +403,14 @@ class Cached(ClientTestCase):
         cold, _ = self.client((200, RELEASE), (200, RELEASE_GROUP), (200, SEARCH))
         cold.release(RELEASE_MBID)
         cold.release_group(RELEASE_GROUP_MBID)
-        cold.search_releases("The Downward Spiral", "Nine Inch Nails", 14)
+        cold.search_releases("The Downward Spiral", "Nine Inch Nails")
 
         self.clock = FakeClock()
         warm, transport = self.client()
         self.assertEqual(warm.release(RELEASE_MBID), json.loads(RELEASE))
         self.assertEqual(warm.release_group(RELEASE_GROUP_MBID), json.loads(RELEASE_GROUP))
         self.assertEqual(
-            warm.search_releases("The Downward Spiral", "Nine Inch Nails", 14), json.loads(SEARCH)
+            warm.search_releases("The Downward Spiral", "Nine Inch Nails"), json.loads(SEARCH)
         )
         self.assertEqual(transport.requests, [])
         self.assertEqual(self.clock.sleeps, [])
@@ -395,6 +426,22 @@ class Cached(ClientTestCase):
 
         warm, _ = self.client()
         self.assertEqual(warm.release(RELEASE_MBID), json.loads(RELEASE))
+
+
+class ArtistLookup(ClientTestCase):
+    def test_an_artist_lookup_asks_for_its_genres_once_and_answers_later_from_the_cache(self) -> None:
+        # The artist's genres stand in for an album's when the album has
+        # none of its own, so they have the release group's shape.
+        artist_mbid = "69ee3720-a7cb-4402-b48d-a02c366f2bcf"
+        body = json.dumps({"id": artist_mbid, "name": "The Cure",
+                           "genres": [{"name": "gothic rock", "count": 20}]}).encode()
+        client, transport = self.client((200, body))
+        self.assertEqual(client.artist(artist_mbid), json.loads(body))
+        self.assertEqual(client.artist(artist_mbid), json.loads(body))
+        [request] = transport.requests
+        self.assertEqual(urlsplit(request.url).path, f"/ws/2/artist/{artist_mbid}")
+        self.assertEqual(query(request.url)["fmt"], "json")
+        self.assertIn("genres", inc(request.url))
 
 
 if __name__ == "__main__":

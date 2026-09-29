@@ -28,7 +28,7 @@ from musiclib.batch import job as job_module
 from musiclib.batch import memory as memory_module
 from musiclib.batch.job import Job
 from musiclib.units import units as list_units
-from musiclib.write import AlbumFailed, FoobarRunning, _guard_foobar, write_album
+from musiclib.write import AlbumFailed, FoobarRunning, guard_foobar, write_album
 
 
 def _applicable(entry: dict) -> bool:
@@ -63,14 +63,14 @@ def run(job: Job, memory_path: Path, *, limit: int | None = None,
     live_root = Path(live_root)
     extras_root = Path(extras_root)
 
-    on_disk_sha256 = decisions._decisions_sha256(job)
+    on_disk_sha256 = decisions.decisions_sha256(job)
     if on_disk_sha256 != plan_doc.get("decisions_sha256"):
         print(f"{job.decisions} does not match the decisions the last "
               "`musiclib batch identify` folded in; run it again first", file=err)
         return 1
 
     try:
-        _guard_foobar(root, live_root, systemctl)
+        guard_foobar(root, live_root, systemctl)
     except FoobarRunning as exc:
         print(str(exc), file=err)
         return 1

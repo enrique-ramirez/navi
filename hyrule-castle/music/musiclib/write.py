@@ -57,7 +57,7 @@ _STOP_FOOBAR = "sudo systemctl stop foobar2000 first"
 
 # --- the foobar2000 guard ---------------------------------------------------
 
-def _guard_foobar(root: Path, live_root: Path, systemctl: str) -> None:
+def guard_foobar(root: Path, live_root: Path, systemctl: str) -> None:
     """Refuse a write under `live_root` while foobar2000 is serving it.
 
     A root equal to or nested under the live library is as live as the
@@ -110,7 +110,7 @@ def _final_destinations(plan: Plan) -> list[tuple[str, bool]]:
     return finals
 
 
-def _check_collisions(plan: Plan, root: Path) -> None:
+def check_collisions(plan: Plan, root: Path) -> None:
     """Refuse the whole album if two of its destinations collide, Wine's way.
 
     An image is left out of the "already there" half of this check: it
@@ -186,7 +186,7 @@ def _move_all(pairs: list[tuple[Path, Path]]) -> None:
         raise
 
 
-def _undo_moves(pairs: list[tuple[Path, Path]]) -> None:
+def undo_moves(pairs: list[tuple[Path, Path]]) -> None:
     """The inverse of `_move_all`: every pair's destination back to its source."""
     _move_all([(destination, source) for source, destination in pairs])
 
@@ -202,7 +202,7 @@ def _remove_empty_tree(base: Path) -> None:
         base.rmdir()
 
 
-def _prune_empty(path: Path, root: Path) -> None:
+def prune_empty(path: Path, root: Path) -> None:
     """`path`'s tree, and every emptied ancestor up to (not including) `root`."""
     _remove_empty_tree(path)
     parent = path.parent
@@ -261,7 +261,7 @@ def _prior_tags(plan: Plan, root: Path) -> dict[str, dict]:
     return prior
 
 
-def _rollback_target(current: files.Track, prior: dict) -> dict:
+def rollback_target(current: files.Track, prior: dict) -> dict:
     """`prior`, with every picture key swapped for `current`'s own value.
 
     A picture cannot be restored from `prior`: `files.snapshot` keeps only a
@@ -304,8 +304,8 @@ def write_album(
     live_root = Path(live_root)
     extras_root = Path(extras_root)
 
-    _guard_foobar(root, live_root, systemctl)
-    _check_collisions(plan, root)
+    guard_foobar(root, live_root, systemctl)
+    check_collisions(plan, root)
 
     # Read every track's tags before anything moves: this is the record's
     # "prior value", and the only point at which the file is still at its
@@ -347,7 +347,7 @@ def write_album(
                     # place; embed failed after that, so this file - unlike
                     # one tagwrite itself rejected - is not put back yet.
                     reverted = files.read(destination_path)
-                    tagwrite.write(reverted, _rollback_target(reverted, current.tags))
+                    tagwrite.write(reverted, rollback_target(reverted, current.tags))
                     raise AlbumFailed(f"{file_plan.destination}: {exc}") from exc
             done.append(file_plan)
     except AlbumFailed as failed:
@@ -358,9 +358,9 @@ def write_album(
         )
         for file_plan in reversed(done):
             current = files.read(root / file_plan.destination)
-            tagwrite.write(current, _rollback_target(current, prior_tags[file_plan.destination]))
-        _undo_moves([(root / source, root / destination) for source, destination in library_moves])
-        _prune_empty(root / plan.destination, root)
+            tagwrite.write(current, rollback_target(current, prior_tags[file_plan.destination]))
+        undo_moves([(root / source, root / destination) for source, destination in library_moves])
+        prune_empty(root / plan.destination, root)
         raise
 
     created = _write_images(plan, root)
@@ -371,7 +371,7 @@ def write_album(
     for deletion in plan.deletions:
         (root / deletion).unlink()
 
-    _prune_empty(root / plan.source, root)
+    prune_empty(root / plan.source, root)
 
     return _record(
         tags=prior_tags,

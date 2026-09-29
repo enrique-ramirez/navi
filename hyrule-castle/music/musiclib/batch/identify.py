@@ -28,8 +28,8 @@ from musiclib.cache import Cache
 from musiclib.caa import CoverArt
 from musiclib.mb import MusicBrainz
 from musiclib.plan import Plan, changes as plan_changes, plan_album
-from musiclib.units import Unit, units as list_units
-from musiclib.write import Collision, _check_collisions
+from musiclib.units import TrackPair, Unit, pair, position_key, units as list_units
+from musiclib.write import Collision, check_collisions
 
 #: The identification statuses `plan_entry` may build a plan for, at all: any
 #: other status (`unidentified`, `needs a person`) means there is no release
@@ -92,22 +92,6 @@ def _candidate_dict(candidate) -> dict:
     }
 
 
-def _positions(release: dict, file_count: int) -> list[str]:
-    """`"<medium>-<track>"` for every planned file, in the same medium/track order `plan_album` used.
-
-    Recomputed from the release's own media rather than re-walking the
-    unit's tracks: `plan_album` only ever produces one `FilePlan` per file
-    when the disk and release track counts agree per medium, so dividing the
-    release's own counts in order reproduces exactly the split `plan_album`
-    made.
-    """
-    positions = []
-    for medium_index, medium in enumerate(release.get("media", []), start=1):
-        positions.extend(f"{medium_index}-{track_index}"
-                         for track_index in range(1, len(medium.get("tracks", [])) + 1))
-    return positions[:file_count]
-
-
 def _files(plan: Plan, positions: list[str]) -> list[dict]:
     out = []
     for file_plan, position in zip(plan.files, positions):
@@ -125,7 +109,7 @@ def _fields(plan: Plan, positions: list[str], family_by_source: dict[str, str]) 
         family = family_by_source.get(file_plan.source)
         neutral: dict[str, list[str]] = {}
         for name, keys in mapping.PICARD.items():
-            if name in decisions_module._ID_FIELDS:
+            if name in decisions_module.ID_FIELDS:
                 continue
             key = keys.get(family)
             if key and key in file_plan.target:
@@ -167,10 +151,10 @@ def _blank_entry(source: str, status: str) -> dict:
     }
 
 
-def _entry_positions(unit: Unit, root: Path, release: dict, plan: Plan) -> tuple[list[str], dict[str, str]]:
+def _entry_pairs(unit: Unit, root: Path, release: dict, plan: Plan) -> tuple[list[TrackPair], dict[str, str]]:
+    """The pairs `plan_album` planned `plan.files` from, in the same order, and each file's tag family."""
     family_by_source = {Path(t.path).relative_to(root).as_posix(): t.family for t in unit.tracks}
-    positions = _positions(release, len(plan.files))
-    return positions, family_by_source
+    return (pair(unit, release) or [])[:len(plan.files)], family_by_source
 
 
 def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision: dict | None,
@@ -186,7 +170,13 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     laid over the plan before this entry is built from it.
     """
     action = decision.get("action") if decision else None
-    owner_input = {"composers": dict(memory.get("composers") or {})}
+    owner_input = {"composers": dict(memory.get("composers") or {}), "edits": dict(memory.get("edits") or {})}
+    if action == "accept":
+        # The accepted release's own edit is on the files it will write, so
+        # the engine must not read it as a disagreement with MusicBrainz.
+        accepted = decision["release_id"]
+        owner_input["edits"][accepted] = memory_module.merge_edits(
+            owner_input["edits"].get(accepted, {}), decision.get("edits", {}))
 
     game = decision.get("game") if action == "accept" else None
     if game is not None:
@@ -230,9 +220,10 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     if identification.status in _PLANNABLE and top is not None and top.release is not None:
         release = top.release
         plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=owner_input,
-                          incoming=None, status=identification.status)
+                          incoming=None, status=identification.status, pairs=top.pairs)
 
-        positions, family_by_source = _entry_positions(unit, root, release, plan)
+        pairs, family_by_source = _entry_pairs(unit, root, release, plan)
+        positions = [position_key(p) for p in pairs]
         release_group = clients.mb.release_group(release["release-group"]["id"])
         composer = genres.composer(release)
 
@@ -254,7 +245,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         edits = memory_module.merge_edits(owner_edits, game_edit)
 
         if edits:
-            plan = memory_module.lay_edits(plan, edits, release, release_group, positions, family_by_source, unit)
+            plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit)
 
         for problem in plan.problems:
             entry["holds"].append({"kind": "validation", "detail": problem})
@@ -280,7 +271,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         entry["owner_edits"] = owner_edits
         entry["inputs"] = {
             "release_id": top.release_id, "chosen": forced_choice, "status": identification.status,
-            "owner_input": owner_input, "edits": edits,
+            "owner_input": {"composers": owner_input["composers"]}, "edits": edits,
         }
         entry["plan_digest"] = hashlib.sha256(plan.to_json()).hexdigest()
 
@@ -302,7 +293,7 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict) -> Plan:
     without it `Plan.to_json()` would not match `plan_digest` (`Plan.status`
     is part of it), so `apply` could never tell a still-good plan from a
     stale one. `inputs["edits"]` is laid exactly the way `plan_entry` laid
-    it - the same `edits` dict, the same positions and families - so the two
+    it - the same `edits` dict, the same pairs and families - so the two
     give the same digest.
     """
     release = clients.mb.release(inputs["release_id"])
@@ -310,9 +301,9 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict) -> Plan:
                       status=inputs["status"])
     edits = inputs.get("edits") or {}
     if edits:
-        positions, family_by_source = _entry_positions(unit, root, release, plan)
+        pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         release_group = clients.mb.release_group(release["release-group"]["id"])
-        plan = memory_module.lay_edits(plan, edits, release, release_group, positions, family_by_source, unit)
+        plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit)
     return plan
 
 
@@ -343,7 +334,7 @@ def _finalize(entries: list[dict], plans: dict[str, Plan], root: Path) -> None:
 
     for key, plan in plans.items():
         try:
-            _check_collisions(plan, root)
+            check_collisions(plan, root)
         except Collision as exc:
             _add_collision(by_source[key], str(exc))
         except Exception as exc:
@@ -464,7 +455,7 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
         print(str(exc), file=err)
         return 1
     decisions_by_album = (decisions_doc or {}).get("albums", {})
-    decisions_sha256 = decisions_module._decisions_sha256(job)
+    decisions_sha256 = decisions_module.decisions_sha256(job)
 
     memory = memory_module.load(memory_path)
     # Not saved yet: the reopen list is only worth persisting once every
@@ -475,8 +466,8 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
 
     units = list_units(root)
     unit_rels = {unit.rel for unit in units}
-    applied_map = decisions_module._applied_map(job)
-    resolved_decisions = {decisions_module._follow(key, applied_map): (key, decision)
+    applied = decisions_module.applied_map(job)
+    resolved_decisions = {decisions_module.follow_moves(key, applied): (key, decision)
                           for key, decision in decisions_by_album.items()}
     unplaced = sorted(original_key for resolved_key, (original_key, _decision) in resolved_decisions.items()
                       if resolved_key not in unit_rels)

@@ -7,7 +7,7 @@ import io
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 from mutagen.asf import ASF, ASFByteArrayAttribute
 from mutagen.flac import FLAC, Picture
@@ -24,6 +24,7 @@ _EMBED_MAX = 1200
 class ImagePlan:
     files: dict[str, bytes]
     problems: list[str]
+    consumed: str | None = None  # the folder file that became `cover.jpg`, when it was not one already
 
 
 def _is_skipped(image: dict) -> bool:
@@ -39,9 +40,15 @@ def _is_jpeg(data: bytes) -> bool:
     return data[:3] == b"\xff\xd8\xff"
 
 
+#: What Pillow raises for bytes that are not a readable image, however the file is broken.
+_NOT_AN_IMAGE = (OSError, ValueError, SyntaxError, Image.DecompressionBombError)
+
+
 def _as_jpeg(data: bytes) -> bytes:
     """`data`, unchanged if it is already a JPEG, else converted to one."""
     if _is_jpeg(data):
+        with Image.open(io.BytesIO(data)) as image:
+            image.load()
         return data
     with Image.open(io.BytesIO(data)) as image:
         out = io.BytesIO()
@@ -49,25 +56,74 @@ def _as_jpeg(data: bytes) -> bytes:
         return out.getvalue()
 
 
-def plan_images(
-    caa_images: list[dict],
-    download: Callable[[str], bytes],
-    existing_cover: bytes | None,
-) -> ImagePlan:
-    """The album's image files, from the Cover Art Archive's list for the release."""
+_LOCAL_STEMS = ("cover", "front", "folder", "album", "art")
+_LOCAL_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def local_covers(folder: Path) -> list[tuple[str, bytes]]:
+    """`(name, bytes)` of each image in `folder` that can stand in for the cover, best first."""
+    found = []
+    for path in folder.iterdir():
+        stem = path.stem.casefold()
+        if path.is_file() and stem in _LOCAL_STEMS and path.suffix.casefold() in _LOCAL_SUFFIXES:
+            found.append((_LOCAL_STEMS.index(stem), path.name.casefold(), path.name, path))
+    return [(name, path.read_bytes()) for _rank, _key, name, path in sorted(found, key=lambda f: f[:3])]
+
+
+def _front_of(caa_images: list[dict]) -> dict | None:
     kept = [image for image in caa_images if not _is_skipped(image)]
     front = next((image for image in kept if image.get("front")), None)
     if front is None:
         front = next((image for image in kept if "Front" in image.get("types", [])), None)
+    return front
+
+
+def plan_images(
+    caa_images: list[dict],
+    download: Callable[[str], bytes],
+    group_images: Callable[[], list[dict]] | None = None,
+    local: Sequence[tuple[str, bytes]] = (),
+) -> ImagePlan:
+    """The album's image files, from the Cover Art Archive's list for the release.
+
+    The front is the release's own; failing that, the front of the list
+    `group_images()` returns (asked only then); failing that, the first of
+    `local` (see `local_covers`) that Pillow can open. Only the front falls back.
+    """
+    kept = [image for image in caa_images if not _is_skipped(image)]
+    front = _front_of(caa_images)
+    if front is None and group_images is not None:
+        front = _front_of(group_images())
 
     files: dict[str, bytes] = {}
     problems: list[str] = []
+    consumed: str | None = None
+
+    def fetch(image: dict) -> bytes | None:
+        url = image["image"]
+        try:
+            return _as_jpeg(download(url))
+        except _NOT_AN_IMAGE:
+            problems.append(f"cover art archive: {url} is not an image")
+            return None
+
     if front is not None:
-        files["cover.jpg"] = _as_jpeg(download(front["image"]))
-    elif existing_cover is not None:
-        files["cover.jpg"] = existing_cover
+        cover = fetch(front)
+        if cover is not None:
+            files["cover.jpg"] = cover
     else:
-        problems.append("no Cover Art Archive front image and no existing cover.jpg to keep")
+        for name, data in local:
+            try:
+                files["cover.jpg"] = _as_jpeg(data)
+            except _NOT_AN_IMAGE:
+                continue
+            if name.casefold() != "cover.jpg":
+                consumed = name
+            break
+        else:
+            problems.append(
+                "no front cover: not in the Cover Art Archive for the release or its release group, "
+                "and no cover image in the folder")
 
     rest = [image for image in kept if image is not front]
     counts: dict[str, int] = {}
@@ -89,9 +145,11 @@ def plan_images(
             name = f"{base}-{seen[base]}.jpg"
         else:
             name = f"{base}.jpg"
-        files[name] = _as_jpeg(download(image["image"]))
+        picture = fetch(image)
+        if picture is not None:
+            files[name] = picture
 
-    return ImagePlan(files=files, problems=problems)
+    return ImagePlan(files=files, problems=problems, consumed=consumed)
 
 
 def embedded_front(cover_jpeg: bytes) -> bytes:

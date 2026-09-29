@@ -23,8 +23,8 @@ from pathlib import Path, PurePosixPath
 from musiclib import ascii as ascii_
 from musiclib import check, files, genres, images, mapping, names
 from musiclib.caa import CoverArtError
-from musiclib.identify import _group_media
-from musiclib.units import Unit
+from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzUnavailable
+from musiclib.units import TrackPair, Unit, counted_media, group_media, pair
 
 #: The one instruction every "the archive is unavailable" problem carries:
 #: a 500 or a timeout is not "this release has no images" (only a real,
@@ -36,10 +36,6 @@ _CAA_UNAVAILABLE = "cover art archive unavailable"
 #: filesystem the box writes to, holds 255 bytes a name regardless of how
 #: many characters that is.
 _MAX_NAME_BYTES = 255
-
-#: MusicBrainz's fixed id for the Various Artists credit: a compilation is
-#: filed under `V/Various Artists` rather than under a real artist.
-_VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 
 
 @dataclass
@@ -87,6 +83,7 @@ class Plan:
     holds: list[str]
     suggestions: dict[str, str]
     problems: list[str]
+    consumed: str | None = None
 
     def to_json(self) -> bytes:
         """Canonical bytes for comparing two plans, sorted keys and UTF-8 throughout.
@@ -121,6 +118,7 @@ class Plan:
             "deletions": list(self.deletions),
             "extras": list(self.extras),
             "kept": list(self.kept),
+            "consumed": self.consumed,
             "holds": list(self.holds),
             "suggestions": dict(self.suggestions),
             "problems": list(self.problems),
@@ -154,20 +152,22 @@ def _blocked(unit: Unit, root: Path, status: str | None, reasons: list[str]) -> 
     )
 
 
-def _is_compilation(release: dict) -> bool:
+def is_compilation(release: dict) -> bool:
+    """Whether MusicBrainz credits the release to Various Artists alone."""
     credit = release.get("artist-credit") or []
-    return len(credit) == 1 and credit[0].get("artist", {}).get("id") == _VARIOUS_ARTISTS
+    return len(credit) == 1 and credit[0].get("artist", {}).get("id") == VARIOUS_ARTISTS
 
 
 def _album_date(release: dict, tracks: list[files.Track]) -> str | None:
-    """The release's date, or the first file's own, for naming the album folder.
+    """The date for naming the album folder: MusicBrainz's, else the first file's own.
 
     Mirrors `mapping._kept_or_mb`'s per-field fallback, but once for the
     whole album rather than once per track: the folder is one name, not one
     per file.
     """
-    if release.get("date"):
-        return release["date"]
+    mb_date = mapping.release_date(release)
+    if mb_date:
+        return mb_date
     for track in tracks:
         key = mapping.PICARD["date"].get(track.family)
         if not key:
@@ -190,7 +190,7 @@ def _track_disc_folder(unit_path: Path, tracks: list[files.Track]) -> str | None
 
 
 def _album_genres(release_group: dict, tracks: list[files.Track], release: dict,
-                  owner_input: dict, incoming: str | None) -> list[str]:
+                  owner_input: dict, incoming: str | None, mb) -> list[str]:
     """The album's genres, the same list for every track."""
     file_genres: list[str] = []
     for track in tracks:
@@ -202,11 +202,23 @@ def _album_genres(release_group: dict, tracks: list[files.Track], release: dict,
                 file_genres.append(value)
     composer = genres.composer(release)
     custom = genres.custom_genre(release_group, file_genres, composer, owner_input, incoming)
-    return genres.compose(custom, release_group.get("genres", []), file_genres)
+
+    def artist_genres() -> list[dict]:
+        try:
+            return mb.artist(composer).get("genres", [])
+        except MusicBrainzUnavailable:
+            raise
+        except MusicBrainzError:
+            # An unusable answer for this one artist only costs the fallback.
+            return []
+
+    return genres.compose(custom, release_group.get("genres", []), file_genres,
+                          artist_genres if composer is not None else None)
 
 
-def _sort_others(unit: Unit, image_names: set[str], moving: bool) -> tuple[list[str], list[str], list[str]]:
-    """`unit.others` (already root-relative-less, i.e. relative to the album), sorted.
+def sort_others(unit: Unit, image_names: set[str], moving: bool,
+                 consumed: str | None = None) -> tuple[list[str], list[str], list[str]]:
+    """`unit.others`, paths relative to the album, sorted into (deletions, extras, kept).
 
     An existing file whose name a planned image occupies (`image_names`,
     casefolded: always `cover.jpg`, plus any other image the rules place by a
@@ -214,11 +226,15 @@ def _sort_others(unit: Unit, image_names: set[str], moving: bool) -> tuple[list[
     what replaces it - and it is a deletion only when the album is moving: an
     album that stays gets that name overwritten in place, case and all, by
     `write._write_images`, and marking it deleted as well would remove a file
-    the write goes on to replace.
+    the write goes on to replace. `consumed`, a folder file that became
+    `cover.jpg` under another name, is always a deletion.
     """
     deletions, extras, kept = [], [], []
     for rel in unit.others:
         full = f"{unit.rel}/{rel}"
+        if rel == consumed:
+            deletions.append(full)
+            continue
         if PurePosixPath(rel).name.casefold() in image_names:
             if moving:
                 deletions.append(full)
@@ -238,6 +254,7 @@ def _sort_others(unit: Unit, image_names: set[str], moving: bool) -> tuple[list[
 def plan_album(
     unit: Unit, release: dict, mb, caa, owner_input: dict | None = None,
     incoming: str | None = None, status: str | None = None,
+    pairs: list[TrackPair] | None = None,
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`."""
     owner_input = owner_input or {}
@@ -253,16 +270,14 @@ def plan_album(
     problems: list[str] = []
 
     release_group = mb.release_group(release["release-group"]["id"])
-    album_genres = _album_genres(release_group, unit.tracks, release, owner_input, incoming)
+    album_genres = _album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
 
-    # A rip from Windows often carries `Cover.jpg`: the box's disk tells the
-    # cases apart, so the existing cover has to be found by name alone.
-    existing_cover_path = next(
-        (p for p in unit.path.iterdir() if p.is_file() and p.name.casefold() == "cover.jpg"), None)
-    existing_cover = existing_cover_path.read_bytes() if existing_cover_path else None
     try:
         caa_images = caa.images(release["id"])
-        image_plan = images.plan_images(caa_images, caa.download, existing_cover)
+        image_plan = images.plan_images(
+            caa_images, caa.download,
+            group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
+            local=images.local_covers(unit.path))
     except CoverArtError as exc:
         # A 500 or a timeout is not "this release has no images" (`caa`
         # itself already turns a real 404 into an empty list, cached): taking
@@ -280,7 +295,7 @@ def plan_album(
     # quote or an ellipsis.
     artist_name = ascii_.to_ascii(mapping.join_credit(credit, "name"))
     artist_sort = ascii_.to_ascii(mapping.join_credit(credit, "sort-name"))
-    compilation = _is_compilation(release)
+    compilation = is_compilation(release)
     artist_folder = names.artist_folder(artist_name, artist_sort, known=True, compilation=compilation)
     letter = names.letter(artist_folder)
     album_title = ascii_.to_ascii(release["title"])
@@ -297,29 +312,30 @@ def plan_album(
         # mapping problem below (from every track) is what stops the write.
         destination = source
 
-    media = _group_media(unit)
-    release_media = release.get("media", [])
+    if pairs is None:
+        pairs = pair(unit, release)
     file_plans: list[FilePlan] = []
     holds: list[str] = []
     suggestions: dict[str, str] = {}
-    disk_counts = [len(tracks) for tracks in media]
-    release_counts = [len(medium.get("tracks", [])) for medium in release_media]
-    if disk_counts != release_counts:
-        # Indexing `release_media` by medium below would go out of range for
-        # an extra medium on disk, and a per-medium mismatch would tag every
-        # file after it against the wrong recording: neither is a plan
-        # `check` could rescue, so no file is planned at all.
+    if pairs is None:
+        disk_counts = [len(tracks) for tracks in group_media(unit)]
+        release_counts = [len(medium.tracks) for medium in counted_media(release)]
+        # A per-medium mismatch would tag every file after it against the
+        # wrong recording, and an extra medium on disk has no recording at
+        # all: neither is a plan `check` could rescue, so no file is planned.
         problems.append(
             f"file counts do not match the release: {disk_counts} files per medium on disk, "
             f"release has {release_counts} tracks per medium"
         )
     else:
-        for medium_index, tracks in enumerate(media, start=1):
-            mb_tracks_on_medium = len(release_media[medium_index - 1]["tracks"])
-            disc_folder_name = _track_disc_folder(unit.path, tracks)
-            for track_index, track in enumerate(tracks, start=1):
-                planned = mapping.plan_tags(track, release, medium_index, track_index,
-                                            album_genres, disc_folder=disc_folder_name)
+        for medium_index in sorted({p.medium for p in pairs}):
+            medium_pairs = [p for p in pairs if p.medium == medium_index]
+            disc_folder_name = _track_disc_folder(unit.path, [p.file for p in medium_pairs])
+            for pair_ in medium_pairs:
+                track = pair_.file
+                planned = mapping.plan_tags(track, release, medium_index, pair_.position, album_genres,
+                                            disc_folder=disc_folder_name, number=pair_.number,
+                                            total=pair_.total, disc=pair_.disc, discs=pair_.discs)
                 problems.extend(planned.problems)
                 holds.extend(planned.holds)
                 if planned.suggested_discsubtitle and disc_folder_name:
@@ -328,8 +344,8 @@ def plan_album(
                 title_key = mapping.PICARD["title"][track.family]
                 title = planned.target[title_key][0]
                 ext = Path(track.path).suffix.lstrip(".")
-                filename = names.track_filename(track_index, title, ext, mb_tracks_on_medium)
-                disc_dir = names.disc_folder(medium_index, len(media))
+                filename = names.track_filename(pair_.number, title, ext, pair_.total)
+                disc_dir = names.disc_folder(pair_.disc, pair_.discs)
                 dest_rel = f"{destination}/{disc_dir}/{filename}" if disc_dir else f"{destination}/{filename}"
                 for part in PurePosixPath(dest_rel).parts:
                     length = len(part.encode("utf-8"))
@@ -347,14 +363,15 @@ def plan_album(
     # archive has a front for the release: with no front, the rip's own is
     # what `image_plan.files["cover.jpg"]` already carries forward.
     image_names = {"cover.jpg"} | {name.casefold() for name in image_plan.files}
-    deletions, extras, kept = _sort_others(unit, image_names, moving=(source != destination))
+    deletions, extras, kept = sort_others(unit, image_names, moving=(source != destination),
+                                         consumed=image_plan.consumed)
 
     plan = Plan(
         root=root, source=source, destination=destination, release_id=release.get("id"),
         status="review" if holds else (status or "review"),
         files=file_plans, images=image_plan.files, embedded=embedded,
         deletions=deletions, extras=extras, kept=kept,
-        holds=_dedupe(holds), suggestions=suggestions, problems=[],
+        holds=_dedupe(holds), suggestions=suggestions, problems=[], consumed=image_plan.consumed,
     )
 
     problems.extend(f"{v.rule}: {v.detail}" for v in check.check_album(state_from_plan(plan)))
@@ -454,7 +471,7 @@ def state_from_plan(plan: Plan) -> check.AlbumState:
         ))
 
     prefix = f"{plan.source}/"
-    # `plan.kept` already went through `_sort_others`, which sorted a video
+    # `plan.kept` already went through `sort_others`, which sorted a video
     # out to `plan.extras` with the real file in hand - so `classify_other`
     # never needs a path here to answer "keep" or "unexpected" for what is
     # left, only the name (`check.classify_other`'s own docstring).

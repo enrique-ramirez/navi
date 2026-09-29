@@ -33,7 +33,7 @@ from tests.test_plan import Archive, plan_with
 ALBUM = "N/Nine Inch Nails/(1999) The Fragile"
 DESTINATION = "N/Nine Inch Nails/(1999) The Fragile (Deluxe)"
 TITLES = ("Somewhat Damaged", "The Day the World Went Away", "The Frail", "The Wretched")
-KEPT = ("back.jpg", "booklet.pdf", "cover.jpg", "lyrics.lrc", "notes.txt", "rip.log")
+KEPT = ("back.jpg", "booklet.pdf", "cover.jpg", "credits.txt", "notes.txt", "rip.log")
 
 
 def tags_on_disk(path: Path) -> dict:

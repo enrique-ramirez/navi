@@ -25,6 +25,7 @@ from musiclib.cache import Cache
 
 _BASE = "https://api.acoustid.org/v2/lookup"
 _MIN_INTERVAL = 1 / 3
+_MIN_SCORE = 0.5
 
 
 class AcoustIDError(Exception):
@@ -48,7 +49,7 @@ def unavailable(
 
 
 class AcoustID:
-    """Fingerprints a file with `fpcalc` and looks up recordings on AcoustID."""
+    """Fingerprints a file with `fpcalc` and looks up releases on AcoustID."""
 
     def __init__(
         self,
@@ -95,13 +96,13 @@ class AcoustID:
         return data["duration"], data["fingerprint"]
 
     def lookup(self, duration: int, fingerprint: str) -> list[str]:
-        """Recording MBIDs for `duration`/`fingerprint`, best score first, ties by MBID.
+        """Release MBIDs of the best result for `duration`/`fingerprint`, sorted.
 
         The cache key drops `client`: it is a secret that gets rotated, and
         neither rotating it nor the cache directory itself should carry it.
         """
         enc_fp = quote(fingerprint, safe="")
-        tail = f"duration={duration}&fingerprint={enc_fp}&meta=recordings"
+        tail = f"duration={duration}&fingerprint={enc_fp}&meta=recordings+releaseids"
         cache_url = f"{_BASE}?{tail}"
         request_url = f"{_BASE}?client={quote(self.key, safe='')}&{tail}"
 
@@ -118,18 +119,21 @@ class AcoustID:
             return body
 
         body = self.cache.fetch(cache_url, fetch)
-        return _ranked(json.loads(body))
+        return _best_releases(json.loads(body))
 
 
-def _ranked(data: dict) -> list[str]:
-    best: dict[str, float] = {}
-    for result in data.get("results", []):
-        recordings = result.get("recordings")
-        if not recordings:
-            continue
-        score = result.get("score", 0)
-        for recording in recordings:
-            rid = recording["id"]
-            if score > best.get(rid, float("-inf")):
-                best[rid] = score
-    return [rid for rid, _ in sorted(best.items(), key=lambda kv: (-kv[1], kv[0]))]
+def _best_releases(data: dict) -> list[str]:
+    scored = [r for r in data.get("results", []) if r.get("recordings")]
+    if not scored:
+        return []
+    top = max(r.get("score", 0) for r in scored)
+    if top < _MIN_SCORE:
+        return []
+    releases = {
+        release["id"]
+        for result in scored
+        if result.get("score", 0) == top
+        for recording in result["recordings"]
+        for release in recording.get("releases", [])
+    }
+    return sorted(releases)

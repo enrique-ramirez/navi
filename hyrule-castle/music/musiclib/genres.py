@@ -8,6 +8,9 @@ Game-music detection, which decides `custom`, is not part of this module;
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
+
+from musiclib.mb import VARIOUS_ARTISTS
 
 # Loaded relative to this file rather than the current directory, so it
 # still finds the list once the engine is installed to
@@ -19,37 +22,49 @@ OFFICIAL = frozenset(_DATA_FILE.read_text(encoding="utf-8").splitlines())
 
 _VGM = "video game music"
 _SOUNDTRACK = "soundtrack"
-_VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
+_MIN_VOTE_SHARE = 0.25
 _GAME_TAGS = {"video game", "vgm", "game", "game music", _VGM}
 _INCOMING_GAME_GENRES = {"game", "video game", "vgm", _SOUNDTRACK}
 
 
-def compose(custom: str | None, mb_genres: list[dict[str, object]], file_genres: list[str]) -> list[str]:
-    """The album's genres: `custom` first, then what `mb_genres` contributes.
+def _top_quarter(mb_genres: list[dict[str, object]]) -> list[str]:
+    """The on-list names with at least `_MIN_VOTE_SHARE` of the top vote count, by count then name."""
+    on_list = [(g["name"].lower(), g.get("count") or 0) for g in mb_genres if g["name"].lower() in OFFICIAL]
+    if not on_list:
+        return []
+    line = max(count for _name, count in on_list) * _MIN_VOTE_SHARE
+    kept = [(name, count) for name, count in on_list if count >= line]
+    kept.sort(key=lambda item: (-item[1], item[0]))
+    return [name for name, _count in kept]
 
-    With no MusicBrainz genres at all, the file's own genres that are on
-    `OFFICIAL` survive, lowercased and deduplicated, `custom` moved to the
-    front. With some MusicBrainz genres, only the ones on `OFFICIAL` survive,
-    ranked by vote count, and the file's genres play no part.
+
+def compose(
+    custom: str | None,
+    mb_genres: list[dict[str, object]],
+    file_genres: list[str],
+    artist_genres: Callable[[], list[dict[str, object]]] | None = None,
+) -> list[str]:
+    """The album's genres: `custom` first, then what the sources contribute.
+
+    Sources in order, the first that yields any winning: the release group's
+    `mb_genres`, the file's own genres, then `artist_genres()`, which is
+    called only when both are empty and there is no `custom`.
     """
-    if not mb_genres:
+    names = _top_quarter(mb_genres)
+    if not names:
         # Neither `custom` nor a dropped file `soundtrack` needs removing by
         # hand: both are already off the official list, so the same filter
         # drops them on its own.
         seen: set[str] = set()
-        kept: list[str] = []
         for value in file_genres:
             name = value.strip().casefold()
             if not name or name not in OFFICIAL or name in seen:
                 continue
             seen.add(name)
-            kept.append(name)
-        return kept if custom is None else [custom] + kept
-
-    on_list = [(g["name"].lower(), g.get("count") or 0) for g in mb_genres if g["name"].lower() in OFFICIAL]
-    on_list.sort(key=lambda item: (-item[1], item[0]))
-    names = [name for name, _count in on_list]
-    return [custom] + names if custom is not None else names
+            names.append(name)
+    if not names and custom is None and artist_genres is not None:
+        names = _top_quarter(artist_genres())
+    return names if custom is None else [custom] + names
 
 
 def composer(release: dict) -> str | None:
@@ -58,7 +73,7 @@ def composer(release: dict) -> str | None:
     if len(credit) != 1:
         return None
     mbid = credit[0].get("artist", {}).get("id")
-    return None if mbid in (None, _VARIOUS_ARTISTS) else mbid
+    return None if mbid in (None, VARIOUS_ARTISTS) else mbid
 
 
 def tag_says_game(release_group: dict) -> bool:

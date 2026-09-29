@@ -6,6 +6,10 @@ country, media and release-level IDs, and with none of X's where Y has no
 value, because X's barcode on a Y file is wrong rather than merely stale.
 Everything outside that set is left alone, however release-like it looks.
 
+A release with no date of its own is dated from its release group's first
+release date, and from the file only where the group has none either. The
+album folder's year and every track's `DATE` come from the same place.
+
 As in `test_map_tags`, every expected value is read back from a real file
 tagged the way Picard does, so these tests do not depend on how `Track.tags`
 renders an MP4 freeform atom.
@@ -19,6 +23,7 @@ import unittest
 
 from musiclib import files, mapping
 from tests import builders
+from tests.test_check import _Planning, _release, _rip
 
 FORMATS = ("mp3", "flac", "ogg", "m4a")
 
@@ -189,6 +194,66 @@ class ReleaseSpecific(unittest.TestCase):
                 for k, v in outside.items():
                     self.assertEqual(result.target.get(k), v, k)
                 self.assertEqual([r.key for r in result.removals if r.key in outside], [])
+
+
+class AnUndatedRelease(_Planning):
+    """Where `DATE` and the album folder's year come from when the release has no date.
+
+    The order is the release's date, then the release group's first release
+    date as the release lookup carries it, then the file's own `DATE`. The
+    group `plan_album` fetches for genres says 1989-05-02 throughout, so a
+    date taken from that fetch instead of from the release shows here.
+    """
+
+    TITLES = ["Plainsong", "Pictures of You"]
+
+    def plan_undated(self, first_release_date, *, ext="flac", file_date="2001", release_date=None):
+        root = self.library()
+        album = _rip(root, self.TITLES, ext=ext, date=file_date)
+        release = _release(self.TITLES, date=release_date)
+        release["release-group"]["first-release-date"] = first_release_date
+        return self.plan(self.unit(root, album), release, status="auto")
+
+    def assertDated(self, plan, ext, date):
+        """Every track's `DATE` is `date` and the album folder carries its year."""
+        self.assertEqual([p for p in plan.problems if "date" in p.lower()], [])
+        self.assertEqual(str(plan.destination), f"C/Cure, The/({date[:4]}) Disintegration")
+        self.assertEqual(len(plan.files), len(self.TITLES))
+        for file_plan in plan.files:
+            self.assertEqual(file_plan.target.get(key(ext, "date")), [date], file_plan.source)
+
+    def test_takes_the_release_groups_first_date_over_the_files_own_date_in_every_format(self):
+        # The files say 2001, a year that is neither MusicBrainz date, so a
+        # plan that still prefers the file over the group shows.
+        for ext in FORMATS:
+            with self.subTest(ext):
+                self.assertDated(self.plan_undated("1994-05-17", ext=ext), ext, "1994-05-17")
+
+    def test_keeps_the_release_groups_first_date_as_musicbrainz_gives_it_and_names_the_folder_by_its_year(self):
+        for first in ("1994", "1994-05", "1994-05-17"):
+            with self.subTest(first):
+                self.assertDated(self.plan_undated(first), "flac", first)
+
+    def test_an_empty_release_date_counts_as_none(self):
+        self.assertDated(self.plan_undated("1994-05-17", release_date=""), "flac", "1994-05-17")
+
+    def test_with_no_first_date_on_the_release_group_either_takes_the_files_own_date(self):
+        # MusicBrainz gives a missing first date as "", and a missing key is
+        # the same. A plan that writes the empty string as the date shows.
+        for first in ("", None):
+            with self.subTest(first=first):
+                self.assertDated(self.plan_undated(first), "flac", "2001")
+
+    def test_a_dated_release_keeps_its_own_date_over_the_release_groups(self):
+        self.assertDated(self.plan_undated("1994", release_date="1999"), "flac", "1999")
+
+    def test_with_no_date_anywhere_the_plan_carries_the_no_date_problem(self):
+        for first in ("", None):
+            with self.subTest(first=first):
+                plan = self.plan_undated(first, file_date=None)
+                self.assertTrue([p for p in plan.problems if "no DATE" in p], plan.problems)
+                for file_plan in plan.files:
+                    self.assertNotIn(key("flac", "date"), file_plan.target, file_plan.source)
 
 
 if __name__ == "__main__":

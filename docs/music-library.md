@@ -20,9 +20,9 @@ MusicBrainz is the reference for every fact about a release. The one exception i
                 └── ...
 ```
 
-**Letter.** The first character of the artist folder, uppercased, accents removed: `Ángeles Azules, Los` goes under `A`. Digits, symbols and non-Latin scripts go under `#`.
+**Letter.** The first character of the artist folder, uppercased, accents removed: `Ángeles Azules, Los` goes under `A`. `Ø` counts as `O` and `Ł` as `L`, like an accented letter: `Øystein Sevåg` goes under `O`. Digits, symbols and non-Latin scripts go under `#`.
 
-**Artist folder.** The release's album artist. When MusicBrainz's sort name for that artist is the name with a leading article moved to the end, the folder uses the sort name: `Toten Hosen, Die`, `Strokes, The`, `Bunkers, Los`, `Rita Mitsouko, Les`, `Perfect Circle, A`. Otherwise it is the name as written, so people stay `Joaquín Sabina` and never become `Sabina, Joaquín`. An artist MusicBrainz does not know falls back to a fixed list: The, A, An, Los, Las, La, El, Die, Der, Das, Les, Le, L'. Compilations go under `V/Various Artists`.
+**Artist folder.** The release's album artist. When MusicBrainz's sort name for that artist is the name with a leading article moved to the end, the folder uses the sort name: `Toten Hosen, Die`, `Strokes, The`, `Bunkers, Los`, `Rita Mitsouko, Les`, `Perfect Circle, A`. Otherwise it is the name as written, so people stay `Joaquín Sabina` and never become `Sabina, Joaquín`. An artist MusicBrainz does not know falls back to a fixed list: The, A, An, Los, Las, La, El, Die, Der, Das, Les, Le, L'. Compilations go under `V/Various Artists`. An artist folder that would start with `.` or `-` has that character replaced by `_` and is filed under `#`: `.38 Special` becomes `#/_38 Special` and `-M-` becomes `#/_M-`. The tag keeps the name as written.
 
 **Album folder.** `(YYYY) Title`, where `YYYY` is the year of the release's `DATE` tag. The folder and the tag never disagree. A release that is not a plain album gets a prefix from its MusicBrainz release group:
 
@@ -60,13 +60,15 @@ One prefix at most, in the order the table lists them. A plain album (an LP, in 
 
 **Dates.** `DATE` is the release date of this edition. `ORIGINALDATE` is the release group's first release. There is no `YEAR` tag.
 
+**Edition.** Where several MusicBrainz releases fit the files, the library takes an Official one over any other status, and among those the oldest. A partial date counts as the last day it could be, and an undated release comes last.
+
 **Discs.** `DISCSUBTITLE` (`TSST` on MP3) holds a disc's own title. It never goes into the album title, and neither do `(disc 1)`, `(bonus disc)` or anything like them.
 
 **No duplicate fields.** One album artist field (`TPE2`, `ALBUMARTIST`), never `TXXX:ALBUM ARTIST` or `ALBUM ARTIST` beside it. One total, never both inside `TRCK`/`TPOS` and in a `TXXX`.
 
 No field credits whoever ripped, encoded or uploaded the file, or links to where it came from.
 
-**Genres.** Only names on MusicBrainz's official genre list, spelled the way MusicBrainz spells them (lowercase, `post-rock`, `hip hop`), stored as separate values rather than one delimited string. Two custom genres exist because MusicBrainz models soundtracks as a release type rather than a genre: `soundtrack` and `video game music`. A release MusicBrainz marks as a soundtrack gets `soundtrack` by default. The import review can switch it to `video game music`, and that choice is remembered per composer. A release with no MusicBrainz genres keeps the genres its files carry that are on the list, lowercased. Every track has at least one genre, and a track with none is an error.
+**Genres.** Only names on MusicBrainz's official genre list, spelled the way MusicBrainz spells them (lowercase, `post-rock`, `hip hop`), stored as separate values rather than one delimited string. Two custom genres exist because MusicBrainz models soundtracks as a release type rather than a genre: `soundtrack` and `video game music`. A release MusicBrainz marks as a soundtrack gets `soundtrack` by default. The import review can switch it to `video game music`, and that choice is remembered per composer. Of a release's MusicBrainz genres, only those whose vote count is at least a quarter of the top genre's are kept, ties included. A release with no MusicBrainz genres keeps the genres its files carry that are on the list, lowercased. Every track has at least one genre, and a track with none is an error.
 
 **Ratings.** Whole stars, 1 to 5. MP3 holds one `POPM` frame with the email `Windows Media Player 9 Series` on the WMP byte scale (1, 64, 128, 196, 255), which is what foobar2000 writes. FLAC and Ogg hold `RATING` as a plain number. An unrated track has no rating tag at all, never `0` or `-1`. The import never writes a rating: ratings come from listening, in foobar2000 or Jean.
 
@@ -80,9 +82,9 @@ Everything else the Cover Art Archive has for the release is kept beside it: `ba
 
 ## What an album folder may contain
 
-Audio, images, PDF booklets, `.log` files (a rip log proves how the audio was made), `.txt` notes and `.lrc` lyrics. All of them sit in the album folder itself, never in a subfolder other than a `CDn`.
+Audio, images, PDF booklets, `.log` files (a rip log proves how the audio was made) and `.txt` notes. All of them sit in the album folder itself, never in a subfolder other than a `CDn`.
 
-Removed: OS junk (`.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, Windows Media Player's `AlbumArtSmall.jpg` and `AlbumArt_*.jpg`), and rip lists that name the old filenames and go stale the moment files are renamed (`.cue`, `.m3u`, `.m3u8`, `.sfv`, `.accurip`, `.ffp`, `.md5`), plus `.nfo`, `.url`, `.ini` and `.ico`.
+Removed: OS junk (`.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, Windows Media Player's `AlbumArtSmall.jpg` and `AlbumArt_*.jpg`), and rip lists that name the old filenames and go stale the moment files are renamed (`.cue`, `.m3u`, `.m3u8`, `.sfv`, `.accurip`, `.ffp`, `.md5`), plus `.lrc`, `.nfo`, `.url`, `.ini` and `.ico`.
 
 Videos, disc images and CD-ROM software are kept, but outside the library, in `/srv/music/extras` under the same `Letter/Artist/Album` path. foobar2000 does not watch that folder.
 

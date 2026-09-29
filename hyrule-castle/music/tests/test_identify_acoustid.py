@@ -38,16 +38,6 @@ KEY = "k3yF0rTest5"
 DURATION = 262
 FINGERPRINT = FPCALC["fingerprint"]
 
-# lookup.json in score order, ties broken by MBID. The file lists them in an
-# order that neither sorting the MBIDs nor keeping the file's order produces,
-# so only ranking by score gets this.
-RANKED = [
-    "c3e9d4f6-2a7b-4c8d-8e1f-2a3b4c5d6e7f",  # 0.97, the smaller MBID of the pair
-    "f9e8d7c6-0000-4000-8000-000000000002",  # 0.97
-    "d4f0e5a7-3b8c-4d9e-9f2a-3b4c5d6e7f80",  # 0.63
-    "a0c1e2f3-0000-4000-8000-000000000001",  # 0.41
-]
-
 
 class FakeClock:
     """A monotonic clock that moves only when somebody sleeps on it."""
@@ -299,16 +289,20 @@ class Fingerprint(ClientTestCase):
 
 
 class Lookup(ClientTestCase):
-    def test_a_lookup_sends_the_key_duration_and_fingerprint_and_asks_for_recordings(self) -> None:
+    def test_a_lookup_sends_the_key_duration_and_fingerprint_and_asks_for_recordings_with_release_ids(self) -> None:
+        # `releaseids` is what puts the release MBIDs in the answer, so the
+        # fallback never has to ask MusicBrainz about each recording.
+        # AcoustID reads `meta` as words separated by spaces, which arrive
+        # as `+` or `%20`; either decodes the same here.
         client, transport = self.client((200, LOOKUP))
         client.lookup(DURATION, FINGERPRINT)
         [request] = transport.requests
         url = urlsplit(request.url)
         self.assertEqual((url.scheme, url.netloc, url.path), ("https", "api.acoustid.org", "/v2/lookup"))
-        self.assertEqual(
-            query(request.url),
-            {"client": KEY, "duration": str(DURATION), "fingerprint": FINGERPRINT, "meta": "recordings"},
-        )
+        sent = query(request.url)
+        meta = sent.pop("meta", "")
+        self.assertEqual(sent, {"client": KEY, "duration": str(DURATION), "fingerprint": FINGERPRINT})
+        self.assertEqual(sorted(meta.split()), ["recordings", "releaseids"])
 
     def test_it_identifies_itself_as_musiclib(self) -> None:
         # The seam sends the same User-Agent as the MusicBrainz client.
@@ -321,34 +315,14 @@ class Lookup(ClientTestCase):
         self.assertIn(f"musiclib/{musiclib.__version__}", agents[0])
         self.assertIn("hello@enrique-ramirez.com", agents[0])
 
-    def test_recordings_come_back_best_score_first_ties_by_mbid(self) -> None:
-        # A result with no recordings (AcoustID has fingerprints nobody has
-        # linked yet) contributes nothing.
-        client, _ = self.client((200, LOOKUP))
-        self.assertEqual(client.lookup(DURATION, FINGERPRINT), RANKED)
-
-    def test_a_recording_under_two_results_comes_back_once_at_its_better_score(self) -> None:
-        # The file lists the weaker result first, so keeping the first
-        # occurrence puts the recording below one it outscores.
-        twice = json.dumps({"status": "ok", "results": [
-            {"id": "r1", "score": 0.5, "recordings": [{"id": "b0000000-0000-4000-8000-000000000001"}]},
-            {"id": "r2", "score": 0.7, "recordings": [{"id": "a0000000-0000-4000-8000-000000000002"}]},
-            {"id": "r3", "score": 0.9, "recordings": [{"id": "b0000000-0000-4000-8000-000000000001"}]},
-        ]}).encode()
-        client, _ = self.client((200, twice))
-        self.assertEqual(
-            client.lookup(DURATION, FINGERPRINT),
-            ["b0000000-0000-4000-8000-000000000001", "a0000000-0000-4000-8000-000000000002"],
-        )
+    # What `lookup` hands back is between it and identify. Which releases a
+    # track contributes (criterion 15) is held further down, through
+    # identify, so it holds wherever the builder puts the rule.
 
     def test_an_error_in_a_200_body_is_an_acoustid_error(self) -> None:
         client, _ = self.client((200, b'{"status": "error", "error": {"code": 3, "message": "invalid fingerprint"}}'))
         with self.assertRaises(acoustid.AcoustIDError):
             client.lookup(DURATION, FINGERPRINT)
-
-    def test_no_results_is_an_empty_list(self) -> None:
-        client, _ = self.client((200, b'{"status": "ok", "results": []}'))
-        self.assertEqual(client.lookup(DURATION, FINGERPRINT), [])
 
     def test_an_error_status_raises_and_is_not_cached(self) -> None:
         # 400 is what AcoustID answers for a bad key. Caching it would keep
@@ -357,7 +331,7 @@ class Lookup(ClientTestCase):
         with self.assertRaises(acoustid.AcoustIDError):
             client.lookup(DURATION, FINGERPRINT)
         later, transport = self.client((200, LOOKUP))
-        self.assertEqual(later.lookup(DURATION, FINGERPRINT), RANKED)
+        later.lookup(DURATION, FINGERPRINT)
         self.assertEqual(len(transport.requests), 1)
 
 
@@ -397,10 +371,11 @@ class RateLimit(ClientTestCase):
 class Cached(ClientTestCase):
     def test_a_warm_cache_answers_without_a_request_or_a_wait(self) -> None:
         cold, _ = self.client((200, LOOKUP))
-        cold.lookup(DURATION, FINGERPRINT)
+        answer = cold.lookup(DURATION, FINGERPRINT)
+        self.assertTrue(answer)
         self.clock = FakeClock()
         warm, transport = self.client()
-        self.assertEqual(warm.lookup(DURATION, FINGERPRINT), RANKED)
+        self.assertEqual(warm.lookup(DURATION, FINGERPRINT), answer)
         self.assertEqual(transport.requests, [])
         self.assertEqual(self.clock.sleeps, [])
 
@@ -408,9 +383,10 @@ class Cached(ClientTestCase):
         # The key is a secret and gets rotated. Neither should cost the
         # whole cache.
         cold, _ = self.client((200, LOOKUP))
-        cold.lookup(DURATION, FINGERPRINT)
+        answer = cold.lookup(DURATION, FINGERPRINT)
+        self.assertTrue(answer)
         warm, transport = self.client(key="aN0therKey")
-        self.assertEqual(warm.lookup(DURATION, FINGERPRINT), RANKED)
+        self.assertEqual(warm.lookup(DURATION, FINGERPRINT), answer)
         self.assertEqual(transport.requests, [])
 
     def test_the_key_never_appears_in_the_cache_directory(self) -> None:
@@ -431,64 +407,77 @@ class Cached(ClientTestCase):
         cold.lookup(DURATION, FINGERPRINT)
         empty = (200, b'{"status": "ok", "results": []}')
         other, transport = self.client(empty, empty)
-        self.assertEqual(other.lookup(DURATION, FINGERPRINT + "x"), [])
-        self.assertEqual(other.lookup(DURATION + 1, FINGERPRINT), [])
+        other.lookup(DURATION, FINGERPRINT + "x")
+        other.lookup(DURATION + 1, FINGERPRINT)
         self.assertEqual(len(transport.requests), 2)
 
 
-# --- identify falling back to fingerprints (criteria 4 and 5) ---------------
+# --- identify falling back to fingerprints (003 criteria 2 and 15) ----------
+
+
+# The Downward Spiral's first ten tracks as files: title tag and seconds.
+TITLES = [
+    ("Mr. Self Destruct", 270), ("Piggy", 264), ("Heresy", 234), ("March of the Pigs", 178),
+    ("Closer", 373), ("Ruiner", 298), ("The Becoming", 331), ("I Do Not Want This", 341),
+    ("Big Man with a Gun", 96), ("A Warm Place", 202),
+]
+
+
+def best(*releases: str, score: float = 0.9) -> tuple[float, list[list[str]]]:
+    """One AcoustID result at `score`: a single recording, released on `releases`."""
+    return score, [list(releases)]
 
 
 class Lookups:
-    """AcoustID answering by file: `fpcalc` below fingerprints a file as `FP-<its name>`.
+    """AcoustID answering by track number: `fpcalc` below fingerprints `03. Heresy.flac` as `FP-03. Heresy.flac`.
 
-    `recordings` maps a file name to the recording MBIDs AcoustID knows it
-    as. A file not in it is a fingerprint nobody has linked yet.
+    `answers` maps a track number to its results, each `(score, recordings)`
+    with every recording given as the release MBIDs it is on, listed in the
+    order given. A track not in it is a fingerprint nobody has linked yet.
+    Release IDs come back only when the request asks for `releaseids`, as
+    on AcoustID, so a client that forgets to ask gets none.
     """
 
-    def __init__(self, recordings: dict[str, list[str]]) -> None:
-        self.recordings = recordings
+    def __init__(self, answers: dict[int, list[tuple[float, list[list[str]]]]]) -> None:
+        self.answers = answers
         self.requests: list[str] = []
 
     def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
         self.requests.append(url)
-        name = query(url)["fingerprint"].removeprefix("FP-")
-        results = [{"id": f"result-{n}", "score": 0.9, "recordings": [{"id": r}]}
-                   for n, r in enumerate(self.recordings.get(name, []))]
+        sent = query(url)
+        with_releases = "releaseids" in sent.get("meta", "").split()
+        number = int(sent["fingerprint"].removeprefix("FP-")[:2])
+        results = []
+        for n, (score, recordings) in enumerate(self.answers.get(number, [])):
+            listed = []
+            for m, releases in enumerate(recordings):
+                recording: dict = {"id": f"c{number:02d}{n}{m}0000-0000-4000-8000-000000000000"}
+                if with_releases:
+                    recording["releases"] = [{"id": r} for r in releases]
+                listed.append(recording)
+            results.append({"id": f"result-{number}-{n}", "score": score, "recordings": listed})
         return 200, json.dumps({"status": "ok", "results": results}).encode()
 
 
 class IdentifyByFingerprint(unittest.TestCase):
     """What identify does when the search finds nothing with the files' track counts.
 
-    MusicBrainz is the fake server from tests.test_identify, which also says
-    which releases each recording appears on. It is imported here rather
-    than at the top because it imports musiclib.identify, and the client
-    cases above do not need that to exist.
+    MusicBrainz is the fake server from tests.test_identify. It is imported
+    here rather than at the top because it imports musiclib.identify, and
+    the client cases above do not need that to exist.
     """
-
-    FILES = [200, 180, 240]
 
     def setUp(self) -> None:
         from tests import test_identify as fakes
         from musiclib.identify import identify
 
         self.fakes = fakes
+        self.mbid = fakes.mbid
         self._identify = identify
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        album = self.root / "N" / "Nine Inch Nails" / "(1994) The Downward Spiral"
-        self.unit = fakes.unit(album, [
-            fakes.vorbis(album, f"0{n}. Track {n}.flac", length, tracknumber=str(n),
-                         album="The Downward Spiral", albumartist="Nine Inch Nails")
-            for n, length in enumerate(self.FILES, start=1)
-        ])
-        # On disk as well as in the unit, the way a scanned album is: the
-        # client stats a file before it fingerprints it.
-        album.mkdir(parents=True, exist_ok=True)
-        for track in self.unit.tracks:
-            Path(track.path).touch()
+        self.album(3)
         # fpcalc logs the file it was asked about and names the fingerprint
         # after it, so each file can be looked up as something different.
         self.fpcalc_log = self.root / "fpcalc.log"
@@ -502,12 +491,29 @@ class IdentifyByFingerprint(unittest.TestCase):
         )
         self.fpcalc.chmod(0o755)
 
+    def album(self, count: int) -> None:
+        """The first `count` of TITLES as the album under test, on disk as a scanned album is."""
+        folder = self.root / "N" / "Nine Inch Nails" / "(1994) The Downward Spiral"
+        self.unit = self.fakes.unit(folder, [
+            self.fakes.vorbis(folder, f"{n:02d}. {title}.flac", length, tracknumber=str(n), title=title,
+                              album="The Downward Spiral", albumartist="Nine Inch Nails", artist="Nine Inch Nails")
+            for n, (title, length) in enumerate(TITLES[:count], start=1)
+        ])
+        # The client stats a file before it fingerprints it.
+        folder.mkdir(parents=True, exist_ok=True)
+        for track in self.unit.tracks:
+            Path(track.path).touch()
+
+    def release(self, key: str, tracks=None, **fields) -> dict:
+        """A one-medium release as MusicBrainz has it, by default exactly the album's files."""
+        return self.fakes.titled_json(self.mbid(key), tracks or TITLES[:len(self.unit.tracks)], **fields)
+
     def which(self, name: str) -> str | None:
         return str(self.fpcalc) if name == "fpcalc" else None
 
-    def identify(self, server, recordings: dict[str, list[str]] | None = None, *,
+    def identify(self, server, answers: dict | None = None, *,
                  env: dict[str, str] | None = None, which=None, with_acoustid: bool = True):
-        lookups = Lookups(recordings or {})
+        lookups = Lookups(answers or {})
         acoustid_clock = FakeClock()
         (self.root / "acoustid-cache").mkdir(exist_ok=True)
         (self.root / "mb-cache").mkdir(exist_ok=True)
@@ -541,61 +547,176 @@ class IdentifyByFingerprint(unittest.TestCase):
         self.assertEqual((result.status, result.reason), ("unidentified", "no match"))
 
     def test_a_count_match_in_the_search_means_no_fingerprinting(self) -> None:
-        # 4 s off is `review`, and still a count match: the owner picks
-        # from the search, and AcoustID is not asked.
-        mbid = self.fakes.mbid
-        close = self.fakes.release_json(mbid("a1"), [[204, 180, 240]])
-        server = self.fakes.Server(search=self.fakes.search_json(close), releases=(close,),
-                                   recordings={mbid("91"): [mbid("a1")]})
-        result, lookups = self.identify(server, {"01. Track 1.flac": [mbid("91")]})
+        # Track 1 20 s off is `review`, and still a count match: the owner
+        # picks from the search, and AcoustID is not asked.
+        close = self.release("a1", [("Mr. Self Destruct", 290), *TITLES[1:3]])
+        server = self.fakes.Server(search=self.fakes.search_json(close), releases=(close,))
+        result, lookups = self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
         self.assertEqual(result.status, "review")
         self.assertEqual(lookups.requests, [])
         self.assertFalse(self.fpcalc_ran())
 
-    def test_a_fingerprint_match_is_review_even_when_it_fits_exactly(self) -> None:
+    def test_a_fingerprint_match_that_fits_is_auto(self) -> None:
         # The search found the album only with the wrong track count. The
-        # fingerprints find a release every file fits within 3 s, alone,
-        # which from a search would be `auto`.
-        mbid = self.fakes.mbid
-        short = self.fakes.release_json(mbid("b1"), [[200, 180]])
-        exact = self.fakes.release_json(mbid("a1"), [self.FILES])
-        server = self.fakes.Server(search=self.fakes.search_json(short), releases=(exact,),
-                                   recordings={mbid(f"9{n}"): [mbid("a1")] for n in (1, 2, 3)})
-        result, _ = self.identify(server, {f"0{n}. Track {n}.flac": [mbid(f"9{n}")] for n in (1, 2, 3)})
-        self.assertEqual(result.status, "review")
-        self.assertEqual([(c.release_id, c.release) for c in result.candidates[:1]], [(mbid("a1"), exact)])
+        # fingerprints find a release every file fits. 001 held every
+        # fingerprint match for a person; criterion 2 lets one that fits
+        # through, as it would from a search.
+        short = self.release("b1", TITLES[:2])
+        exact = self.release("a1")
+        server = self.fakes.Server(search=self.fakes.search_json(short), releases=(exact,))
+        result, _ = self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
+        self.assertEqual(result.status, "auto")
+        self.assertEqual([(c.release_id, c.release) for c in result.candidates[:1]], [(self.mbid("a1"), exact)])
 
-    def test_releases_from_every_track_are_proposed_once_each_ranked_as_a_search_is(self) -> None:
-        # Files are 200, 180 and 240 s. Track 1 is recording A, on e1, d4 and
-        # c2. Track 2 is recording B, on c2, f3 and 03. Track 3 is unknown.
-        # f3 is reachable only from track 2, and c2 from both. The ranking
-        # differs from the order the releases were found in, and from MBID
-        # order, and d4 and e1 tie on duration so only the MBID orders them.
-        mbid = self.fakes.mbid
-        releases = {
-            "e1": [[200, 180, 241]],  # counts match, 1 s off in all
-            "d4": [[201, 180, 240]],  # counts match, 1 s off in all
-            "c2": [[200, 180, 244]],  # counts match, 4 s off
-            "f3": [[200, 180, 240]],  # counts match exactly
-            "03": [[200, 180]],       # counts differ
-        }
+    def test_a_fingerprint_match_whose_track_3_title_differs_is_review(self) -> None:
+        # Every length is exact, so only the title check can hold it.
+        other = self.release("a1", [*TITLES[:2], ("Hurt", 234)])
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(other,))
+        result, _ = self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
+        self.assertEqual(result.status, "review")
+        self.assertEqual([c.release_id for c in result.candidates], [self.mbid("a1")])
+
+    def test_a_fitting_fingerprint_match_on_a_soundtrack_is_still_held(self) -> None:
+        # Criterion 2 lets a fingerprint match be `auto`, and the soundtrack
+        # hold from 001 still runs after it: nothing on the files says game.
+        exact = self.release("a1")
         server = self.fakes.Server(
-            search=self.fakes.search_json(),
-            releases=tuple(self.fakes.release_json(mbid(k), v) for k, v in releases.items()),
-            recordings={mbid("9a"): [mbid("e1"), mbid("d4"), mbid("c2")],
-                        mbid("9b"): [mbid("c2"), mbid("f3"), mbid("03")]},
+            search=self.fakes.search_json(), releases=(exact,),
+            release_groups=(self.fakes.release_group_json(secondary_types=("Soundtrack",)),),
         )
-        result, _ = self.identify(server, {"01. Track 1.flac": [mbid("9a")], "02. Track 2.flac": [mbid("9b")]})
-        self.assertEqual(result.status, "review")
-        self.assertEqual([c.release_id for c in result.candidates],
-                         [mbid("f3"), mbid("d4"), mbid("e1"), mbid("c2"), mbid("03")])
+        result, _ = self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
+        self.assertEqual((result.status, result.reason), ("review", "unsettled soundtrack"))
 
-    def test_no_recording_found_leaves_the_album_unidentified_with_no_match(self) -> None:
+    def test_release_ids_come_from_acoustid_and_no_recording_is_looked_up_on_musicbrainz(self) -> None:
+        # One MusicBrainz request per recording was a request a second per
+        # track on a long album. The release is still fetched, which shows
+        # the path ran and found it through AcoustID alone.
+        exact = self.release("a1")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact,))
+        self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
+        self.assertEqual([u for u in server.urls if "/recording" in urlsplit(u).path], [])
+        self.assertEqual(server.fetched(), [self.mbid("a1")])
+
+    def test_the_musicbrainz_client_no_longer_looks_up_a_recordings_releases(self) -> None:
+        self.assertFalse(hasattr(mb.MusicBrainz, "recording_releases"))
+
+    def test_a_best_result_under_0_5_contributes_no_release(self) -> None:
+        # a1 fits every file. Track 1's best result puts it there at 0.9;
+        # tracks 2 and 3 have it only at 0.4 and, lower still, 0.3. Counted,
+        # a1 would be on all three tracks; ignored, it is on one in three.
+        exact = self.release("a1")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact,))
+        weak = [best(self.mbid("a1"), score=0.3), best(self.mbid("a1"), score=0.4)]
+        result, _ = self.identify(server, {1: [best(self.mbid("a1"))], 2: weak, 3: weak})
+        self.assertEqual((result.status, result.reason), ("unidentified", "no match"))
+        self.assertEqual(server.fetched(), [])
+
+    def test_a_best_result_of_exactly_0_5_counts(self) -> None:
+        # "At least 0.5". With track 2 counted a1 is on two tracks of three,
+        # over 60%; without it, one of three.
+        exact = self.release("a1")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact,))
+        result, _ = self.identify(server, {1: [best(self.mbid("a1"))], 2: [best(self.mbid("a1"), score=0.5)]})
+        self.assertEqual(server.fetched(), [self.mbid("a1")])
+        self.assertEqual(result.status, "auto")
+
+    def test_only_the_best_result_of_each_track_counts_not_the_others_above_0_5(self) -> None:
+        # b2 is on every track at 0.8, a strong result that is still not the
+        # best, and is listed first so taking the first result gets it too.
+        exact = self.release("a1")
+        other = self.release("b2")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact, other))
+        answer = [best(self.mbid("b2"), score=0.8), best(self.mbid("a1"), score=0.9)]
+        result, _ = self.identify(server, {n: answer for n in (1, 2, 3)})
+        self.assertEqual(server.fetched(), [self.mbid("a1")])
+        self.assertEqual(result.status, "auto")
+
+    def test_of_ten_tracks_a_release_on_seven_is_fetched_and_one_on_six_is_not(self) -> None:
+        # Criterion 15's example. Tracks 8 to 10 have no result at all and
+        # still count in the ten: out of the seven tracks that answered, b2
+        # would be on six, well over 60%. Six of ten is 60% exactly, which
+        # is not more than 60%.
+        self.album(10)
+        exact = self.release("a1")
+        other = self.release("b2")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact, other))
+        answers = {1: [best(self.mbid("a1"))]}
+        answers.update({n: [best(self.mbid("a1"), self.mbid("b2"))] for n in range(2, 8)})
+        result, _ = self.identify(server, answers)
+        self.assertEqual(server.fetched(), [self.mbid("a1")])
+        self.assertEqual(result.status, "auto")
+
+    def test_a_release_on_two_recordings_of_one_track_counts_once_for_that_track(self) -> None:
+        # AcoustID often links one fingerprint to several recordings of the
+        # same song, all on the same release. Counted per recording, a1
+        # would be on two of three tracks from track 1 alone.
+        exact = self.release("a1")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact,))
+        twice = (0.9, [[self.mbid("a1")], [self.mbid("a1")]])
+        result, _ = self.identify(server, {1: [twice]})
+        self.assertEqual((result.status, result.reason), ("unidentified", "no match"))
+        self.assertEqual(server.fetched(), [])
+
+    def test_no_release_on_more_than_60_percent_of_the_tracks_leaves_the_album_unidentified_with_no_match(self) -> None:
+        exact = self.release("a1")
+        other = self.release("b2")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(exact, other))
+        result, lookups = self.identify(server, {1: [best(self.mbid("a1"))], 2: [best(self.mbid("b2"))]})
+        self.assertEqual((result.status, result.reason), ("unidentified", "no match"))
+        self.assertEqual(server.fetched(), [])
+        self.assertNotEqual(lookups.requests, [])
+
+    def test_no_result_for_any_track_leaves_the_album_unidentified_with_no_match(self) -> None:
         server = self.fakes.Server(search=self.fakes.search_json())
         result, lookups = self.identify(server, {})
         self.assertEqual((result.status, result.reason), ("unidentified", "no match"))
         self.assertEqual(result.candidates, [])
         self.assertNotEqual(lookups.requests, [])
+
+    def test_releases_are_proposed_once_each_and_ranked_as_a_search_ranks_them(self) -> None:
+        # Nothing fits, so the ranking is all a person sees. Every track's
+        # best result lists all four, in an order that is neither the rank
+        # nor MBID order. c3 fails one pair, on its title. b2 and a1 fail two
+        # each: b2 on titles with exact lengths, a1 on lengths 16 s off. 0f
+        # is a track short.
+        releases = [
+            self.release("b2", [("Mr. Self Destruct", 270), ("Closer", 264), ("March of the Pigs", 234)]),
+            self.release("0f", TITLES[:2]),
+            self.release("c3", [("Mr. Self Destruct", 284), ("Piggy", 278), ("March of the Pigs", 248)]),
+            self.release("a1", [("Mr. Self Destruct", 286), ("Piggy", 280), ("Heresy", 234)]),
+        ]
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=tuple(releases))
+        result, _ = self.identify(server, {n: [best(*(r["id"] for r in releases))] for n in (1, 2, 3)})
+        self.assertEqual(result.status, "review")
+        self.assertEqual([c.release_id for c in result.candidates],
+                         [self.mbid("c3"), self.mbid("b2"), self.mbid("a1"), self.mbid("0f")])
+
+    def test_a_fitting_release_with_no_track_lengths_is_not_ranked_last_for_it(self) -> None:
+        # Both fit, on the same date. b2 has no lengths at all, so there is
+        # nothing to compare and its difference is 0, as on the search path.
+        # a1 is 2 s off on track 2. Ranked as the worst possible difference,
+        # b2's missing lengths put it behind a1, and so does MBID order.
+        untimed = self.release("b2", [(title, None) for title, _ in TITLES[:3]])
+        timed = self.release("a1", [TITLES[0], ("Piggy", 266), TITLES[2]])
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(untimed, timed))
+        on = best(self.mbid("a1"), self.mbid("b2"))
+        result, _ = self.identify(server, {n: [on] for n in (1, 2, 3)})
+        self.assertEqual(result.status, "auto")
+        self.assertEqual([(c.release_id, c.duration_diff) for c in result.candidates],
+                         [(self.mbid("b2"), 0.0), (self.mbid("a1"), 2.0)])
+
+    def test_among_fingerprint_matches_that_fit_the_official_one_is_chosen_over_older_ones(self) -> None:
+        # Criterion 6 on this path. The Bootleg and the Promotion are older
+        # and rank higher, so oldest-first or rank-first each pick one of them.
+        bootleg = self.release("a1", date="1993-05-01", status="Bootleg")
+        promotion = self.release("b2", [("Mr. Self Destruct", 270.5), *TITLES[1:3]],
+                                 date="1993-02-01", status="Promotion")
+        official = self.release("c3", [("Mr. Self Destruct", 271), *TITLES[1:3]], date="1994-03-08")
+        server = self.fakes.Server(search=self.fakes.search_json(), releases=(bootleg, promotion, official))
+        on = best(self.mbid("a1"), self.mbid("b2"), self.mbid("c3"))
+        result, _ = self.identify(server, {n: [on] for n in (1, 2, 3)})
+        self.assertEqual(result.status, "auto")
+        self.assertEqual(result.candidates[0].release_id, self.mbid("c3"))
 
 
 if __name__ == "__main__":

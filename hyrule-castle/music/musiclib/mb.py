@@ -24,6 +24,7 @@ from musiclib.cache import Cache
 USER_AGENT = f"musiclib/{__version__} ( hello@enrique-ramirez.com )"
 
 _BASE = "https://musicbrainz.org/ws/2"
+VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 _MIN_INTERVAL = 1.0
 # Growing waits after a 503, measured start to start. All above the 1 s
 # floor, so the rate limit itself never swallows a step and makes it look
@@ -99,9 +100,7 @@ def default_transport(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
 
 
 class MusicBrainz:
-    """Looks up releases and release groups, and searches by title, artist and track count.
-
-    Every lookup goes through `cache`, so a warm cache never reaches
+    """Every lookup goes through `cache`, so a warm cache never reaches
     `transport`. `clock` and `sleep` default to `time.monotonic` and
     `time.sleep`; tests pass a fake pair so the 1 second waits do not
     actually cost a second.
@@ -163,16 +162,18 @@ class MusicBrainz:
         url = f"{_BASE}/release-group/{mbid}?inc=genres+tags&fmt=json"
         return json.loads(self._get(url))
 
-    def recording_releases(self, mbid: str) -> list[str]:
-        """The MBIDs of the releases `mbid` appears on, for the AcoustID fallback."""
-        url = f"{_BASE}/recording/{mbid}?inc=releases&fmt=json"
-        return [r["id"] for r in json.loads(self._get(url)).get("releases", [])]
+    def artist(self, mbid: str) -> dict:
+        url = f"{_BASE}/artist/{mbid}?inc=genres&fmt=json"
+        return json.loads(self._get(url))
 
-    def search_releases(self, title: str, artist: str, tracks: int) -> dict:
-        lucene = (
-            f'release:"{_lucene_escape(title)}" AND '
-            f'artist:"{_lucene_escape(artist)}" AND '
-            f"tracks:{int(tracks)}"
-        )
+    def search_releases(self, title: str, artist: str | None, various_artists: bool = False) -> dict:
+        # No track-count term: a search result counts data tracks and pregap
+        # that the files never have, so filtering on it hides enhanced CDs.
+        terms = [f"release:({_lucene_escape(title.lower())})"] if title else []
+        if various_artists:
+            terms.append(f"arid:{VARIOUS_ARTISTS}")
+        elif artist:
+            terms.append(f"artist:({_lucene_escape(artist.lower())})")
+        lucene = " ".join(terms)
         url = f"{_BASE}/release/?query={quote(lucene, safe='')}&fmt=json&limit=25"
         return json.loads(self._get(url))

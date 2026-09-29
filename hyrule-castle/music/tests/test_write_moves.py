@@ -34,7 +34,7 @@ from tests.test_plan import BACK, BACK_URL, FRONT_URL, Archive, plan_with
 ALBUM = "N/Nine Inch Nails/(1999) The Fragile"
 DESTINATION = "N/Nine Inch Nails/(1999) The Fragile (Deluxe)"
 TITLES = ("Somewhat Damaged", "The Day the World Went Away", "The Frail")
-KEPT = ("back.jpg", "booklet.pdf", "lyrics.lrc", "notes.txt", "rip.log")
+KEPT = ("back.jpg", "booklet.pdf", "credits.txt", "notes.txt", "rip.log")
 DELETED = ("album.cue", ".DS_Store", "cover.jpg")
 EXTRAS = ("The Fragile.iso", "Making of.mkv")
 

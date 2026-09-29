@@ -52,7 +52,7 @@ class _Library(unittest.TestCase):
             images={"cover.jpg": builders.jpeg(700, 700)},
             deletions=[f"{ALBUM}/album.cue", f"{ALBUM}/cover.jpg"],
             kept=[f"{ALBUM}/{name}" for name in ("back.jpg", "booklet.pdf", "rip.log",
-                                                  "notes.txt", "lyrics.lrc")])
+                                                  "notes.txt", "credits.txt")])
 
     def assert_written(self, plan):
         for track in plan.files:

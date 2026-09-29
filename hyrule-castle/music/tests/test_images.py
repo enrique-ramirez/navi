@@ -1,9 +1,13 @@
-"""Album images and the embedded cover, from spec criteria 25, 26 and 27.
+"""Album images and the embedded cover, from spec criteria 25, 26 and 27, and the front's fallbacks.
 
 `tests/fixtures/caa/release.json` is written in the shape the Cover Art
 Archive returns for a release. Its list order is chosen so that sorting by
 id, counting a type before skipping, or looking only at the first type all
 give the wrong names. The image bytes are generated here with Pillow.
+
+Where the front comes from when the release has none, and what a download
+that is not an image does, are judged through `plan_album` against a rip
+from `tests.test_check`, so they hold whatever `plan_images` is handed.
 """
 
 from __future__ import annotations
@@ -11,8 +15,10 @@ from __future__ import annotations
 import base64
 import io
 import json
+import struct
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,8 +28,10 @@ from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggvorbis import OggVorbis
 from PIL import Image
 
-from musiclib import caa, images
+from musiclib import caa, images, mb
+from musiclib.cache import Cache
 from tests import builders
+from tests.test_check import _names, _Planning, _plan_album, _release, _release_group, _rip, _Services
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RELEASE = json.loads((FIXTURES / "caa" / "release.json").read_text())
@@ -149,7 +157,7 @@ class CoverArtClient(unittest.TestCase):
 
 class Naming(unittest.TestCase):
     def setUp(self) -> None:
-        self.plan = images.plan_images(CAA_IMAGES, download, None)
+        self.plan = images.plan_images(CAA_IMAGES, download)
 
     def test_names_every_image_the_rules_keep(self) -> None:
         self.assertEqual(
@@ -199,7 +207,7 @@ class Naming(unittest.TestCase):
         self.assertTrue(g > 100 and r < 40 and b < 40, (r, g, b))
 
     def test_a_single_medium_is_not_numbered_and_a_single_booklet_is(self) -> None:
-        plan = images.plan_images([by_id(1003), by_id(1008), by_id(1009)], download, None)
+        plan = images.plan_images([by_id(1003), by_id(1008), by_id(1009)], download)
         self.assertEqual(set(plan.files), {"cover.jpg", "medium.jpg", "booklet-01.jpg"})
 
 
@@ -209,38 +217,42 @@ class WhichImageIsTheFront(unittest.TestCase):
 
     def test_the_image_marked_front_wins_over_an_earlier_front_typed_one(self) -> None:
         caa_images = [self.image(1001, ["Front"], False), self.image(1002, ["Front"], True)]
-        plan = images.plan_images(caa_images, download, None)
+        plan = images.plan_images(caa_images, download)
         self.assertEqual(plan.files["cover.jpg"], BODIES[by_id(1002)["image"]])
 
     def test_without_a_marked_front_the_first_front_typed_image_is_the_cover(self) -> None:
         caa_images = [self.image(1001, ["Back"], False), self.image(1002, ["Front"], False)]
-        plan = images.plan_images(caa_images, download, None)
+        plan = images.plan_images(caa_images, download)
         self.assertEqual(plan.files["cover.jpg"], BODIES[by_id(1002)["image"]])
 
     def test_a_raw_unedited_front_is_never_the_cover(self) -> None:
         caa_images = [self.image(1006, ["Raw/Unedited", "Front"], True), self.image(1002, ["Front"], False)]
-        plan = images.plan_images(caa_images, download, None)
+        plan = images.plan_images(caa_images, download)
         self.assertEqual(plan.files["cover.jpg"], BODIES[by_id(1002)["image"]])
 
 
+NO_FRONT = ("no front cover: not in the Cover Art Archive for the release or its release group, "
+            "and no cover image in the folder")
+
+
 class NoFrontInTheArchive(unittest.TestCase):
-    def test_the_archive_front_replaces_the_existing_cover(self) -> None:
-        plan = images.plan_images(CAA_IMAGES, download, builders.jpeg(10, 10))
+    def test_the_archive_front_replaces_the_folders_cover(self) -> None:
+        plan = images.plan_images(CAA_IMAGES, download, local=[("cover.jpg", builders.jpeg(10, 10))])
         self.assertEqual(plan.files["cover.jpg"], BODIES[by_id(1003)["image"]])
 
-    def test_the_existing_cover_is_kept(self) -> None:
+    def test_the_folders_cover_is_kept(self) -> None:
         existing = builders.jpeg(10, 10)
-        plan = images.plan_images([by_id(1001)], download, existing)
+        plan = images.plan_images([by_id(1001)], download, local=[("cover.jpg", existing)])
         self.assertEqual(plan.files["cover.jpg"], existing)
         self.assertEqual(plan.files["back.jpg"], BODIES[by_id(1001)["image"]])
         self.assertFalse(plan.problems)
 
-    def test_with_no_existing_cover_either_the_plan_fails_naming_cover_jpg(self) -> None:
+    def test_with_no_cover_in_the_folder_either_the_plan_says_where_it_looked(self) -> None:
         for caa_images in ([], [by_id(1001)], [by_id(1006)]):
             with self.subTest(ids=[i["id"] for i in caa_images]):
-                plan = images.plan_images(caa_images, download, None)
+                plan = images.plan_images(caa_images, download)
                 self.assertNotIn("cover.jpg", plan.files)
-                self.assertTrue(any("cover.jpg" in str(p) for p in plan.problems), plan.problems)
+                self.assertIn(NO_FRONT, plan.problems)
 
 
 class EmbeddedFront(unittest.TestCase):
@@ -374,7 +386,7 @@ class EmbedInMp4AndWma(unittest.TestCase):
 class CoverAndEmbeddedTogether(unittest.TestCase):
     def test_cover_jpg_stays_full_size_and_every_track_carries_it_at_1200(self) -> None:
         front = {**by_id(1003), "image": "http://coverartarchive.org/release/x/1.jpg"}
-        plan = images.plan_images([front], lambda url: COVER, None)
+        plan = images.plan_images([front], lambda url: COVER)
         self.assertEqual(plan.files["cover.jpg"], COVER)
 
         embedded = images.embedded_front(plan.files["cover.jpg"])
@@ -387,6 +399,259 @@ class CoverAndEmbeddedTogether(unittest.TestCase):
                     self.assertEqual((kind, mime), (3, "image/jpeg"))
                     self.assertEqual(data, embedded)
                     self.assertEqual(max(size(data)), 1200)
+
+
+RELEASE_GROUP_MBID = "4d5e6f70-8192-4a3b-8c4d-5e6f70819203"
+
+
+class ReleaseGroupImages(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.cache_dir = Path(tmp.name)
+
+    def client(self, transport) -> caa.CoverArt:
+        from musiclib.cache import Cache
+
+        return caa.CoverArt(Cache(self.cache_dir), transport=transport)
+
+    def test_lists_the_release_groups_images_and_answers_them_offline(self) -> None:
+        body = json.dumps(RELEASE).encode()
+        transport = Transport({f"coverartarchive.org/release-group/{RELEASE_GROUP_MBID}": (200, body)})
+        self.assertEqual(self.client(transport).release_group_images(RELEASE_GROUP_MBID), CAA_IMAGES)
+        self.assertEqual(len(transport.requests), 1)
+        self.assertEqual(self.client(offline).release_group_images(RELEASE_GROUP_MBID), CAA_IMAGES)
+
+    def test_a_release_group_the_archive_does_not_have_has_no_images_even_offline(self) -> None:
+        transport = Transport({f"coverartarchive.org/release-group/{RELEASE_GROUP_MBID}": (404, b"Not Found")})
+        self.assertEqual(self.client(transport).release_group_images(RELEASE_GROUP_MBID), [])
+        self.assertEqual(self.client(offline).release_group_images(RELEASE_GROUP_MBID), [])
+
+    def test_a_release_group_listing_that_answers_500_raises_rather_than_reading_as_none(self) -> None:
+        transport = Transport({f"coverartarchive.org/release-group/{RELEASE_GROUP_MBID}": (500, b"oops")})
+        with self.assertRaises(caa.CoverArtError):
+            self.client(transport).release_group_images(RELEASE_GROUP_MBID)
+
+
+def webp(width: int, height: int) -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (width, height), (0, 0, 200)).save(out, "WEBP")
+    return out.getvalue()
+
+
+RELEASE_FRONT = ("Front", f"https://coverartarchive.org/release/{builders.RELEASE_ID}/1.jpg", builders.jpeg(301, 301))
+RELEASE_BACK = ("Back", f"https://coverartarchive.org/release/{builders.RELEASE_ID}/2.jpg", builders.jpeg(302, 302))
+# The release-group endpoint lists another release's images, so its URLs
+# name that release, not the one being planned.
+OTHER_RELEASE = "1a0b0c0d-0000-4000-8000-0000000000b9"
+GROUP_FRONT = ("Front", f"https://coverartarchive.org/release/{OTHER_RELEASE}/7.jpg", builders.jpeg(401, 401))
+GROUP_BACK = ("Back", f"https://coverartarchive.org/release/{OTHER_RELEASE}/8.jpg", builders.jpeg(402, 402))
+GROUP_BOOKLET = ("Booklet", f"https://coverartarchive.org/release/{OTHER_RELEASE}/9.jpg", builders.jpeg(403, 403))
+NOT_AN_IMAGE = b"<!DOCTYPE html><html><title>Service Temporarily Unavailable</title></html>"
+
+
+class Archives:
+    """MusicBrainz as `test_check._Services` answers it, and both Cover Art Archive listings.
+
+    `release_images` and `group_images` are `(type, url, bytes)` for each
+    image the release's and the release group's listing hold, in order. An empty
+    listing is the archive's 404; so is any URL neither names.
+    """
+
+    def __init__(self, release: dict, *, release_images=(), group_images=()) -> None:
+        self.release_id = release["id"]
+        self.group_id = release["release-group"]["id"]
+        self.musicbrainz = _Services(release, _release_group(), front=False)
+        self.listings = {f"/release/{self.release_id}": list(release_images),
+                         f"/release-group/{self.group_id}": list(group_images)}
+
+    def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
+        parts = urlsplit(url)
+        if parts.netloc != "coverartarchive.org":
+            return self.musicbrainz(url, headers)
+        listing = self.listings.get(parts.path.rstrip("/"))
+        if listing is not None:
+            if not listing:
+                return 404, b"Not Found"
+            return 200, json.dumps({"images": [
+                {"id": n, "types": [kind], "front": kind == "Front", "back": kind == "Back",
+                 "image": image_url, "thumbnails": {}}
+                for n, (kind, image_url, _data) in enumerate(listing, start=1)]}).encode()
+        for listing in self.listings.values():
+            for _kind, image_url, data in listing:
+                if url == image_url:
+                    return 200, data
+        return 404, b"Not Found"
+
+
+class _FrontPlanning(_Planning):
+    TITLES = ["Plainsong", "Pictures of You"]
+
+    def plan_rip(self, local: dict[str, bytes], **archive):
+        """A rip with no cover of its own but `local`'s files, planned against `archive`."""
+        root = self.library()
+        album = _rip(root, self.TITLES, cover=False)
+        for name, data in local.items():
+            (album / name).parent.mkdir(parents=True, exist_ok=True)
+            (album / name).write_bytes(data)
+        release = _release(self.TITLES)
+        services = Archives(release, **archive)
+        cache = Cache(Path(tempfile.mkdtemp(prefix="cache-", dir=self.tmp)))
+        client = mb.MusicBrainz(cache, transport=services, clock=lambda: 0.0, sleep=lambda s: None)
+        art = caa.CoverArt(cache, transport=services)
+        return _plan_album(self.unit(root, album), release, client, art, status="auto")
+
+
+class TheFrontFallsBack(_FrontPlanning):
+    def test_with_no_front_on_the_release_the_release_groups_front_is_the_cover(self) -> None:
+        plan = self.plan_rip({}, release_images=[RELEASE_BACK], group_images=[GROUP_BACK, GROUP_FRONT])
+        self.assertEqual(plan.images.get("cover.jpg"), GROUP_FRONT[2])
+        self.assertEqual(plan.images["back.jpg"], RELEASE_BACK[2])
+        self.assertEqual(list(plan.problems), [])
+
+    def test_only_the_front_comes_from_the_release_group(self) -> None:
+        # The group's back and booklet belong to some other release of the
+        # album; only its front stands in for this one's.
+        plan = self.plan_rip({}, release_images=[], group_images=[GROUP_BACK, GROUP_FRONT, GROUP_BOOKLET])
+        self.assertEqual(plan.images, {"cover.jpg": GROUP_FRONT[2]})
+
+    def test_the_releases_own_front_beats_the_groups_and_the_folders(self) -> None:
+        plan = self.plan_rip({"cover.jpg": builders.jpeg(501, 501)},
+                             release_images=[RELEASE_FRONT], group_images=[GROUP_FRONT])
+        self.assertEqual(plan.images.get("cover.jpg"), RELEASE_FRONT[2])
+
+    def test_the_release_groups_front_beats_a_cover_jpg_already_in_the_folder(self) -> None:
+        plan = self.plan_rip({"cover.jpg": builders.jpeg(501, 501)},
+                             release_images=[RELEASE_BACK], group_images=[GROUP_FRONT])
+        self.assertEqual(plan.images.get("cover.jpg"), GROUP_FRONT[2])
+        self.assertEqual(list(plan.problems), [])
+
+    def test_with_no_front_in_either_archive_folder_png_becomes_cover_jpg_and_is_removed(self) -> None:
+        plan = self.plan_rip({"Folder.PNG": png(64, 32, (0, 128, 0, 255))})
+        cover = plan.images.get("cover.jpg")
+        self.assertIsNotNone(cover, plan.problems)
+        self.assertTrue(is_jpeg(cover))
+        self.assertEqual(size(cover), (64, 32))
+        r, g, b = Image.open(io.BytesIO(cover)).convert("RGB").getpixel((32, 16))
+        self.assertTrue(g > 100 and r < 40 and b < 40, (r, g, b))
+        self.assertIn("Folder.PNG", _names(plan.deletions))
+        self.assertNotIn("Folder.PNG", _names(plan.kept) | _names(plan.extras))
+        self.assertEqual(list(plan.problems), [])
+
+    def test_every_listed_name_and_extension_in_any_case_is_taken_from_the_folder(self) -> None:
+        # A JPEG is kept byte for byte; anything else is converted.
+        cases = {
+            "COVER.png": png(71, 31, (0, 128, 0, 255)),
+            "Front.JPEG": builders.jpeg(72, 32),
+            "folder.jpg": builders.jpeg(73, 33),
+            "Album.WebP": webp(74, 34),
+            "ART.JPG": builders.jpeg(75, 35),
+        }
+        for name, data in cases.items():
+            with self.subTest(name):
+                plan = self.plan_rip({name: data})
+                cover = plan.images.get("cover.jpg")
+                self.assertIsNotNone(cover, plan.problems)
+                self.assertTrue(is_jpeg(cover))
+                self.assertEqual(size(cover), size(data))
+                if is_jpeg(data):
+                    self.assertEqual(cover, data)
+                self.assertEqual(list(plan.problems), [])
+
+    def test_of_several_in_the_folder_the_earliest_name_in_the_list_wins_then_the_file_name(self) -> None:
+        # Alphabetical order picks `album` or `art` in each of these; the
+        # list's order is cover, front, folder, album, art.
+        cases = {
+            "front": ({"album.jpg": builders.jpeg(81, 41), "art.png": png(82, 42, (0, 0, 0, 255)),
+                       "Folder.jpg": builders.jpeg(83, 43), "front.webp": webp(84, 44)}, (84, 44)),
+            "cover": ({"album.jpg": builders.jpeg(81, 41), "cover.png": png(85, 45, (0, 0, 0, 255))}, (85, 45)),
+            "one name, two extensions": ({"front.png": png(86, 46, (0, 0, 0, 255)),
+                                          "front.jpeg": builders.jpeg(87, 47)}, (87, 47)),
+        }
+        for case, (local, expected) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip(local)
+                self.assertIn("cover.jpg", plan.images, plan.problems)
+                self.assertEqual(size(plan.images["cover.jpg"]), expected)
+
+    def test_a_name_or_extension_off_the_list_or_a_file_in_a_subfolder_is_not_a_cover(self) -> None:
+        for name in ("cover.gif", "cover.bmp", "covers.jpg", "front cover.jpg", "back.jpg", "scans/cover.jpg"):
+            with self.subTest(name):
+                plan = self.plan_rip({name: builders.jpeg(90, 90)})
+                # A plan refused before tagging (a unit `units` blocks) holds
+                # no images either, so the tracks show it was really planned.
+                self.assertTrue(plan.files, plan.problems)
+                self.assertNotIn("cover.jpg", plan.images)
+                self.assertIn(NO_FRONT, plan.problems)
+
+
+class ADownloadThatIsNotAnImage(_FrontPlanning):
+    def test_is_a_problem_naming_its_url_and_never_raises(self) -> None:
+        # An HTML error page served with a 200 is not a missing cover, and
+        # not a crash either: raising here would file the album under
+        # `error` in a batch, where a problem holds it for the owner.
+        cases = {
+            "the release's front": (dict(release_images=[("Front", RELEASE_FRONT[1], NOT_AN_IMAGE)]),
+                                    RELEASE_FRONT[1]),
+            "the release's back": (dict(release_images=[RELEASE_FRONT, ("Back", RELEASE_BACK[1], b"")]),
+                                   RELEASE_BACK[1]),
+            "the release group's front": (dict(release_images=[],
+                                               group_images=[("Front", GROUP_FRONT[1], NOT_AN_IMAGE)]),
+                                          GROUP_FRONT[1]),
+        }
+        for case, (archive, url) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip({"cover.jpg": builders.jpeg(501, 501)}, **archive)
+                self.assertIn(f"cover art archive: {url} is not an image", plan.problems)
+
+    def test_a_truncated_jpeg_or_one_pillow_raises_valueerror_or_syntaxerror_on_is_the_same_problem(self) -> None:
+        # A JPEG's first three bytes prove nothing about the rest, so one cut
+        # off mid-download would otherwise be kept byte for byte as the cover.
+        for body_name, body in BROKEN.items():
+            for where, archive, url in (
+                ("front", dict(release_images=[("Front", RELEASE_FRONT[1], body)]), RELEASE_FRONT[1]),
+                ("back", dict(release_images=[RELEASE_FRONT, ("Back", RELEASE_BACK[1], body)]), RELEASE_BACK[1]),
+            ):
+                with self.subTest(body=body_name, image=where):
+                    plan = self.plan_rip({}, **archive)
+                    self.assertIn(f"cover art archive: {url} is not an image", plan.problems)
+                    self.assertNotIn(body, plan.images.values())
+
+
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_IHDR_16X16_RGB = struct.pack(">IIBBBBB", 16, 16, 8, 2, 0, 0, 0)
+
+#: Bytes that start as an image and are not one, each failing in Pillow a different way.
+BROKEN = {
+    # The JPEG magic bytes, and half of the picture after them: OSError on load.
+    "truncated JPEG": builders.jpeg(300, 300)[:len(builders.jpeg(300, 300)) // 2],
+    # An IHDR chunk one byte short: Pillow raises ValueError from `Image.open`.
+    "PNG raising ValueError": _PNG_SIGNATURE + _png_chunk(b"IHDR", _IHDR_16X16_RGB[:12]),
+    # A first IDAT too short for the picture, then a chunk whose type is not
+    # letters: Pillow raises SyntaxError while loading it.
+    "PNG raising SyntaxError": (_PNG_SIGNATURE + _png_chunk(b"IHDR", _IHDR_16X16_RGB)
+                                + _png_chunk(b"IDAT", zlib.compress(bytes(16 * 49))[:10])
+                                + struct.pack(">I", 16) + b"\x80\xe4P\x02" + bytes(20)),
+}
+
+
+class ABrokenImageInTheFolder(_FrontPlanning):
+    def test_is_passed_over_for_the_next_cover_image_in_the_folder(self) -> None:
+        # `cover` comes before `front` in the list, so only skipping the
+        # broken one reaches the good one.
+        good = png(64, 32, (0, 128, 0, 255))
+        for body_name, body in BROKEN.items():
+            for name in ("cover.jpg", "cover.png"):
+                with self.subTest(body=body_name, name=name):
+                    plan = self.plan_rip({name: body, "front.png": good})
+                    cover = plan.images.get("cover.jpg")
+                    self.assertIsNotNone(cover, plan.problems)
+                    self.assertEqual(size(cover), (64, 32))
+                    self.assertEqual(list(plan.problems), [])
 
 
 if __name__ == "__main__":
