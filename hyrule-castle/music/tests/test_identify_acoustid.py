@@ -578,14 +578,15 @@ class IdentifyByFingerprint(unittest.TestCase):
 
     def test_a_fitting_fingerprint_match_on_a_soundtrack_is_still_held(self) -> None:
         # Criterion 2 lets a fingerprint match be `auto`, and the soundtrack
-        # hold from 001 still runs after it: nothing on the files says game.
+        # hold still runs after it: nothing on the files says game, so the
+        # owner has to choose (003 criterion 57).
         exact = self.release("a1")
         server = self.fakes.Server(
             search=self.fakes.search_json(), releases=(exact,),
             release_groups=(self.fakes.release_group_json(secondary_types=("Soundtrack",)),),
         )
         result, _ = self.identify(server, {n: [best(self.mbid("a1"))] for n in (1, 2, 3)})
-        self.assertEqual((result.status, result.reason), ("review", "unsettled soundtrack"))
+        self.assertEqual((result.status, result.reason), ("review", "soundtrack choice"))
 
     def test_release_ids_come_from_acoustid_and_no_recording_is_looked_up_on_musicbrainz(self) -> None:
         # One MusicBrainz request per recording was a request a second per

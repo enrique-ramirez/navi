@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from musiclib import ascii as ascii_
-from musiclib import check, files, genres, images, mapping, names
+from musiclib import artists, check, files, genres, images, mapping, names
 from musiclib.caa import CoverArtError
 from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzUnavailable
 from musiclib.units import TrackPair, Unit, counted_media, group_media, pair
@@ -201,7 +202,11 @@ def _album_genres(release_group: dict, tracks: list[files.Track], release: dict,
             if value not in file_genres:
                 file_genres.append(value)
     composer = genres.composer(release)
-    custom = genres.custom_genre(release_group, file_genres, composer, owner_input, incoming)
+    choice = genres.owner_choice(owner_input, release.get("id"))
+    if choice is None:
+        custom = genres.custom_genre(release_group, file_genres, incoming)
+    else:
+        custom = None if choice == genres.NEITHER else choice
 
     def artist_genres() -> list[dict]:
         try:
@@ -251,12 +256,47 @@ def sort_others(unit: Unit, image_names: set[str], moving: bool,
     return deletions, extras, kept
 
 
+def _without_brackets(value: str) -> str:
+    """`value` fit for a folder suffix, which holds one pair of brackets of its own.
+
+    A value wholly wrapped in one `[...]` (MusicBrainz names an area
+    `[Worldwide]`) loses the wrap, and any other bracket becomes a parenthesis.
+    """
+    value = value.strip()
+    if value.startswith("[") and value.endswith("]") and not re.search(r"[\[\]]", value[1:-1]):
+        value = value[1:-1]
+    return value.replace("[", "(").replace("]", ")").strip()
+
+
+def edition_fields(release: dict) -> list[str]:
+    """What tells `release` from another edition, in the order a folder suffix prefers it.
+
+    The disambiguation comment, the country's name and the format of the
+    media that hold audio; each `""` where the release has none, and free
+    of brackets (`_without_brackets`).
+    """
+    events = [e.get("area") or {} for e in release.get("release-events", [])]
+    named = next((a for a in events if release.get("country") in a.get("iso-3166-1-codes", [])), None)
+    named = named or (events[0] if events else {})
+    country = named.get("name") or ""
+    media = release.get("media", [])
+    formats: list[str] = []
+    for counted in counted_media(release):
+        name = media[counted.index - 1].get("format")
+        if name and name not in formats:
+            formats.append(name)
+    return [_without_brackets(value) for value in (release.get("disambiguation") or "", country, " + ".join(formats))]
+
+
 def plan_album(
     unit: Unit, release: dict, mb, caa, owner_input: dict | None = None,
     incoming: str | None = None, status: str | None = None,
-    pairs: list[TrackPair] | None = None,
+    pairs: list[TrackPair] | None = None, edition: str | None = None,
 ) -> Plan:
-    """The full intended state of `unit`, planned against `release`."""
+    """The full intended state of `unit`, planned against `release`.
+
+    `edition` ends the album folder in brackets (`names.album_folder`).
+    """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
 
@@ -269,6 +309,10 @@ def plan_album(
     source = unit.path.relative_to(root).as_posix()
     problems: list[str] = []
 
+    latin = mb.latin_releases(release)
+    if latin:
+        release = mapping.with_titles_of(release, latin[0])
+
     release_group = mb.release_group(release["release-group"]["id"])
     album_genres = _album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
 
@@ -277,7 +321,8 @@ def plan_album(
         image_plan = images.plan_images(
             caa_images, caa.download,
             group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
-            local=images.local_covers(unit.path))
+            local=images.local_covers(unit.path),
+            existing={path.name.casefold() for path in unit.path.iterdir()})
     except CoverArtError as exc:
         # A 500 or a timeout is not "this release has no images" (`caa`
         # itself already turns a real 404 into an empty list, cached): taking
@@ -293,7 +338,7 @@ def plan_album(
     # The folder is built from the same converted text as the tag beside it,
     # never MusicBrainz's raw name, so the two never disagree over a curly
     # quote or an ellipsis.
-    artist_name = ascii_.to_ascii(mapping.join_credit(credit, "name"))
+    artist_name = ascii_.to_ascii(artists.own_name(credit, mb))
     artist_sort = ascii_.to_ascii(mapping.join_credit(credit, "sort-name"))
     compilation = is_compilation(release)
     artist_folder = names.artist_folder(artist_name, artist_sort, known=True, compilation=compilation)
@@ -304,6 +349,7 @@ def plan_album(
         album_folder = names.album_folder(
             album_date, album_title, release_group_info.get("primary-type"),
             tuple(release_group_info.get("secondary-types", [])),
+            ascii_.to_ascii(edition) if edition else None,
         )
         destination = f"{letter}/{artist_folder}/{album_folder}"
     else:
@@ -335,7 +381,8 @@ def plan_album(
                 track = pair_.file
                 planned = mapping.plan_tags(track, release, medium_index, pair_.position, album_genres,
                                             disc_folder=disc_folder_name, number=pair_.number,
-                                            total=pair_.total, disc=pair_.disc, discs=pair_.discs)
+                                            total=pair_.total, disc=pair_.disc, discs=pair_.discs,
+                                            credited_name=lambda c: artists.credited_name(c, mb))
                 problems.extend(planned.problems)
                 holds.extend(planned.holds)
                 if planned.suggested_discsubtitle and disc_folder_name:

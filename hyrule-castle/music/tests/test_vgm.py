@@ -1,7 +1,11 @@
-"""Game-music detection, from spec criteria 39 and 40.
+"""Game-music detection, from spec 001 criteria 39 and 40 as 003 criteria 57 to 61 amend them.
 
 Each `video game music` rule is shown firing with every other input
 neutral, so a rule that only works alongside another one fails here.
+`custom_genre` takes neither the album's artist nor the owner's input, so
+nothing here can show the old composer memory decides nothing; that is in
+`tests.test_soundtracks`, with what holds a Soundtrack-type release group
+for the owner's choice and the choice itself. The type adds no genre here.
 """
 
 from __future__ import annotations
@@ -47,24 +51,16 @@ def group(tags: tuple[str, ...] = (), secondary: tuple[str, ...] = (), genre_nam
     }
 
 
-def remembered(mbid: str, value: str) -> dict:
-    return {"composers": {mbid: value}}
-
-
 def custom(
     release_group: dict | None = None,
     file_genres: tuple[str, ...] = (),
-    composer: str | None = None,
-    owner_input: dict | None = None,
     incoming: str | None = None,
 ) -> str | None:
     """`custom_genre` with every input neutral unless the test says otherwise."""
     return genres.custom_genre(
         release_group if release_group is not None else group(),
         list(file_genres),
-        composer,
-        owner_input if owner_input is not None else {},
-        incoming,
+        incoming=incoming,
     )
 
 
@@ -97,9 +93,6 @@ class EachVideoGameMusicRuleAlone(unittest.TestCase):
         for incoming in ("Game", "Video Game", "VGM", "Soundtrack", "vgm", "SOUNDTRACK"):
             with self.subTest(incoming=incoming):
                 self.assertEqual(custom(incoming=incoming), VGM)
-
-    def test_a_composer_remembered_as_game_music(self) -> None:
-        self.assertEqual(custom(composer=UEMATSU, owner_input=remembered(UEMATSU, VGM)), VGM)
 
 
 class NotGameMusic(unittest.TestCase):
@@ -136,65 +129,21 @@ class NotGameMusic(unittest.TestCase):
         # `Soundtrack` is only a soundtrack.
         self.assertEqual(custom(file_genres=("Soundtrack",)), "soundtrack")
 
-    def test_a_composer_remembered_as_not_game_music_gives_nothing_by_itself(self) -> None:
-        self.assertIsNone(custom(composer=UEMATSU, owner_input=remembered(UEMATSU, "not game music")))
-
-    def test_another_composers_memory_is_not_read(self) -> None:
-        self.assertIsNone(custom(composer=MITSUDA, owner_input=remembered(UEMATSU, VGM)))
-
-
-class ComposerInputIsNeverReadWithoutAComposer(unittest.TestCase):
-    # Owner input could hold an entry under any MBID, including Various
-    # Artists'. An album with no composer must not reach it through the
-    # credit's first artist or through the Various Artists MBID.
-    def test_for_various_artists(self) -> None:
-        release = credit((VARIOUS_ARTISTS, "Various Artists"))
-        owner = remembered(VARIOUS_ARTISTS, VGM)
-        self.assertIsNone(custom(composer=genres.composer(release), owner_input=owner))
-
-    def test_for_a_two_artist_credit(self) -> None:
-        release = credit((UEMATSU, "Nobuo Uematsu"), (MITSUDA, "Yasunori Mitsuda"))
-        owner = {"composers": {UEMATSU: VGM, MITSUDA: VGM}}
-        self.assertIsNone(custom(composer=genres.composer(release), owner_input=owner))
-
 
 class Soundtrack(unittest.TestCase):
     def test_comes_from_the_files(self) -> None:
         self.assertEqual(custom(file_genres=("soundtrack",)), "soundtrack")
 
-    def test_comes_from_the_release_group_type(self) -> None:
-        self.assertEqual(custom(group(secondary=("Soundtrack",))), "soundtrack")
-
-    def test_stays_when_the_composer_is_remembered_as_not_game_music(self) -> None:
-        self.assertEqual(
-            custom(
-                group(secondary=("Soundtrack",)),
-                composer=UEMATSU,
-                owner_input=remembered(UEMATSU, "not game music"),
-            ),
-            "soundtrack",
-        )
+    def test_never_comes_from_the_release_group_type_alone(self) -> None:
+        # 003 criterion 57. The type says a film or a game, and which one is
+        # the owner's to say.
+        self.assertIsNone(custom(group(secondary=("Soundtrack",))))
+        self.assertIsNone(custom(group(secondary=("Live", "Soundtrack"))))
 
 
 class VideoGameMusicWins(unittest.TestCase):
-    def test_a_game_tag_beats_a_file_soundtrack_and_a_not_game_music_memory(self) -> None:
-        # The tag rule holds, so the remembered `not game music` is never
-        # consulted, and the file's `soundtrack` loses.
-        self.assertEqual(
-            custom(
-                group(tags=("vgm",), secondary=("Soundtrack",)),
-                file_genres=("soundtrack",),
-                composer=UEMATSU,
-                owner_input=remembered(UEMATSU, "not game music"),
-            ),
-            VGM,
-        )
-
-    def test_a_remembered_composer_beats_a_file_soundtrack(self) -> None:
-        self.assertEqual(
-            custom(file_genres=("soundtrack",), composer=UEMATSU, owner_input=remembered(UEMATSU, VGM)),
-            VGM,
-        )
+    def test_a_game_tag_beats_a_file_soundtrack(self) -> None:
+        self.assertEqual(custom(group(tags=("vgm",), secondary=("Soundtrack",)), file_genres=("soundtrack",)), VGM)
 
     def test_the_files_soundtrack_is_dropped_from_the_genres(self) -> None:
         # MusicBrainz has no genres here, so the file's are kept, all but

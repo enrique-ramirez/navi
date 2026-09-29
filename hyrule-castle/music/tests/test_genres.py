@@ -347,13 +347,13 @@ class APlanFallsBackToTheAlbumArtistsGenres(_Planning):
                     self.plan_with(_release(TITLES), _release_group({}), **statuses)
 
     def test_the_artist_is_never_looked_up_when_the_album_has_a_genre_or_no_single_artist(self) -> None:
-        soundtrack = _release_group({})
-        soundtrack["secondary-types"] = ["Soundtrack"]
         several = [{**CURE[0], "joinphrase": " & "}, NIN[0]]
         cases = {
             "the release group has genres": (_release(TITLES), _release_group({"gothic rock": 3}), ()),
             "the files have genres": (_release(TITLES), _release_group({}), ("Gothic Rock",)),
-            "a soundtrack with nothing else": (_release(TITLES), soundtrack, ()),
+            # `soundtrack` on the files is the custom genre (003 criterion 61),
+            # and it is off the list, so nothing else stands behind it.
+            "a file soundtrack with nothing else": (_release(TITLES), _release_group({}), ("Soundtrack",)),
             # Various Artists and a credit to several artists have no one
             # artist whose genres would be the album's.
             "Various Artists": (_release(TITLES, credit=VARIOUS_ARTISTS), _release_group({}), ()),

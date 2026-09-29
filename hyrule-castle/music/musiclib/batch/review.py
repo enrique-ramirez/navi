@@ -223,20 +223,19 @@ def _field_inputs(fields: dict[str, dict[str, list[str]]]) -> str:
 def _game_block(entry: Album) -> str:
     key = entry["source"]
     name = f"game-{_esc(key)}"
-    # `entry["game"]` is the game/not-game choice identify already folded
-    # in: pre-selecting it means a re-export that touches nothing does not
-    # lose it.
     chosen = entry.get("game")
 
     def sel(value: str) -> str:
         return " checked" if value == chosen else ""
 
     return (
-        '<fieldset class="game"><legend>Composer choice</legend>'
+        '<fieldset class="game"><legend>Soundtrack choice</legend>'
         f'<label><input type="radio" name="{name}" value="video game music"{sel("video game music")}>'
         " video game music</label>"
-        f'<label><input type="radio" name="{name}" value="not game music"{sel("not game music")}>'
-        " not game music</label>"
+        f'<label><input type="radio" name="{name}" value="soundtrack"{sel("soundtrack")}>'
+        " soundtrack</label>"
+        f'<label><input type="radio" name="{name}" value="neither"{sel("neither")}>'
+        " neither</label>"
         "</fieldset>"
     )
 
@@ -339,10 +338,8 @@ def _folded_decision(entry: Album) -> dict | None:
     """`entry`'s own `decision`/`release_id`/`game`, in `decisions.json`'s
     shape - `None` for nothing decided yet (a plain skip).
 
-    `owner_edits` (not `inputs.edits`) is what a re-export carries: for a
-    no-composer album, `inputs.edits` includes the genre `rebuild` writes
-    for the folded game choice, and carrying that forward would make
-    flipping the radio a no-op.
+    `owner_edits` is what a re-export carries; the game choice travels
+    separately, as `game`.
     """
     decision = entry.get("decision")
     if decision == "accept":

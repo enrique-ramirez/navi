@@ -177,6 +177,32 @@ class Layout(_Library):
                 album = builders.library_album(root, folder=folder)
                 self.assertBreaks(root, album, {"album folder"}, also)
 
+    def test_an_album_folder_ending_in_one_bracketed_edition_suffix_is_clean(self):
+        # Criterion 64: editions that would share a folder each end in the
+        # field that tells them apart. The tags say nothing about which
+        # field or why, so check takes any one suffix after the right name.
+        cases = [
+            ("(2007) Unia [Japan]", "Unia", "2007-05-23"),
+            ("(2008) Dear Science [Vinyl]", "Dear Science", "2008-09-23"),
+            ("(2002) [Live] And All That Could Have Been [Europe]", "And All That Could Have Been",
+             "2002-01-22"),
+        ]
+        for folder, album_title, date in cases:
+            with self.subTest(folder):
+                root = self.library()
+                builders.library_album(root, folder=folder, album=album_title, date=date)
+                self.assertEqual(check.check(root), [])
+
+    def test_an_edition_suffix_after_the_wrong_title_or_a_second_one_breaks_album_folder(self):
+        # Green before criterion 64. They keep a check that learns to allow
+        # the suffix from allowing anything after the year.
+        for folder in ("(1999) Fragile [Japan]", "(1999) The Fragile [Japan] [CD]",
+                       "(1999) [Japan] The Fragile [CD]"):
+            with self.subTest(folder):
+                root = self.library()
+                album = builders.library_album(root, folder=folder)
+                self.assertBreaks(root, album, {"album folder"})
+
     def test_an_album_folder_year_that_disagrees_with_date(self):
         root = self.library()
         album = builders.library_album(root, folder="(1998) The Fragile", date="1999-09-21")
@@ -213,6 +239,20 @@ class Layout(_Library):
                 album = builders.library_album(root)
                 (album / "02. Hurt.flac").rename(album / wrong)
                 self.assertBreaks(root, album, {"file name"})
+
+    def test_an_upper_case_audio_extension_is_a_file_name_violation_expecting_it_lower_case(self):
+        # A rip made on Windows can carry `.MP3`, and a comparison that
+        # lower-cases both sides would call it clean while the plan renames it.
+        for ext, upper in (("mp3", "MP3"), ("flac", "FLAC"), ("m4a", "M4a")):
+            with self.subTest(upper):
+                root = self.library()
+                album = builders.library_album(root, ext=ext)
+                (album / f"02. Hurt.{ext}").rename(album / f"02. Hurt.{upper}")
+                self.assertBreaks(root, album, {"file name"})
+                details = [v.detail for v in check.check(root) if v.rule == "file name"]
+                self.assertEqual(len(details), 1, details)
+                self.assertIn(f"02. Hurt.{upper}", details[0])
+                self.assertIn(f"expected '02. Hurt.{ext}'", details[0])
 
     def test_three_digits_on_a_medium_of_a_hundred_tracks_or_more(self):
         # The count comes from the track total, so one file stands in for a

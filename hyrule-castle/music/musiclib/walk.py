@@ -66,8 +66,3 @@ def album_contents(album_dir: Path) -> tuple[list[Path], list[tuple[Path, str]]]
             elif entry.is_file():
                 found.append(entry)
     return sorted(found), sorted(unlistable)
-
-
-def album_files(album_dir: Path) -> list[Path]:
-    """Every file under `album_dir` at any depth, in path order, none inside an ignored folder."""
-    return album_contents(album_dir)[0]

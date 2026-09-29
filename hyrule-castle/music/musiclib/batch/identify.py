@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping
 
-from musiclib import acoustid, genres, identify as identify_engine, mapping
+from musiclib import acoustid, identify as identify_engine, mapping
 from musiclib.batch import decisions as decisions_module
 from musiclib.batch import job as job_module
 from musiclib.batch import memory as memory_module
@@ -27,7 +27,7 @@ from musiclib.batch.job import Job
 from musiclib.cache import Cache
 from musiclib.caa import CoverArt
 from musiclib.mb import MusicBrainz
-from musiclib.plan import Plan, changes as plan_changes, plan_album
+from musiclib.plan import Plan, changes as plan_changes, edition_fields, plan_album
 from musiclib.units import TrackPair, Unit, pair, position_key, units as list_units
 from musiclib.write import Collision, check_collisions
 
@@ -127,25 +127,11 @@ def _image_digest(data: bytes) -> dict:
     return {"sha256": hashlib.sha256(data).hexdigest(), "length": len(data)}
 
 
-def _game_choice(release_group: dict, plan: Plan, family_by_source: dict[str, str]) -> bool:
-    """Whether the page must offer `video game music` / `not game music` for this album."""
-    if "Soundtrack" in release_group.get("secondary-types", []):
-        return True
-    if not plan.files:
-        return False
-    first = plan.files[0]
-    family = family_by_source.get(first.source)
-    key = mapping.PICARD["genre"].get(family)
-    if not key:
-        return False
-    return any(value.strip().casefold() == "video game music" for value in first.target.get(key, []))
-
-
 def _blank_entry(source: str, status: str) -> dict:
     """The fields every entry has, before anything a plan or a hold adds."""
     return {
         "source": source, "status": status, "holds": [], "decision": None, "release_id": None,
-        "destination": None, "composer": None, "game_choice": False, "candidates": [], "files": [],
+        "destination": None, "game_choice": False, "candidates": [], "files": [],
         "fields": {}, "images": {}, "residue": [], "deletions": [], "extras": [], "kept": [], "changes": [],
         "inputs": None, "plan_digest": None, "game": None, "owner_edits": {},
     }
@@ -158,19 +144,18 @@ def _entry_pairs(unit: Unit, root: Path, release: dict, plan: Plan) -> tuple[lis
 
 
 def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision: dict | None,
-               reopened: bool, *, env: Mapping[str, str] = os.environ,
+               reopened: bool, *, edition: str | None = None, env: Mapping[str, str] = os.environ,
                which: Callable[[str], str | None] = shutil.which) -> tuple[dict, Plan | None]:
     """One album's entry, and its `Plan` if it has one. Collision holds and `state` are not this function's to add.
 
     `decision` folds the owner's `decisions.json` answer for this album in:
     `repoint` and an `accept` of a release the engine did not put on top are
-    both planned via `identify.chosen`, a single-composer `game` choice is
-    folded into `owner_input` before the engine decides anything, and every
-    edit - the memory's, the decision's, and any no-composer game edit - is
-    laid over the plan before this entry is built from it.
+    both planned via `identify.chosen`, a `game` choice is folded into
+    `owner_input` by release before the engine decides anything, and every
+    edit - the memory's and the decision's - is laid over the plan before this entry is built from it.
     """
     action = decision.get("action") if decision else None
-    owner_input = {"composers": dict(memory.get("composers") or {}), "edits": dict(memory.get("edits") or {})}
+    owner_input = {"soundtracks": dict(memory.get("soundtracks") or {}), "edits": dict(memory.get("edits") or {})}
     if action == "accept":
         # The accepted release's own edit is on the files it will write, so
         # the engine must not read it as a disagreement with MusicBrainz.
@@ -178,20 +163,15 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         owner_input["edits"][accepted] = memory_module.merge_edits(
             owner_input["edits"].get(accepted, {}), decision.get("edits", {}))
 
-    game = decision.get("game") if action == "accept" else None
+    game = memory_module.current_choice(decision.get("game")) if action == "accept" else None
     if game is not None:
-        # Fetched by its own id, not through `identification` below: this is
-        # the release the owner is accepting, whether or not the engine
-        # agrees it is the best match, and a 404 on it is the owner's own
-        # mistake to see as an `error` hold like any other bad paste.
-        target_release = clients.mb.release(decision["release_id"])
-        composer_for_game = genres.composer(target_release)
-        if composer_for_game is not None:
-            owner_input["composers"][composer_for_game] = game
+        # The owner's choice is read like a remembered one, so this job, the
+        # apply that replays it and the next job all see the same thing.
+        owner_input["soundtracks"][decision["release_id"]] = game
 
     forced_choice = False
     if action == "repoint":
-        identification = identify_engine.chosen(unit, clients.mb, decision["release"])
+        identification = identify_engine.chosen(unit, clients.mb, decision["release"], owner_input, None)
         forced_choice = True
     else:
         identification = identify_engine.identify(
@@ -200,7 +180,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         if action == "accept":
             normal_top = identification.candidates[0] if identification.candidates else None
             if normal_top is None or normal_top.release_id != decision["release_id"]:
-                identification = identify_engine.chosen(unit, clients.mb, decision["release_id"])
+                identification = identify_engine.chosen(unit, clients.mb, decision["release_id"], owner_input, None)
                 forced_choice = True
 
     entry = _blank_entry(unit.rel, identification.status)
@@ -220,32 +200,18 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     if identification.status in _PLANNABLE and top is not None and top.release is not None:
         release = top.release
         plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=owner_input,
-                          incoming=None, status=identification.status, pairs=top.pairs)
+                          incoming=None, status=identification.status, pairs=top.pairs, edition=edition)
 
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         positions = [position_key(p) for p in pairs]
         release_group = clients.mb.release_group(release["release-group"]["id"])
-        composer = genres.composer(release)
-
-        game_edit = {}
-        if game == memory_module.VIDEO_GAME_MUSIC and composer is None:
-            # No single album-artist to remember the choice under (Various
-            # Artists, or two or more artists): the choice becomes a genre
-            # edit on this album alone, never a composer memory.
-            game_edit = memory_module.video_game_genre_edit(plan, positions, family_by_source)
-
         memory_edits = (memory.get("edits") or {}).get(top.release_id, {})
         decision_edits = decision.get("edits", {}) if action == "accept" else {}
-        # What the owner actually typed, memory and this decision, decision
-        # winning: never the genre edit `game_edit` adds. That edit is
-        # recomputed from the current `game` choice on every run, so carrying
-        # it forward as an "owner edit" would make flipping the game radio
-        # and re-exporting a no-op - the stale genre edit would just win again.
-        owner_edits = memory_module.merge_edits(memory_edits, decision_edits)
-        edits = memory_module.merge_edits(owner_edits, game_edit)
+        edits = memory_module.merge_edits(memory_edits, decision_edits)
 
         if edits:
-            plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit)
+            plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit,
+                                           edition)
 
         for problem in plan.problems:
             entry["holds"].append({"kind": "validation", "detail": problem})
@@ -256,10 +222,13 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
             # already said yes.
             entry["holds"].append({"kind": "decision", "detail": ""})
 
+        choice = owner_input["soundtracks"].get(top.release_id)
         entry["release_id"] = top.release_id
         entry["destination"] = plan.destination
-        entry["composer"] = composer
-        entry["game_choice"] = _game_choice(release_group, plan, family_by_source)
+        # Offered whatever else holds the album, while it waits on the choice
+        # and once the owner has made it, so a re-export carries it forward.
+        entry["game_choice"] = game is not None or identify_engine.awaits_soundtrack_choice(
+            release_group, release, unit, owner_input, None)
         entry["files"] = _files(plan, positions)
         entry["fields"] = _fields(plan, positions, family_by_source)
         entry["images"] = {name: _image_digest(data) for name, data in sorted(plan.images.items())}
@@ -268,11 +237,13 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         entry["extras"] = list(plan.extras)
         entry["kept"] = list(plan.kept)
         entry["changes"] = plan_changes(plan)
-        entry["owner_edits"] = owner_edits
+        entry["owner_edits"] = edits
         entry["inputs"] = {
             "release_id": top.release_id, "chosen": forced_choice, "status": identification.status,
-            "owner_input": {"composers": owner_input["composers"]}, "edits": edits,
+            "owner_input": {"soundtracks": {top.release_id: choice} if choice else {}}, "edits": edits,
         }
+        if edition is not None:
+            entry["inputs"]["edition"] = edition
         entry["plan_digest"] = hashlib.sha256(plan.to_json()).hexdigest()
 
         if action == "repoint":
@@ -298,16 +269,68 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict) -> Plan:
     """
     release = clients.mb.release(inputs["release_id"])
     plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=inputs["owner_input"],
-                      status=inputs["status"])
+                      status=inputs["status"], edition=inputs.get("edition"))
     edits = inputs.get("edits") or {}
     if edits:
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         release_group = clients.mb.release_group(release["release-group"]["id"])
-        plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit)
+        plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit,
+                                       inputs.get("edition"))
     return plan
 
 
 # --- every album together: collisions and state ------------------------------
+
+
+def _edition_field_index(fields: list[list[str]]) -> int | None:
+    """The index of the first field every album has and no two share, compared casefolded, or `None`."""
+    for index in range(len(fields[0])):
+        values = [album[index].casefold() for album in fields]
+        if all(values) and len(set(values)) == len(values):
+            return index
+    return None
+
+
+def _sharing_a_destination(plans: dict[str, Plan]) -> list[list[str]]:
+    """Each set of two or more album keys whose destinations match casefolded, the keys sorted."""
+    by_destination: dict[str, list[str]] = {}
+    for key, plan in plans.items():
+        by_destination.setdefault(plan.destination.casefold(), []).append(key)
+    return [sorted(keys) for keys in by_destination.values() if len(keys) > 1]
+
+
+def _separate_editions(entries: list[dict], plans: dict[str, Plan], fields_of: Callable[[dict], list[str]],
+                       replan: Callable[[str, str], tuple], err) -> None:
+    """Give each album of a set that would share one album folder a suffix from its own release.
+
+    The first of the disambiguation comment, the country and the format that
+    every album in the set has and that differs between all of them; no such
+    field leaves the set as it is, and `_finalize` holds it for the
+    collision. `fields_of(entry)` gives the release's fields, in the order
+    `plan.edition_fields` does, and `replan(key, edition)` plans the album
+    again with the suffix on, so its changes, digest and inputs carry the
+    folder it will be written to.
+
+    A set is suffixed whole or not at all: every album is planned again
+    before any entry is swapped, and a set that raises is reported on `err`
+    and left as it was, for the others to go on.
+    """
+    by_source = {entry["source"]: entry for entry in entries}
+    for keys in _sharing_a_destination(plans):
+        try:
+            fields = [fields_of(by_source[key]) for key in keys]
+            index = _edition_field_index(fields)
+            if index is None:
+                continue
+            replanned = [replan(key, values[index]) for key, values in zip(keys, fields)]
+        except Exception as exc:
+            print(f"identify: editions of {', '.join(keys)} not separated: {type(exc).__name__}: {exc}",
+                  file=err)
+            continue
+        position = {entry["source"]: n for n, entry in enumerate(entries)}
+        for key, (entry, plan) in zip(keys, replanned):
+            entries[position[key]] = entry
+            plans[key] = plan
 
 
 def _add_collision(entry: dict, detail: str) -> None:
@@ -322,13 +345,8 @@ def _finalize(entries: list[dict], plans: dict[str, Plan], root: Path) -> None:
     """Add every `collision` hold (the one thing no single album can see for itself) and decide `state`."""
     by_source = {entry["source"]: entry for entry in entries}
 
-    by_destination: dict[str, list[str]] = {}
-    for key, plan in plans.items():
-        by_destination.setdefault(plan.destination.casefold(), []).append(key)
-    for keys in by_destination.values():
-        if len(keys) <= 1:
-            continue
-        for key in sorted(keys):
+    for keys in _sharing_a_destination(plans):
+        for key in keys:
             others = ", ".join(sorted(other for other in keys if other != key))
             _add_collision(by_source[key], f"same destination as {others}")
 
@@ -501,6 +519,15 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
         # corrected in a later sitting, from a later identify.
         memory["reopened"] = sorted(reopened_keys)
         memory_module.save(memory_path, memory)
+
+    units_by_rel = {unit.rel: unit for unit in units}
+
+    def replan(key: str, edition: str) -> tuple[dict, Plan]:
+        return plan_entry(units_by_rel[key], root, built_clients, memory, resolved_decisions.get(key, (None, None))[1],
+                          key in reopened_keys, edition=edition, env=env, which=which)
+
+    _separate_editions(entries, plans, lambda e: edition_fields(built_clients.mb.release(e["release_id"])),
+                       replan, err)
 
     _finalize(entries, plans, root)
     entries.sort(key=lambda e: e["source"])

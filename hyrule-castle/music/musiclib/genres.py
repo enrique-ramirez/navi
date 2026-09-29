@@ -20,11 +20,14 @@ from musiclib.mb import VARIOUS_ARTISTS
 _DATA_FILE = Path(__file__).parent / "mb-genres.txt"
 OFFICIAL = frozenset(_DATA_FILE.read_text(encoding="utf-8").splitlines())
 
-_VGM = "video game music"
-_SOUNDTRACK = "soundtrack"
+#: The owner's three choices for a Soundtrack-type album; the first two are also
+#: the custom genres.
+VIDEO_GAME_MUSIC = "video game music"
+SOUNDTRACK = "soundtrack"
+NEITHER = "neither"
 _MIN_VOTE_SHARE = 0.25
-_GAME_TAGS = {"video game", "vgm", "game", "game music", _VGM}
-_INCOMING_GAME_GENRES = {"game", "video game", "vgm", _SOUNDTRACK}
+_GAME_TAGS = {"video game", "vgm", "game", "game music", VIDEO_GAME_MUSIC}
+_INCOMING_GAME_GENRES = {"game", "video game", "vgm", SOUNDTRACK}
 
 
 def _top_quarter(mb_genres: list[dict[str, object]]) -> list[str]:
@@ -91,37 +94,33 @@ def incoming_says_game(incoming: str | None) -> bool:
     return incoming is not None and incoming.casefold() in _INCOMING_GAME_GENRES
 
 
-def composer_remembered_as(composer: str | None, owner_input: dict, value: str) -> bool:
-    if composer is None:
-        return False
-    return owner_input.get("composers", {}).get(composer) == value
+def owner_choice(owner_input: dict, release_id: str | None) -> str | None:
+    """The owner's choice for this release, `VIDEO_GAME_MUSIC`, `SOUNDTRACK` or `NEITHER`, or `None`.
 
-
-def _secondary_type(release_group: dict, name: str) -> bool:
-    return name in release_group.get("secondary-types", [])
+    Kept per release, never per artist: one composer's game score and film
+    score are different albums. The old `composers` entry is not read.
+    """
+    if release_id is None:
+        return None
+    return (owner_input.get("soundtracks") or {}).get(release_id)
 
 
 def custom_genre(
     release_group: dict,
     file_genres: list[str],
-    composer: str | None,
-    owner_input: dict,
     incoming: str | None = None,
 ) -> str | None:
     """`"video game music"`, `"soundtrack"`, or `None`.
 
-    Video game music wins: a game tag, a file already carrying it, an
-    incoming game genre, or a composer the owner has remembered as game
-    music before, over a soundtrack from the files or the release group's
-    secondary type.
+    Video game music wins: a game tag, a file already carrying it or an
+    incoming game genre, over a soundtrack from the files of an album that
+    is not Soundtrack-type. That type adds nothing here: it holds the album
+    for the owner's choice (`owner_choice`), which the caller applies.
     """
-    if (
-        tag_says_game(release_group)
-        or files_say(file_genres, _VGM)
-        or incoming_says_game(incoming)
-        or composer_remembered_as(composer, owner_input, _VGM)
-    ):
-        return _VGM
-    if files_say(file_genres, _SOUNDTRACK) or _secondary_type(release_group, "Soundtrack"):
-        return _SOUNDTRACK
+    if tag_says_game(release_group) or files_say(file_genres, VIDEO_GAME_MUSIC) or incoming_says_game(incoming):
+        return VIDEO_GAME_MUSIC
+    # On a Soundtrack-type album `soundtrack` on the files is what an earlier
+    # job wrote from the type alone, so only the owner's choice may put it back.
+    if files_say(file_genres, SOUNDTRACK) and "Soundtrack" not in release_group.get("secondary-types", []):
+        return SOUNDTRACK
     return None

@@ -360,17 +360,19 @@ class Positions(unittest.TestCase):
 
     # --- what an entry stores -----------------------------------------------
 
-    def test_an_entrys_owner_input_holds_the_composers_and_not_the_edit_memory(self):
+    def test_an_entrys_owner_input_does_not_carry_the_edit_memory(self):
         # Every entry carried the whole memory's edits, one copy per album:
-        # hundreds of megabytes of plan.json on the real library. The plan
-        # reads only the composers; the edits it lays are `inputs.edits`.
+        # hundreds of megabytes of plan.json on the real library. The edits
+        # the plan lays are `inputs.edits`. `Elsewhere` is the memory's edit
+        # for a release no album here has, so it can only turn up in an
+        # entry as part of a copy of the whole memory, under any key.
         planned = [entry for entry in self.entries.values() if entry["inputs"] is not None]
         # An album the engine crashed on has no inputs at all, so the loop
         # below must not come up empty.
         self.assertIn(ACCENTED, [entry["source"] for entry in planned])
         for entry in planned:
             with self.subTest(album=entry["source"]):
-                self.assertEqual(entry["inputs"]["owner_input"], {"composers": {}})
+                self.assertNotIn("Elsewhere", json.dumps(entry["inputs"]["owner_input"]))
 
 
 # --- criterion 28: the next job proposes nothing --------------------------------

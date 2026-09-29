@@ -443,6 +443,37 @@ class ArtistLookup(ClientTestCase):
         self.assertEqual(query(request.url)["fmt"], "json")
         self.assertIn("genres", inc(request.url))
 
+    def test_an_artist_lookup_brings_aliases_and_genres_in_one_request_answered_warm_from_the_cache(self) -> None:
+        # Aliases are how a credit in Japanese agrees with files tagged in
+        # English. A new client over the same cache, with a transport that
+        # fails on any request, shows the answer was kept.
+        artist_mbid = "a0e5e2fc-3dc4-4b86-a7c7-3a6b2e1e0f4d"
+        body = json.dumps({"id": artist_mbid, "name": "植松伸夫", "sort-name": "Uematsu, Nobuo", "genres": [],
+                           "aliases": [{"name": "Nobuo Uematsu", "sort-name": "Uematsu, Nobuo",
+                                        "locale": "en", "primary": True, "type": "Artist name"}]}).encode()
+        client, transport = self.client((200, body))
+        self.assertEqual(client.artist(artist_mbid), json.loads(body))
+        [request] = transport.requests
+        self.assertEqual(urlsplit(request.url).path, f"/ws/2/artist/{artist_mbid}")
+        self.assertLessEqual({"aliases", "genres"}, inc(request.url))
+
+        warm, transport = self.client()
+        self.assertEqual(warm.artist(artist_mbid), json.loads(body))
+        self.assertEqual(transport.requests, [])
+
+    def test_the_release_lookup_url_is_the_one_every_warm_cache_already_holds(self) -> None:
+        # The cache is keyed by URL. Asking the release for aliases, or even
+        # reordering what it asks for, would miss every cached release and
+        # refetch the library at one a second.
+        client, transport = self.client((200, RELEASE))
+        client.release(RELEASE_MBID)
+        [request] = transport.requests
+        self.assertEqual(
+            request.url,
+            f"https://musicbrainz.org/ws/2/release/{RELEASE_MBID}"
+            "?inc=artist-credits+labels+media+recordings+release-groups&fmt=json",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

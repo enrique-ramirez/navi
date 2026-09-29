@@ -19,6 +19,7 @@ from musiclib.units import first_value
 _AGREEING_LENGTH_S = 15.0
 _PLACEHOLDER_LENGTH_S = 1.5
 _RATIO = 0.8
+_MIN_CONTAINED = 3
 
 _BRACKETED = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _NON_WORD = re.compile(r"\W")
@@ -39,11 +40,16 @@ def normalise(title: str) -> str:
 
 
 def agree(a: str, b: str) -> bool:
-    """Whether two titles name one song. A title that normalises to nothing agrees with nothing."""
+    """Whether two titles name one song. A title that normalises to nothing agrees with nothing.
+
+    One inside the other counts only when the shorter reaches `_MIN_CONTAINED`
+    characters: a letter or two is inside almost any title.
+    """
     a, b = normalise(a), normalise(b)
     if not a or not b:
         return False
-    return a in b or b in a or SequenceMatcher(None, a, b).ratio() >= _RATIO
+    contained = min(len(a), len(b)) >= _MIN_CONTAINED and (a in b or b in a)
+    return a == b or contained or SequenceMatcher(None, a, b).ratio() >= _RATIO
 
 
 def is_placeholder(title: str) -> bool:

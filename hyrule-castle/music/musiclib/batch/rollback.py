@@ -10,13 +10,19 @@ is skipped too, so running rollback twice is harmless.
 
 What rollback cannot give back is listed rather than silently dropped: a
 `cover.jpg` `write_album` wrote or replaced (`created`), a file it deleted
-(`deleted`), and every track's embedded picture. A picture is never
-restored - `files.read` keeps only a digest of one, never its bytes
-(`write.rollback_target`) - and FLAC does not even keep that digest in the
+(`deleted`), every track's embedded picture, and any other frame the writer
+cannot rebuild (`tagwrite.is_unrestorable`: MP3 `PRIV`, `GEOB` and URL
+frames and binary MP4 or ASF values, which `files.read` keeps as a digest and
+never as bytes, and `USER`, which it keeps as text the writer does not
+rebuild; `write.rollback_target`).
+Such a value is never restored. Every other tag is restored, and the album
+finishes.
+
+One of those frames is listed with its track and key only when it differs
+from what is on the file now. A picture is listed for every track
+write_album touched, changed or not: FLAC does not even keep a digest in the
 tags this module can compare (`tagwrite.is_picture_key`'s own docstring), so
-every track write_album touched is listed for its picture regardless of
-whether the picture actually changed: rollback has no way to tell, for every
-format, that it did not.
+rollback has no way to tell, for every format, that it did not change.
 
 An album's library moves always go through `write.undo_moves` as one batch,
 the same as `write_album` itself moves a whole album at once: that is what
@@ -81,6 +87,13 @@ def _undo_extras(moves: list, root: Path, extras_root: Path, out, not_restored: 
             _cannot_restore(out, not_restored, destination, f"could not move back from extras ({exc})")
 
 
+def _frame_name(family: str, key: str) -> str:
+    """`key` as listed: whole, except a `PRIV` key, which also carries the frame's data (any bytes) after its owner."""
+    if family == "id3":
+        return ":".join(key.split(":")[:2])
+    return key
+
+
 def _write_tags(record: dict, root: Path, out, not_restored: list[str]) -> None:
     """Every track's tags, read at its source path - the moves are already known undone by here."""
     tags = record["tags"]
@@ -88,7 +101,13 @@ def _write_tags(record: dict, root: Path, out, not_restored: list[str]) -> None:
         if kind != "library" or destination not in tags:
             continue
         current = files.read(root / source)
-        tagwrite.write(current, rollback_target(current, tags[destination]))
+        prior = tags[destination]
+        tagwrite.write(current, rollback_target(current, prior))
+        for key, value in prior.items():
+            if (tagwrite.is_unrestorable(current.family, key, value)
+                    and not tagwrite.is_picture_key(current.family, key)
+                    and current.tags.get(key) != value):
+                _cannot_restore(out, not_restored, destination, f"{_frame_name(current.family, key)} not restored")
         _cannot_restore(out, not_restored, destination, "embedded picture not restored")
 
     for path in record["created"]:

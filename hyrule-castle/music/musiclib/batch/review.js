@@ -86,7 +86,7 @@
       var out = { action: "accept", release_id: candidate.value, edits: editsForAlbum(album, section), game: null };
       if (album.game_choice) {
         out.game = gameChoice(section, album.game);
-        if (!out.game) { errors.push(album.source + ": choose video game music or not game music"); }
+        if (!out.game) { errors.push(album.source + ": choose video game music, soundtrack or neither"); }
       }
       return out;
     }
@@ -109,7 +109,7 @@
     var alreadyFolded = album.decision === "accept";
     if (!alreadyFolded && Object.keys(edits).length === 0 && !game) { return null; }
     if (album.game_choice && !game) {
-      errors.push(album.source + ": choose video game music or not game music");
+      errors.push(album.source + ": choose video game music, soundtrack or neither");
     }
     return { action: "accept", release_id: album.release_id, edits: edits, game: game };
   }

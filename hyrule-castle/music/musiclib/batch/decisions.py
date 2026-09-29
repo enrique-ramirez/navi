@@ -2,13 +2,14 @@
 
 A file for another job, one naming an album the job does not have, two keys
 that lead to the same album, an unknown action, a repoint the engine's own
-`release_ref` refuses, a `game` value outside the two the page offers, an
-`accept` of a `game_choice` album with no `game`, an `accept` with no
-`release_id`, an `accept` whose `edits` is not an object of objects of
-lists, an edit to a field the page never offers or at a position the album
-does not have, or JSON that does not parse: any of these refuses the file
-entire, naming every offence found rather than only the first, so the owner
-does not re-export once per problem.
+`release_ref` refuses, a `game` value outside the three the page offers
+(`not game music` from before reads as `soundtrack`), an `accept` of a
+`game_choice` album with no `game`, an `accept` with no `release_id`, an
+`accept` whose `edits` is not an object of objects of lists, an edit to a
+field the page never offers or at a position the album does not have, or
+JSON that does not parse: any of these refuses the file entire, naming
+every offence found rather than only the first, so the owner does not
+re-export once per problem.
 """
 
 from __future__ import annotations
@@ -19,11 +20,12 @@ import json
 from musiclib import mapping
 from musiclib.batch import job as job_module
 from musiclib.batch.job import Job
-from musiclib.batch.memory import NOT_GAME_MUSIC, VIDEO_GAME_MUSIC
+from musiclib.batch.memory import NOT_GAME_MUSIC
+from musiclib.genres import NEITHER, SOUNDTRACK, VIDEO_GAME_MUSIC
 from musiclib.identify import release_ref
 
 _ACTIONS = {"accept", "repoint", "skip"}
-_GAME_CHOICES = {VIDEO_GAME_MUSIC, NOT_GAME_MUSIC}
+_GAME_CHOICES = {VIDEO_GAME_MUSIC, SOUNDTRACK, NEITHER, NOT_GAME_MUSIC}
 
 #: MusicBrainz identifiers, never offered as an editable field on the page:
 #: every other `mapping.PICARD` key is a neutral field an `accept` may edit.
@@ -149,8 +151,8 @@ def read(job: Job) -> dict | None:
                 offences.append(f"{key!r}: not a recognised game choice: {game!r}")
             elif game is None and entry.get("game_choice"):
                 offences.append(
-                    f"{key!r}: a Soundtrack-type or game album must say "
-                    f"{VIDEO_GAME_MUSIC!r} or {NOT_GAME_MUSIC!r}"
+                    f"{key!r}: a Soundtrack-type album must say "
+                    f"{VIDEO_GAME_MUSIC!r}, {SOUNDTRACK!r} or {NEITHER!r}"
                 )
             edits = decision.get("edits")
             if edits is not None and not _is_edits_shape(edits):

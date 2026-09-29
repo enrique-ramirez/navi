@@ -1,8 +1,10 @@
 """The owner's standing choices, carried from one job into the next.
 
 An applied field edit and a Soundtrack-type album's `video game music` /
-`not game music` choice both outlive the job that made them, so a re-run or
-a later import gets the same answer without asking again.
+`soundtrack` / `neither` choice both outlive the job that made them, so a
+re-run or a later import gets the same answer without asking again. Both are
+kept by release MBID. The composer memory older jobs wrote is left in the
+file and never read.
 
 001's `plan_album` takes no field edits, so this module also carries the
 *Edits* mechanism: laying a position's edited neutral fields over an
@@ -21,13 +23,19 @@ from pathlib import Path
 from musiclib import ascii as ascii_
 from musiclib import check, mapping, names
 from musiclib.batch import job as job_module
+from musiclib.genres import SOUNDTRACK
 from musiclib.plan import Plan, is_compilation, sort_others, state_from_plan
 from musiclib.units import TrackPair, Unit, position_key
 
-#: The two choices the page offers for a Soundtrack-type or `video game
-#: music` album.
-VIDEO_GAME_MUSIC = "video game music"
+#: What the second choice was called before it was one of three; it did what
+#: `soundtrack` does now.
 NOT_GAME_MUSIC = "not game music"
+
+
+def current_choice(value: str | None) -> str | None:
+    """`value` as one of the three choices: an old `not game music` reads as `soundtrack`."""
+    return SOUNDTRACK if value == NOT_GAME_MUSIC else value
+
 
 #: Edited fields the destination is built from: a track's own title only
 #: moves that track's file, the rest move the album.
@@ -37,11 +45,12 @@ _PATH_FIELDS = {"title", "album", "albumartist", "albumartistsort", "date"}
 def load(path: Path) -> dict:
     """`memory.json` at `path`, or the empty shape for a file that does not exist yet."""
     if not Path(path).is_file():
-        return {"edits": {}, "composers": {}, "reopened": []}
+        return {"edits": {}, "soundtracks": {}, "reopened": []}
     doc = job_module.read_json(path)
     return {
+        **doc,
         "edits": dict(doc.get("edits") or {}),
-        "composers": dict(doc.get("composers") or {}),
+        "soundtracks": dict(doc.get("soundtracks") or {}),
         "reopened": list(doc.get("reopened") or []),
     }
 
@@ -57,24 +66,6 @@ def merge_edits(*sources: dict) -> dict:
         for position, fields in (source or {}).items():
             combined.setdefault(position, {}).update(fields)
     return combined
-
-
-def video_game_genre_edit(plan: Plan, positions: list[str], family_by_source: dict[str, str]) -> dict:
-    """The synthetic `genre` edit for a no-composer album's `video game music` choice.
-
-    Every position gets the same edit: `video game music` takes the first
-    (custom-genre) slot in place of whatever the engine planned there, the
-    rest of the list kept, because the genre list is one album-wide value,
-    not one per track (`plan._album_genres`).
-    """
-    if not plan.files:
-        return {}
-    first = plan.files[0]
-    family = family_by_source.get(first.source)
-    key = mapping.PICARD["genre"].get(family) if family else None
-    current = list(first.target.get(key, [])) if key else []
-    new_genres = [VIDEO_GAME_MUSIC] + current[1:] if current else [VIDEO_GAME_MUSIC]
-    return {position: {"genre": list(new_genres)} for position in positions}
 
 
 def _dedupe(items) -> list:
@@ -100,20 +91,23 @@ def _value(target: dict, field: str, family: str) -> str | None:
 
 
 def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs: list[TrackPair],
-                          family_by_source: dict[str, str], touched: set[str]) -> None:
+                          family_by_source: dict[str, str], touched: set[str], edition: str | None) -> None:
     """Recompute `plan.destination` and every file's destination the way `plan_album` does.
 
     Read back off the (already edited) targets rather than off `release`,
     so an edit and the engine's own value are named the same way; only the
     artist folder falls back to `release` at all, and only when an edit
-    actually touched the fields it is built from.
+    touched `albumartist`.
     """
     first = plan.files[0]
     family0 = family_by_source[first.source]
 
     old_letter, old_artist_folder, _old_album_folder = (plan.destination.split("/", 2) + ["", ""])[:3]
 
-    if touched & {"albumartist", "albumartistsort"}:
+    # Only an edit to `albumartist` itself says the owner wants another
+    # folder: the artist tags hold the credited name, which the folder does
+    # not always use, so a sort-name edit leaves it be.
+    if "albumartist" in touched:
         name = _value(first.target, "albumartist", family0) or ""
         sort_name = _value(first.target, "albumartistsort", family0)
         compilation = is_compilation(release)
@@ -126,7 +120,7 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs:
     album_date = _value(first.target, "date", family0) or ""
     album_folder = names.album_folder(
         album_date, album_title, release_group.get("primary-type"),
-        tuple(release_group.get("secondary-types", [])),
+        tuple(release_group.get("secondary-types", [])), ascii_.to_ascii(edition) if edition else None,
     )
     destination = f"{letter}/{artist_folder}/{album_folder}"
     plan.destination = destination
@@ -141,7 +135,7 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs:
 
 
 def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs: list[TrackPair],
-             family_by_source: dict[str, str], unit: Unit) -> Plan:
+             family_by_source: dict[str, str], unit: Unit, edition: str | None = None) -> Plan:
     """`plan`, with `edits` laid over it, mutated and returned.
 
     Each edited neutral field replaces the real key `mapping.PICARD` maps it
@@ -150,6 +144,9 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
     validated again: an edit laid without that re-derivation gives a plan
     `check` refuses, because a filename or album folder would then disagree
     with the tag it is supposed to follow.
+
+    `edition` is the folder suffix the plan already carries, kept when an
+    edit re-derives the folder.
 
     A destination that moves also re-sorts `unit`'s other files exactly as
     `plan_album` does: whether the existing cover.jpg is a deletion or a file
@@ -183,7 +180,7 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
         file_plan.target = target
 
     if touched:
-        _rederive_destination(plan, release, release_group, pairs, family_by_source, touched)
+        _rederive_destination(plan, release, release_group, pairs, family_by_source, touched, edition)
         image_names = {"cover.jpg"} | {name.casefold() for name in plan.images}
         plan.deletions, plan.extras, plan.kept = sort_others(
             unit, image_names, moving=(plan.source != plan.destination),
@@ -196,8 +193,8 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
 def remember(memory: dict, entry: dict) -> None:
     """Fold one just-applied album's edits and genre choice into `memory`, in place.
 
-    Read from the job's own `entry` - `inputs.edits`, `composer`,
-    `game_choice` - never from the owner's raw decision: identify already
+    Read from the job's own `entry` - `inputs.edits` and the
+    choice in `inputs.owner_input` - never from the owner's raw decision: identify already
     folded the decision in, and `entry` is what it planned and the page
     showed.
     """
@@ -207,12 +204,6 @@ def remember(memory: dict, entry: dict) -> None:
     if release_id and edits:
         memory.setdefault("edits", {})[release_id] = edits
 
-    # `composer` is only set for a single album-artist credit: a Various
-    # Artists or multi-artist album leaves it `None`, keeping it out of the
-    # composer memory even if `owner_input` carries an unrelated value for
-    # the same id.
-    composer = entry.get("composer")
-    if entry.get("game_choice") and composer:
-        choice = (inputs.get("owner_input") or {}).get("composers", {}).get(composer)
-        if choice is not None:
-            memory.setdefault("composers", {})[composer] = choice
+    choice = (inputs.get("owner_input") or {}).get("soundtracks", {}).get(release_id)
+    if release_id and choice is not None:
+        memory.setdefault("soundtracks", {})[release_id] = choice

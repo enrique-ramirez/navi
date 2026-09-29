@@ -99,6 +99,10 @@ def default_transport(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
         return exc.code, exc.read()
 
 
+def _track_counts(release: dict) -> list[int]:
+    return [len(medium.get("tracks", [])) for medium in release.get("media", [])]
+
+
 class MusicBrainz:
     """Every lookup goes through `cache`, so a warm cache never reaches
     `transport`. `clock` and `sleep` default to `time.monotonic` and
@@ -158,12 +162,52 @@ class MusicBrainz:
         )
         return json.loads(self._get(url))
 
+    def release_relations(self, mbid: str) -> dict:
+        url = f"{_BASE}/release/{mbid}?inc=release-rels&fmt=json"
+        return json.loads(self._get(url))
+
+    def latin_releases(self, release: dict) -> list[dict]:
+        """The Latin-script pseudo-releases that translate or transliterate `release`, English first.
+
+        Only a release whose script is given and is not `Latn` is asked for
+        its relations. A pseudo-release qualifies when its script is `Latn`
+        and it has the same number of tracks on each medium, so title n of
+        one is title n of the other. Among those, the ones in English come
+        before the rest, each group in the order MusicBrainz lists them.
+        """
+        script = (release.get("text-representation") or {}).get("script")
+        if not script or script == "Latn":
+            return []
+        try:
+            relations = self.release_relations(release["id"]).get("relations", [])
+        except MusicBrainzUnavailable:
+            raise
+        except MusicBrainzError:
+            return []
+        counts = _track_counts(release)
+        found: dict[str, dict] = {}
+        for relation in relations:
+            if relation.get("type") != "transl-tracklisting":
+                continue
+            target = (relation.get("release") or {}).get("id")
+            if not target or target == release["id"] or target in found:
+                continue
+            try:
+                candidate = self.release(target)
+            except MusicBrainzUnavailable:
+                raise
+            except MusicBrainzError:
+                continue
+            if (candidate.get("text-representation") or {}).get("script") == "Latn" and _track_counts(candidate) == counts:
+                found[target] = candidate
+        return sorted(found.values(), key=lambda r: (r.get("text-representation") or {}).get("language") != "eng")
+
     def release_group(self, mbid: str) -> dict:
         url = f"{_BASE}/release-group/{mbid}?inc=genres+tags&fmt=json"
         return json.loads(self._get(url))
 
     def artist(self, mbid: str) -> dict:
-        url = f"{_BASE}/artist/{mbid}?inc=genres&fmt=json"
+        url = f"{_BASE}/artist/{mbid}?inc=aliases+genres&fmt=json"
         return json.loads(self._get(url))
 
     def search_releases(self, title: str, artist: str | None, various_artists: bool = False) -> dict:

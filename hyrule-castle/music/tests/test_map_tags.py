@@ -258,17 +258,18 @@ class Genre(TestCase):
                 expected = read_back(ext, {"genre": ["dark wave", "coldwave"]})
                 self.assertEqual(target[key(ext, "genre")], expected[key(ext, "genre")])
 
-    def test_musicbrainz_genres_all_off_the_list_leave_the_custom_genre_and_never_the_files(self):
-        # MusicBrainz has genres here, just none on the official list, so
-        # the fallback to the file's genres does not apply. An
-        # empty composed list looks the same as "MusicBrainz had nothing",
-        # which is how the file's Darkwave slips back in.
+    def test_musicbrainz_genres_all_off_the_list_fall_through_to_the_files_on_list_genres_after_the_custom_one(self):
+        # A release group whose genres are all off the list
+        # counts as having none, so the files' own genres come next. Only
+        # their on-list ones survive: `Darkwave` is off the list, `Dark Wave`
+        # is on it. A custom genre stays first and does not stop the fall.
         off_list = [{"name": "seen live", "count": 3}, {"name": "anime", "count": 1}]
-        for custom, expected in ((None, []), ("soundtrack", ["soundtrack"])):
+        on_disk = ["Darkwave", "Dark Wave"]
+        for custom, expected in ((None, ["dark wave"]), ("soundtrack", ["soundtrack", "dark wave"])):
             for ext in FORMATS:
                 with self.subTest(ext, custom=custom):
-                    track = on_file(ext, builders.picard_tags(ext, {"genre": ["Darkwave"]}))
-                    composed = genres.compose(custom, off_list, ["Darkwave"])
+                    track = on_file(ext, builders.picard_tags(ext, {"genre": on_disk}))
+                    composed = genres.compose(custom, off_list, on_disk)
                     target = plan(track, genres=composed).target
                     self.assertEqual(target.get(key(ext, "genre")) or [], expected)
 

@@ -22,6 +22,7 @@ the next pass.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from musiclib import ascii as ascii_
@@ -123,8 +124,8 @@ def join_credit(credits: list[dict], name_key: str) -> str:
 
     `name_key` is `"name"` for the credited name (what `ARTIST`/`ALBUMARTIST`
     hold) or `"sort-name"` for the sort fields; either way, the join phrases
-    between artists are the same. Public: `plan` joins a release's own
-    artist-credit the same way, for the artist folder name.
+    between artists are the same. Public: `plan` joins the release's sort
+    names with it, and `artists` and `batch.identify` join credited names.
     """
     out = ""
     for credit in credits:
@@ -220,14 +221,30 @@ def _suggest_discsubtitle(folder: str | None) -> str | None:
     return suggestion or None
 
 
+def with_titles_of(release: dict, pseudo: dict) -> dict:
+    """`release` with its album title and every track title taken from `pseudo`.
+
+    `pseudo` has the same tracks on each medium. Every other field, the IDs
+    included, stays `release`'s.
+    """
+    media = []
+    for medium, other in zip(release["media"], pseudo["media"]):
+        tracks = [{**track, "title": theirs["title"]} for track, theirs in zip(medium.get("tracks", []), other["tracks"])]
+        media.append({**medium, "tracks": tracks} if "tracks" in medium else medium)
+    return {**release, "title": pseudo["title"], "media": media}
+
+
 def plan_tags(track: files.Track, release: dict, medium_position: int, track_position: int,
              genres: list[str], disc_folder: str | None = None, *, number: int | None = None,
-             total: int | None = None, disc: int | None = None, discs: int | None = None) -> FileTags:
+             total: int | None = None, disc: int | None = None, discs: int | None = None,
+             credited_name: Callable[[list[dict]], str] | None = None) -> FileTags:
     """The tag plan for one track of `release`, at `medium_position`/`track_position` (both 1-based).
 
     Track position 0 is the medium's pregap. `number`, `total`, `disc` and
     `discs` are what gets written as the track and disc pairs; each falls
-    back to the position or count the release gives.
+    back to the position or count the release gives. `credited_name` turns a
+    credit into the text of `ARTIST` and `ALBUMARTIST`; the credit as joined
+    when it is not given.
     """
     family = track.family
     media = release["media"]
@@ -237,12 +254,13 @@ def plan_tags(track: files.Track, release: dict, medium_position: int, track_pos
 
     track_credit = mb_track.get("artist-credit") or release["artist-credit"]
     release_credit = release["artist-credit"]
+    name_of = credited_name or (lambda credit: join_credit(credit, "name"))
 
     fields: dict[str, list[str]] = {
         "title": [mb_track["title"]],
-        "artist": [join_credit(track_credit, "name")],
+        "artist": [name_of(track_credit)],
         "album": [release["title"]],
-        "albumartist": [join_credit(release_credit, "name")],
+        "albumartist": [name_of(release_credit)],
         "artistsort": [join_credit(track_credit, "sort-name")],
         "albumartistsort": [join_credit(release_credit, "sort-name")],
         "release id": [release["id"]],

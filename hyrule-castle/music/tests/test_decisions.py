@@ -19,9 +19,13 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from tests import builders
+from tests.test_batch_apply import Library
 from tests.test_batch_identify import Services, album, no_throttle, release, run_identify
+from tests.test_identify import search_json
+from tests.test_memory import entries, key_of
 
 ACCEPTED = "A/Alpha/First [rip]"
 REPOINTED = "B/Beta/Second [rip]"
@@ -144,10 +148,25 @@ class Reading(unittest.TestCase):
         paste = f"https://musicbrainz.org/release-group/{PASTED['release-group']['id']}"
         self.assertRejected(self.with_album(REPOINTED, {"action": "repoint", "release": paste}), paste)
 
-    def test_a_game_choice_other_than_the_two_the_page_offers_is_refused_naming_it(self):
+    def test_each_of_the_three_game_choices_and_an_old_exports_not_game_music_is_read(self):
+        # 003 criterion 58: the page offers three. `not game music` is what an
+        # export from before the amendment says, and job t1's file must
+        # still be read (criterion 65).
+        from musiclib.batch import decisions
+
+        for game in ("video game music", "soundtrack", "neither", "not game music"):
+            with self.subTest(game=game):
+                decision = {"action": "accept", "release_id": release_of(ACCEPTED), "edits": {}, "game": game}
+                write_decisions(self.job, self.with_album(ACCEPTED, decision))
+                try:
+                    self.assertIsInstance(self.read(), dict)
+                except decisions.DecisionsRejected as refused:
+                    self.fail(f"refused: {refused}")
+
+    def test_a_game_choice_other_than_the_three_the_page_offers_is_refused_naming_it(self):
         decision = {"action": "accept", "release_id": release_of(ACCEPTED), "edits": {},
-                    "game": "soundtrack"}
-        self.assertRejected(self.with_album(ACCEPTED, decision), "soundtrack")
+                    "game": "film score"}
+        self.assertRejected(self.with_album(ACCEPTED, decision), "film score")
 
     def accept_with(self, **changes) -> dict:
         """A file that is fine apart from `changes` to ACCEPTED's accept."""
@@ -190,8 +209,8 @@ class Reading(unittest.TestCase):
         doc = valid(OTHER_JOB)
         doc["albums"][stranger] = {"action": "skip"}
         doc["albums"][SKIPPED] = {"action": "approve"}
-        doc["albums"][ACCEPTED]["game"] = "soundtrack"
-        self.assertRejected(doc, OTHER_JOB, stranger, "approve", "soundtrack")
+        doc["albums"][ACCEPTED]["game"] = "film score"
+        self.assertRejected(doc, OTHER_JOB, stranger, "approve", "film score")
 
 
 class _Job(unittest.TestCase):
@@ -339,6 +358,275 @@ class Repointed(_Job):
 
     def test_a_pasted_bare_mbid_is_planned_against_and_held_the_same_way(self):
         self.assertPlannedAgainstThePaste(PASTED["id"])
+
+
+
+T1 = "t1"
+T1_TRACKS = ["One", "Two"]
+
+# Soundtrack-type, tagged with their releases. The old page asked the
+# composer question on both, and the export answers it both ways.
+OLD_ANSWER = "O/Oleander/Old Score [rip]"
+GAME_ANSWER = "G/Gorse/Overworld [rip]"
+# Plain and tagged: one accepted with an edit, one skipped.
+EDITED = "E/Elder/Edited [rip]"
+T1_SKIPPED = "K/Kale/Skipped [rip]"
+# Not Soundtrack-type, but its files carry `video game music`, which is what
+# made the old page ask the question too.
+GAME_ON_THE_FILES = "V/Vetch/Chiptunes [rip]"
+# Untagged, so found by search. Its one release credits somebody other than
+# the files' artist: criterion 47 holds it, the old engine did not.
+NOT_THEIRS = "D/Dahlia/Borrowed [rip]"
+# Untagged. The search finds two editions of one date: the one the old
+# engine put on top fits closest but credits somebody else, and the amended
+# engine ranks the other, credited to the files' artist, above it.
+TWO_EDITIONS = "M/Mallow/Editions [rip]"
+
+T1_TAGGED = (OLD_ANSWER, GAME_ANSWER, EDITED, T1_SKIPPED, GAME_ON_THE_FILES)
+T1_SEARCHED = (NOT_THEIRS, TWO_EDITIONS)
+
+
+def _t1_release(number: int, key: str, *, credited: str | None = None, soundtrack_type: bool = False,
+                length_ms: int | None = None) -> tuple[dict, dict]:
+    """A release that fits the rip at `key`, credited to `credited` rather than the rip's own artist if given."""
+    artist, title = key.split("/")[1], key.split("/")[2]
+    found, group = release(number, credited or artist, title, T1_TRACKS)
+    if soundtrack_type:
+        group["secondary-types"] = ["Soundtrack"]
+        found["release-group"]["secondary-types"] = ["Soundtrack"]
+    if length_ms is not None:
+        for track in found["media"][0]["tracks"]:
+            track["length"] = track["recording"]["length"] = length_ms
+    return found, group
+
+
+T1_RELEASES = {
+    OLD_ANSWER: _t1_release(41, OLD_ANSWER, soundtrack_type=True),
+    GAME_ANSWER: _t1_release(42, GAME_ANSWER, soundtrack_type=True),
+    EDITED: _t1_release(43, EDITED),
+    T1_SKIPPED: _t1_release(44, T1_SKIPPED),
+    GAME_ON_THE_FILES: _t1_release(45, GAME_ON_THE_FILES),
+    NOT_THEIRS: _t1_release(46, NOT_THEIRS, credited="Somebody Else"),
+}
+#: TWO_EDITIONS' editions: the one job t1 put on top and the owner accepted,
+#: and the one the amended engine puts there. Same date, both fit.
+CLOSEST, _CLOSEST_GROUP = _t1_release(47, TWO_EDITIONS, credited="Somebody Else")
+AGREEING, _AGREEING_GROUP = _t1_release(48, TWO_EDITIONS, length_ms=2000)
+T1_SEARCH = {NOT_THEIRS: [T1_RELEASES[NOT_THEIRS][0]], TWO_EDITIONS: [CLOSEST, AGREEING]}
+T1_CATALOGUE = [*T1_RELEASES.values(), (CLOSEST, _CLOSEST_GROUP), (AGREEING, _AGREEING_GROUP)]
+
+
+def t1_release_of(key: str) -> str:
+    """The release job t1 planned `key` against, and the one its export accepts."""
+    return CLOSEST["id"] if key == TWO_EDITIONS else T1_RELEASES[key][0]["id"]
+
+
+#: `decisions.json` as the page before the amendment exported it: every
+#: accept names a release and carries `edits` and `game`, `game` is `null`
+#: wherever the page did not ask, and the old pair is the only answer there is.
+T1_EXPORT = {"job": T1, "albums": {
+    OLD_ANSWER: {"action": "accept", "release_id": t1_release_of(OLD_ANSWER), "edits": {},
+                 "game": "not game music"},
+    GAME_ANSWER: {"action": "accept", "release_id": t1_release_of(GAME_ANSWER), "edits": {},
+                  "game": "video game music"},
+    GAME_ON_THE_FILES: {"action": "accept", "release_id": t1_release_of(GAME_ON_THE_FILES), "edits": {},
+                        "game": "not game music"},
+    EDITED: {"action": "accept", "release_id": t1_release_of(EDITED),
+             "edits": {"1-2": {"title": ["Two (Live)"]}}, "game": None},
+    T1_SKIPPED: {"action": "skip"},
+    NOT_THEIRS: {"action": "accept", "release_id": t1_release_of(NOT_THEIRS), "edits": {}, "game": None},
+    TWO_EDITIONS: {"action": "accept", "release_id": t1_release_of(TWO_EDITIONS), "edits": {}, "game": None},
+}}
+
+
+def t1_plan(root: Path) -> dict:
+    """`plan.json` for job t1 in the shape the engine wrote it before the amendment.
+
+    The entry keys are the old `_blank_entry`'s, `composer` among them.
+    `game_choice` is true on every Soundtrack-type album and on one whose
+    files say `video game music`. An unsettled Soundtrack album was held
+    `review: unsettled soundtrack`, and nothing was held for its artist.
+    Only what an entry's decision is checked against has to be right: its
+    source, `game_choice` and the positions in `fields`.
+    """
+    def entry(key: str) -> dict:
+        found = T1_RELEASES[key][0] if key != TWO_EDITIONS else CLOSEST
+        soundtrack_type = "Soundtrack" in found["release-group"]["secondary-types"]
+        artist_id = found["artist-credit"][0]["artist"]["id"]
+        artist = key.split("/")[1]
+        holds = [{"kind": "status", "detail": "review: unsettled soundtrack"}] if soundtrack_type else []
+        return {
+            "source": key, "status": "review" if soundtrack_type else "certain", "holds": holds,
+            "decision": None, "release_id": found["id"],
+            "destination": f"{artist}/{artist} - 1989 - {found['title']}",
+            "composer": artist_id, "game_choice": soundtrack_type or key == GAME_ON_THE_FILES,
+            "candidates": [], "files": [],
+            "fields": {position: {"title": [title]} for position, title in zip(("1-1", "1-2"), T1_TRACKS)},
+            "images": {}, "residue": [], "deletions": [], "extras": [], "kept": [], "changes": [],
+            "inputs": None, "plan_digest": None, "game": None, "owner_edits": {},
+            "state": "held" if holds else "auto",
+        }
+
+    keys = sorted(T1_TAGGED + T1_SEARCHED)
+    return {"job": T1, "root": str(root.resolve()), "albums": [entry(key) for key in keys]}
+
+
+class T1Services(Services):
+    """`Services`, with a search that finds the releases `T1_SEARCH` lists for an album, and artist lookups.
+
+    A search is matched to its album by the album's title in the query, so
+    each untagged rip finds its own releases and no other. An artist is any
+    one a release in the catalogue credits, with no aliases.
+    """
+
+    def __init__(self, catalogue: list[tuple[dict, dict]]) -> None:
+        super().__init__(catalogue)
+        self.artists = {part["artist"]["id"]: part["artist"] for found, _group in catalogue
+                        for part in found["artist-credit"]}
+
+    def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
+        parts = urlsplit(url)
+        path = parts.path.rstrip("/")
+        if parts.netloc == "musicbrainz.org" and path == "/ws/2/release":
+            self.answered.append(url)
+            query = unquote(parts.query).casefold()
+            for key, found in T1_SEARCH.items():
+                if key.split("/")[2].split(" [")[0].casefold() in query:
+                    return 200, json.dumps(search_json(*found)).encode()
+            return 200, b'{"releases": [], "count": 0}'
+        if parts.netloc == "musicbrainz.org" and path.startswith("/ws/2/artist/"):
+            self.answered.append(url)
+            artist = self.artists.get(path.removeprefix("/ws/2/artist/"))
+            if artist is None:
+                return 404, b'{"error": "Not Found"}'
+            return 200, json.dumps({**artist, "aliases": [], "genres": []}).encode()
+        return super().__call__(url, headers)
+
+
+def t1_rips(root: Path) -> None:
+    for key in T1_TAGGED:
+        album(root, key, T1_TRACKS, release_id=t1_release_of(key))
+    for key in T1_SEARCHED:
+        album(root, key, T1_TRACKS)
+    for path in (root / GAME_ON_THE_FILES).glob("*.flac"):
+        builders.write_tags(path, {key_of("genre"): ["Video Game Music"]})
+
+
+class JobT1sExportFromBeforeTheAmendment(unittest.TestCase):
+    """Job `t1` holding the old `plan.json`, its old export, and the old memory, then identify and apply once.
+
+    Criterion 65: the amended engine's first `batch identify` on `t1` takes
+    the export, and every album it accepts is planned against the release
+    it names, with `not game music` read as `soundtrack` (criterion 58).
+    `undecided` is the same rips planned by the amended engine in another
+    job with no decisions at all: what the engine would choose on its own,
+    so the cases can show the export is what overrode it. The cases only read.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        no_throttle(cls)
+
+        rips = base / "rips"
+        t1_rips(rips)
+
+        lib = cls.lib = Library(base)
+        lib.root.rmdir()
+        shutil.copytree(rips, lib.root)
+        lib.job = base / ".musiclib" / "jobs" / T1
+        lib.job.mkdir(parents=True)
+        lib.catalogue = T1_CATALOGUE
+        # The memory as job t1's engine left it: the composer memory, no
+        # soundtracks yet.
+        lib.memory.write_text(json.dumps({"edits": {}, "composers": {}, "reopened": []}), encoding="utf-8")
+        (lib.job / "plan.json").write_text(json.dumps(t1_plan(lib.root)), encoding="utf-8")
+        write_decisions(lib.job, T1_EXPORT)
+
+        cls.identified = run_identify(lib.root, lib.job, lib.memory, T1Services(T1_CATALOGUE))
+        cls.planned = lib.entries() if cls.identified[0] == 0 else {}
+        cls.applied = lib.apply() if cls.identified[0] == 0 else None
+        cls.log = {line["source"]: line["outcome"] for line in lib.log()}
+        cls.remembered = json.loads(lib.memory.read_text(encoding="utf-8"))
+
+        fresh = base / "fresh"
+        shutil.copytree(rips, fresh)
+        undecided = base / ".musiclib" / "jobs" / "u1"
+        undecided.mkdir(parents=True)
+        cls.undecided_run = run_identify(fresh, undecided, base / "fresh-memory.json", T1Services(T1_CATALOGUE))
+        cls.undecided = entries(undecided) if cls.undecided_run[0] == 0 else {}
+
+    def entry(self, key: str) -> dict:
+        code, _out, err = self.identified
+        self.assertEqual(code, 0, f"the first identify on t1 refused its old export: {err}")
+        return self.planned[key]
+
+    def genres(self, key: str) -> list[list[str] | None]:
+        entry = self.entry(key)
+        return [entry["fields"][position].get("genre") for position in ("1-1", "1-2")]
+
+    def assertPlannedAgainst(self, key: str, release_id: str) -> None:
+        """`key` planned against `release_id`, the plan apply rebuilds names it too, and apply wrote it."""
+        entry = self.entry(key)
+        self.assertEqual(entry["decision"], "accept")
+        self.assertEqual(entry["release_id"], release_id)
+        self.assertIsNotNone(entry["inputs"], entry)
+        self.assertEqual(entry["inputs"]["release_id"], release_id)
+        self.assertEqual(self.log.get(key), "applied", f"apply said: {self.applied}")
+
+    def test_the_first_identify_on_t1_takes_the_export_it_was_made_for(self):
+        code, _out, err = self.identified
+        self.assertEqual(code, 0, err)
+        self.assertEqual({key: entry["decision"] for key, entry in self.planned.items()},
+                         {key: decision["action"] for key, decision in T1_EXPORT["albums"].items()})
+
+    def test_an_accept_from_the_old_export_is_written_with_its_edit_and_a_skip_is_not_written(self):
+        entry = self.entry(EDITED)
+        self.assertEqual(entry["fields"]["1-2"].get("title"), ["Two (Live)"])
+        self.assertEqual(self.log.get(EDITED), "applied", f"apply said: {self.applied}")
+        self.assertNotIn(T1_SKIPPED, self.log)
+
+    def test_not_game_music_is_planned_and_remembered_as_soundtrack_and_video_game_music_as_itself(self):
+        # The release group's own genre is `rock`.
+        with self.subTest(game="not game music"):
+            self.assertEqual(self.genres(OLD_ANSWER), [["soundtrack", "rock"]] * 2)
+            self.assertEqual(self.log.get(OLD_ANSWER), "applied", f"apply said: {self.applied}")
+        with self.subTest(game="video game music"):
+            self.assertEqual(self.genres(GAME_ANSWER), [["video game music", "rock"]] * 2)
+        # The old value is stored as what it meant, so no later job reads it.
+        self.assertEqual(self.remembered.get("soundtracks", {}).get(t1_release_of(OLD_ANSWER)), "soundtrack")
+        self.assertEqual(self.remembered.get("soundtracks", {}).get(t1_release_of(GAME_ANSWER)), "video game music")
+
+    def test_not_game_music_on_an_album_whose_files_say_video_game_music_puts_soundtrack_first(self):
+        # The old page asked on this album because of its files, and the
+        # amended engine no longer asks: left to itself it plans `video game
+        # music` first. The owner's old answer still reads as `soundtrack`,
+        # first. Whether `video game music` may stay further down is not
+        # settled by the spec, so only the first genre is pinned.
+        alone = self.undecided.get(GAME_ON_THE_FILES)
+        self.assertIsNotNone(alone, self.undecided_run)
+        self.assertEqual(alone["fields"]["1-1"].get("genre", [None])[0], "video game music")
+        self.assertEqual([genres[0] if genres else None for genres in self.genres(GAME_ON_THE_FILES)],
+                         ["soundtrack"] * 2)
+        self.assertEqual(self.log.get(GAME_ON_THE_FILES), "applied", f"apply said: {self.applied}")
+
+    def test_an_accept_the_artist_rule_would_hold_is_planned_against_the_release_it_names_and_written(self):
+        # The control: left to itself the amended engine holds this album
+        # for its artist (criterion 47), against the same release.
+        alone = self.undecided.get(NOT_THEIRS)
+        self.assertIsNotNone(alone, self.undecided_run)
+        self.assertIn({"kind": "status", "detail": "review: artist does not agree"}, alone["holds"])
+        self.assertPlannedAgainst(NOT_THEIRS, t1_release_of(NOT_THEIRS))
+
+    def test_an_accept_of_an_edition_the_amended_engine_ranks_second_is_planned_against_the_one_named(self):
+        # The control: left to itself the amended engine plans the edition
+        # credited to the files' artist, not the one t1 put on top.
+        alone = self.undecided.get(TWO_EDITIONS)
+        self.assertIsNotNone(alone, self.undecided_run)
+        self.assertEqual(alone["release_id"], AGREEING["id"])
+        self.assertPlannedAgainst(TWO_EDITIONS, CLOSEST["id"])
 
 
 if __name__ == "__main__":

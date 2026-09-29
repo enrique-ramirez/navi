@@ -7,7 +7,7 @@ import io
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Container, Sequence
 
 from mutagen.asf import ASF, ASFByteArrayAttribute
 from mutagen.flac import FLAC, Picture
@@ -70,12 +70,14 @@ def local_covers(folder: Path) -> list[tuple[str, bytes]]:
     return [(name, path.read_bytes()) for _rank, _key, name, path in sorted(found, key=lambda f: f[:3])]
 
 
-def _front_of(caa_images: list[dict]) -> dict | None:
+def _is_pdf(data: bytes) -> bool:
+    return data[:4] == b"%PDF"
+
+
+def _front_candidates(caa_images: list[dict]) -> list[dict]:
     kept = [image for image in caa_images if not _is_skipped(image)]
-    front = next((image for image in kept if image.get("front")), None)
-    if front is None:
-        front = next((image for image in kept if "Front" in image.get("types", [])), None)
-    return front
+    return ([image for image in kept if image.get("front")]
+            + [image for image in kept if not image.get("front") and "Front" in image.get("types", [])])
 
 
 def plan_images(
@@ -83,28 +85,46 @@ def plan_images(
     download: Callable[[str], bytes],
     group_images: Callable[[], list[dict]] | None = None,
     local: Sequence[tuple[str, bytes]] = (),
+    existing: Container[str] = (),
 ) -> ImagePlan:
     """The album's image files, from the Cover Art Archive's list for the release.
 
     The front is the release's own; failing that, the front of the list
     `group_images()` returns (asked only then); failing that, the first of
     `local` (see `local_covers`) that Pillow can open. Only the front falls back.
+
+    A PDF is named by its position among the list's PDFs, so the name is the same
+    on every run: skipping an existing `booklet-1.pdf` leaves `booklet-2.pdf`.
+    `existing` holds the folder's file names, lower-cased.
     """
+    downloads: dict[str, bytes] = {}
+
+    def get(image: dict) -> bytes:
+        url = image["image"]
+        if url not in downloads:
+            downloads[url] = download(url)
+        return downloads[url]
+
+    def first_front(listing: list[dict]) -> dict | None:
+        return next((image for image in _front_candidates(listing) if not _is_pdf(get(image))), None)
+
     kept = [image for image in caa_images if not _is_skipped(image)]
-    front = _front_of(caa_images)
+    pdfs = [image for image in kept if _is_pdf(get(image))]
+    pictures = [image for image in kept if image not in pdfs]
+
+    front = first_front(caa_images)
     if front is None and group_images is not None:
-        front = _front_of(group_images())
+        front = first_front(group_images())
 
     files: dict[str, bytes] = {}
     problems: list[str] = []
     consumed: str | None = None
 
     def fetch(image: dict) -> bytes | None:
-        url = image["image"]
         try:
-            return _as_jpeg(download(url))
+            return _as_jpeg(get(image))
         except _NOT_AN_IMAGE:
-            problems.append(f"cover art archive: {url} is not an image")
+            problems.append(f"cover art archive: {image['image']} is not an image")
             return None
 
     if front is not None:
@@ -125,7 +145,7 @@ def plan_images(
                 "no front cover: not in the Cover Art Archive for the release or its release group, "
                 "and no cover image in the folder")
 
-    rest = [image for image in kept if image is not front]
+    rest = [image for image in pictures if image is not front]
     counts: dict[str, int] = {}
     for image in rest:
         base = _base_name(image)
@@ -148,6 +168,11 @@ def plan_images(
         picture = fetch(image)
         if picture is not None:
             files[name] = picture
+
+    for number, image in enumerate(pdfs, 1):
+        name = "booklet.pdf" if len(pdfs) == 1 else f"booklet-{number}.pdf"
+        if name not in existing:
+            files[name] = get(image)
 
     return ImagePlan(files=files, problems=problems, consumed=consumed)
 

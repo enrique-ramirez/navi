@@ -1,11 +1,9 @@
 """The memory: what the owner decided once, carried into every later job, and the edits laid over a plan.
 
 Every field edit in an applied decision is kept under its release MBID and
-track position, and a later job over the same rips plans it again. A `video
-game music` or `not game music` choice is kept
-under the album's composer, a single album artist that is not Various
-Artists, and reaches 001's engine next time. An album with no composer gets
-its choice once, as that album's genre, and never as a composer.
+track position, and a later job over the same rips plans it again. A
+Soundtrack-type album's choice is kept the same way, under its release MBID,
+and is `tests.test_soundtracks`.
 
 An edit is laid over the plan the engine made. A field the path is built
 from (title, album) moves the file or folder with it, because the library's
@@ -29,23 +27,12 @@ from pathlib import Path
 
 from musiclib import files, mapping, tagwrite
 from tests.test_batch_apply import Library
-from tests.test_batch_identify import Services, album, mbid, no_throttle, release, run_identify
+from tests.test_batch_identify import Services, album, no_throttle, release, run_identify
 
-VGM = "video game music"
-NOT_GAME = "not game music"
-VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
-UNSETTLED = "review: unsettled soundtrack"
-
-# Edited albums: ordinary releases, auto before anyone decides anything.
+# Ordinary releases, auto before anyone decides anything.
 TITLED = "T/Tern/Shoreline [rip]"
 RENAMED = "R/Rook/Old Name [rip]"
 REGENRED = "G/Grebe/Marsh [rip]"
-
-# Soundtrack-type albums, each held until someone says what it is.
-GAME = "S/Sakura/Overworld [rip]"
-FILM = "F/Fennel/Harbour [rip]"
-VARIOUS = "V/Various Artists/Boss Battles [rip]"
-DUO = "D/Dace & Eider/Two Hands [rip]"
 
 TITLES = ["One", "Two"]
 NEW_TITLE = "Second Wind"
@@ -53,35 +40,6 @@ NEW_ALBUM = "Renamed Record"
 # Not a genre MusicBrainz gives the release group (that is `rock`), so the
 # written genre can only have come from the edit.
 NEW_GENRE = "jazz"
-
-# The two artists of DUO. Nobody else in the library is either of them.
-DACE, EIDER = mbid(3, 91), mbid(3, 92)
-
-
-def credit(*artists: tuple[str, str]) -> list[dict]:
-    """A ws/2 `artist-credit` for `artists`, each an (MBID, name) pair, joined with ` & `."""
-    return [{"name": name, "joinphrase": " & " if i < len(artists) - 1 else "",
-             "artist": {"id": ident, "name": name, "sort-name": name}}
-            for i, (ident, name) in enumerate(artists)]
-
-
-def soundtrack(number: int, key: str, album_credit: list[dict] | None = None) -> tuple[dict, dict]:
-    """A Soundtrack-type release for the rip at `key`, with nothing else saying whether it is game music.
-
-    No game tag on the group, no genre on the files, so 001 holds it as an
-    unsettled soundtrack until the memory settles it. `album_credit`
-    replaces the stock single-artist credit on the release and every track.
-    """
-    artist, title = key.split("/")[1], key.split("/")[2].split(" [")[0]
-    found, group = release(number, artist, title, TITLES)
-    group["secondary-types"] = ["Soundtrack"]
-    found["release-group"]["secondary-types"] = ["Soundtrack"]
-    if album_credit is not None:
-        found["artist-credit"] = album_credit
-        for track in found["media"][0]["tracks"]:
-            track["artist-credit"] = album_credit
-    return found, group
-
 
 def ordinary(number: int, key: str) -> tuple[dict, dict]:
     artist, title = key.split("/")[1], key.split("/")[2].split(" [")[0]
@@ -92,19 +50,11 @@ CATALOGUE = {
     TITLED: ordinary(1, TITLED),
     RENAMED: ordinary(2, RENAMED),
     REGENRED: ordinary(3, REGENRED),
-    GAME: soundtrack(4, GAME),
-    FILM: soundtrack(5, FILM),
-    VARIOUS: soundtrack(6, VARIOUS, credit((VARIOUS_ARTISTS, "Various Artists"))),
-    DUO: soundtrack(7, DUO, credit((DACE, "Dace"), (EIDER, "Eider"))),
 }
 
 
 def release_of(key: str) -> str:
     return CATALOGUE[key][0]["id"]
-
-
-def artist_of(key: str) -> str:
-    return CATALOGUE[key][0]["artist-credit"][0]["artist"]["id"]
 
 
 def entries(job: Path) -> dict[str, dict]:
@@ -127,8 +77,8 @@ def without_pictures(tags: dict) -> dict:
     return {k: v for k, v in tags.items() if not tagwrite.is_picture_key("vorbis", k)}
 
 
-def accept(key: str, edits: dict, game: str | None = None) -> dict:
-    return {"action": "accept", "release_id": release_of(key), "edits": edits, "game": game}
+def accept(key: str, edits: dict) -> dict:
+    return {"action": "accept", "release_id": release_of(key), "edits": edits, "game": None}
 
 
 def every_position(field: str, value: str) -> dict:
@@ -172,11 +122,6 @@ class Memory(unittest.TestCase):
         for key in (TITLED, RENAMED, REGENRED):
             if cls.planned[key]["state"] != "auto":
                 raise AssertionError(f"{key} is not auto before any decision: {cls.planned[key]}")
-        for key in (GAME, FILM, VARIOUS, DUO):
-            entry = cls.planned[key]
-            if (entry["state"], entry["holds"], entry["game_choice"]) != (
-                    "held", [{"kind": "status", "detail": UNSETTLED}], True):
-                raise AssertionError(f"{key} is not held only as an unsettled soundtrack: {entry}")
         if cls.memory.exists():
             raise AssertionError("memory.json exists before anything was applied")
 
@@ -184,10 +129,6 @@ class Memory(unittest.TestCase):
             TITLED: accept(TITLED, {"1-2": {"title": [NEW_TITLE]}}),
             RENAMED: accept(RENAMED, every_position("album", NEW_ALBUM)),
             REGENRED: accept(REGENRED, every_position("genre", NEW_GENRE)),
-            GAME: accept(GAME, {}, VGM),
-            FILM: accept(FILM, {}, NOT_GAME),
-            VARIOUS: accept(VARIOUS, {}, VGM),
-            DUO: accept(DUO, {}, VGM),
         })
         cls.decided = lib.entries()
         cls.code, cls.out, cls.err = lib.apply()
@@ -280,47 +221,6 @@ class Memory(unittest.TestCase):
         self.assertEqual(self.decided[REGENRED]["destination"], planned["destination"])
         written = {rel: without_pictures(tags) for rel, tags in self.written(REGENRED).items()}
         self.assertEqual(written, expected)
-
-    # --- composer choices ----------------------------------------------------
-
-    def test_a_game_choice_on_a_single_artist_album_is_written_to_that_album_in_the_same_apply(self):
-        # Stored for next time is not enough: the album the owner decided
-        # is written now, with the choice in its genre.
-        for rel, tags in self.written(GAME).items():
-            self.assertEqual(tags[key_of("genre")][0], VGM, rel)
-        for rel, tags in self.written(FILM).items():
-            self.assertNotIn(VGM, tags[key_of("genre")], rel)
-
-    def test_a_remembered_video_game_music_composer_makes_the_next_job_plan_that_genre_first(self):
-        entry = self.again[GAME]
-        self.assertEqual((entry["state"], entry["holds"]), ("auto", []))
-        for position in ("1-1", "1-2"):
-            self.assertEqual(entry["fields"][position]["genre"][0], VGM, position)
-
-    def test_a_remembered_not_game_music_composer_lets_a_soundtrack_album_auto_apply_next_time(self):
-        # Held as an unsettled soundtrack in the first job (setUpClass checks
-        # it). Nothing about the album changed since, only the memory.
-        entry = self.again[FILM]
-        self.assertEqual((entry["state"], entry["status"], entry["holds"]), ("auto", "certain", []))
-        self.assertNotIn(VGM, entry["fields"]["1-1"]["genre"])
-
-    def test_a_game_choice_on_a_various_artists_or_two_artist_album_is_written_to_that_album(self):
-        for key in (VARIOUS, DUO):
-            with self.subTest(album=key):
-                tracks = self.written(key)
-                self.assertEqual(len(tracks), len(TITLES))
-                for rel, tags in tracks.items():
-                    self.assertEqual(tags[key_of("genre")][0], VGM, rel)
-
-    def test_game_choices_are_stored_under_a_single_album_artist_and_never_under_various_or_two_artists(self):
-        # Various Artists is on hundreds of unrelated albums, and a
-        # two-artist credit names nobody as the composer. Keeping either
-        # would decide albums the owner never looked at. Only the two
-        # single-artist choices may be here, each under its own artist.
-        composers = self.assertRemembered().get("composers", {})
-        self.assertEqual(composers, {artist_of(GAME): VGM, artist_of(FILM): NOT_GAME})
-        for artist in (VARIOUS_ARTISTS, DACE, EIDER):
-            self.assertNotIn(artist, composers)
 
 
 if __name__ == "__main__":

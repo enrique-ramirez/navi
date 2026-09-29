@@ -7,7 +7,7 @@ out in the same order both times. Both children read a warm cache through a
 transport that notes every request, and neither may make one. The library
 fills every map an entry has: two discs, residue, a file kept, one deleted and
 one moved to the extras root, a held album with a candidate, a collision, an
-unidentified album, a memory with an edit and a composer, and a
+unidentified album, a memory with an edit and a soundtrack choice, and a
 `decisions.json` with an accept (with an edit and a `game`), a repoint and a
 skip. The job is the same job at the same path both times. Copies at other
 paths need not match, because `root` is in `plan.json`.
@@ -17,7 +17,7 @@ decide, identify again to fold the decisions in, apply, and then a new job
 over the library as apply left it, with the same `memory.json` and no
 decisions. The fakes and the job layout are `tests.test_batch_identify`'s
 and `tests.test_batch_apply`'s; the soundtrack releases are
-`tests.test_memory`'s.
+`tests.test_soundtracks`'s.
 """
 
 from __future__ import annotations
@@ -36,7 +36,8 @@ from pathlib import Path
 from tests import builders
 from tests.test_batch_apply import Library, new_library
 from tests.test_batch_identify import TONE_MS, Services, album, release, run_identify
-from tests.test_memory import NOT_GAME, VGM, entries, key_of, soundtrack
+from tests.test_memory import entries, key_of
+from tests.test_soundtracks import SOUNDTRACK, VGM, soundtrack
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -140,7 +141,8 @@ def build(lib: Library) -> None:
     lib.memory.parent.mkdir(parents=True, exist_ok=True)
     lib.memory.write_text(json.dumps({
         "edits": {release_id(c.discs): {"2-1": {"title": [REMEMBERED_TITLE]}}},
-        "composers": {c.film[0]["artist-credit"][0]["artist"]["id"]: NOT_GAME},
+        # Chosen in an earlier job, so FILM is settled and applied with no decision.
+        "soundtracks": {release_id(c.film): SOUNDTRACK},
         "reopened": [],
     }), encoding="utf-8")
 
@@ -266,7 +268,7 @@ class Determinism(unittest.TestCase):
             "an accept": by_source[GAME]["decision"] == "accept",
             "a remembered edit": (by_source[DISCS]["inputs"] or {}).get("edits"),
             "a decided edit": (by_source[GAME]["inputs"] or {}).get("edits"),
-            "a composer": (by_source[FILM]["inputs"] or {}).get("owner_input", {}).get("composers"),
+            "a remembered soundtrack choice": by_source[FILM]["state"] == "auto",
         }
         self.assertEqual([name for name, value in filled.items() if not value], [],
                          "the job does not exercise these; the byte comparison would prove nothing about them")

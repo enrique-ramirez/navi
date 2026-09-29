@@ -16,6 +16,7 @@ go through `units` and `check` fail on what they find, not on an import.
 from __future__ import annotations
 
 import importlib
+import os
 import shutil
 import tempfile
 import unittest
@@ -40,6 +41,11 @@ def touch(path: Path, data: bytes = b"") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def files_in(album: Path) -> list[Path]:
+    """The files `units` and `check` both take from one album folder."""
+    return walk().album_contents(album)[0]
 
 
 def rels(paths: list[Path], base: Path) -> list[str]:
@@ -111,7 +117,7 @@ class AlbumDirs(_Tree):
                                      ["N/Nine Inch Nails/(1999) The Fragile"])
 
 
-class AlbumFiles(_Tree):
+class AlbumContents(_Tree):
     def test_every_file_at_any_depth_in_path_order_skipping_ignored_folders_and_nfs_files(self) -> None:
         album = self.root() / "N/Nine Inch Nails/(1999) The Fragile"
         for rel in ("CD2/01. The Wretched.flac", "cover.jpg", "CD1/01. Somewhat Damaged.flac",
@@ -123,7 +129,7 @@ class AlbumFiles(_Tree):
                     ".nfs0001", "CD2/.nfs000000000123abcd00000004"):
             touch(album / rel)
 
-        self.assertEqual(rels(walk().album_files(album), album), [
+        self.assertEqual(rels(files_in(album), album), [
             ".DS_Store",
             "._cover.jpg",
             "CD1/01. Somewhat Damaged.flac",
@@ -131,6 +137,74 @@ class AlbumFiles(_Tree):
             "Scans/extra/back.jpg",
             "cover.jpg",
         ])
+
+
+#: The ignored names in cases other than the ones `IGNORED_FOLDERS` spells
+#: them in. A Synology writes `@eaDir` and Windows `$RECYCLE.BIN`, but a copy
+#: through another client or file system can change the case.
+IGNORED_IN_OTHER_CASES = ("@EADIR", "$Recycle.Bin", "#RECYCLE", "Lost+Found", ".trash-1000")
+
+
+class TheIgnoreListIgnoresCase(_Tree):
+    def test_album_dirs_skips_a_listed_name_in_another_case_at_every_level(self) -> None:
+        for name in IGNORED_IN_OTHER_CASES:
+            for level, rel in (("letter", f"{name}/N/(1999) The Fragile"),
+                               ("artist", f"N/{name}/(1999) The Fragile"),
+                               ("album", f"N/Nine Inch Nails/{name}")):
+                with self.subTest(name=name, level=level):
+                    root = self.root()
+                    (root / "N/Nine Inch Nails/(1999) The Fragile").mkdir(parents=True)
+                    touch(root / rel / THUMB)
+                    self.assertEqual(rels(walk().album_dirs(root), root),
+                                     ["N/Nine Inch Nails/(1999) The Fragile"])
+
+    def test_album_contents_skips_a_listed_name_in_another_case_at_any_depth(self) -> None:
+        for name in IGNORED_IN_OTHER_CASES:
+            with self.subTest(name):
+                album = self.root() / "N/Nine Inch Nails/(1999) The Fragile"
+                touch(album / "01. Somewhat Damaged.flac")
+                touch(album / name / THUMB)
+                touch(album / "CD1" / name / THUMB)
+                self.assertEqual(rels(files_in(album), album), ["01. Somewhat Damaged.flac"])
+
+
+@unittest.skipUnless(hasattr(os, "symlink"), "no os.symlink on this platform")
+class SymlinksAreNotFollowed(_Tree):
+    """A symlinked folder is never walked into.
+
+    A link inside the library points at music already in it or at something
+    outside it, and neither is an album of this library to plan and rename.
+    A link back up the tree would walk forever.
+    """
+
+    def link(self, link: Path, target: Path) -> None:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.symlink(target, link, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"cannot make a symlink here: {exc}")
+
+    def test_album_dirs_finds_no_album_through_a_symlinked_letter_artist_or_album_folder(self) -> None:
+        elsewhere = self.tmp / "elsewhere"
+        (elsewhere / "Moby/(2005) Hotel").mkdir(parents=True)
+        for level, rel, target in (("letter", "M", elsewhere),
+                                   ("artist", "M/Moby", elsewhere / "Moby"),
+                                   ("album", "M/Moby/(2005) Hotel", elsewhere / "Moby/(2005) Hotel")):
+            with self.subTest(level):
+                root = self.root()
+                (root / "N/Nine Inch Nails/(1999) The Fragile").mkdir(parents=True)
+                self.link(root / rel, target)
+                self.assertEqual(rels(walk().album_dirs(root), root),
+                                 ["N/Nine Inch Nails/(1999) The Fragile"])
+
+    def test_album_contents_takes_nothing_through_a_symlinked_folder_and_ends_on_a_link_to_itself(self) -> None:
+        album = self.root() / "N/Nine Inch Nails/(1999) The Fragile"
+        touch(album / "CD1/01. Somewhat Damaged.flac")
+        touch(self.tmp / "scans/back.jpg")
+        self.link(album / "Scans", self.tmp / "scans")
+        # A walk that follows this one never returns.
+        self.link(album / "CD1/again", album)
+        self.assertEqual(rels(files_in(album), album), ["CD1/01. Somewhat Damaged.flac"])
 
 
 class UnreadableFolders(_Tree):
@@ -172,7 +246,7 @@ class UnreadableFolders(_Tree):
         album = self.root() / "N/Nine Inch Nails/(1999) The Fragile"
         touch(album / "01. Somewhat Damaged.flac")
         self.lock(album)
-        self.assertEqual(walk().album_files(album), [])
+        self.assertEqual(files_in(album), [])
 
     def test_an_unreadable_folder_inside_an_album_is_skipped_and_the_files_beside_it_are_found(self) -> None:
         # `CD1` is locked and sorts before `CD2` and `cover.jpg`.
@@ -180,7 +254,7 @@ class UnreadableFolders(_Tree):
         for rel in ("CD1/01. Somewhat Damaged.flac", "CD2/01. The Wretched.flac", "cover.jpg"):
             touch(album / rel)
         self.lock(album / "CD1")
-        self.assertEqual(rels(walk().album_files(album), album), ["CD2/01. The Wretched.flac", "cover.jpg"])
+        self.assertEqual(rels(files_in(album), album), ["CD2/01. The Wretched.flac", "cover.jpg"])
 
 
 class AMissingRoot(_Tree):

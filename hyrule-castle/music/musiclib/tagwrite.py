@@ -76,6 +76,37 @@ def is_picture_key(family: str, key: str) -> bool:
     return False
 
 
+def _is_digest(value) -> bool:
+    """Whether `value` is exactly what `files.snapshot` keeps for binary data: a sha1 in 40 lower-case hex digits."""
+    return isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value)
+
+
+def is_unrestorable(family: str, key: str, value) -> bool:
+    """Whether rollback cannot rebuild `key`'s frame from `value`, what `files.read` kept.
+
+    A picture, and on MP3 the `PRIV`, `GEOB` and URL (`W***`) frames, which are
+    kept only as a digest, and `USER`, which is kept as text but is not
+    written back. `UFID` and `POPM` are not here: their values are kept whole.
+
+    On MP4 a `----:` freeform atom and on ASF any attribute can hold text or
+    binary under the same key, and `files.snapshot` marks the binary case only
+    by storing a bare sha1. Older job records carry no other marker, so a
+    value of exactly 40 lower-case hex digits there is taken as a digest. A
+    real text value of that shape is skipped and listed with it, which costs
+    less than writing a digest into the file as though it were text.
+    `value` is one string or the list `Track.tags` keeps.
+    """
+    if is_picture_key(family, key):
+        return True
+    if family == "id3":
+        frame_id = key.split(":", 1)[0]
+        return frame_id in ("PRIV", "GEOB", "USER") or (len(frame_id) == 4 and frame_id[0] == "W")
+    if family == "asf" or (family == "mp4" and key.startswith("----:")):
+        values = [value] if isinstance(value, str) else list(value)
+        return any(_is_digest(v) for v in values)
+    return False
+
+
 def is_forbidden_duplicate(family: str, key: str) -> bool:
     """The exception to keeping unplanned fields, and *No duplicate fields* in the docs.
 

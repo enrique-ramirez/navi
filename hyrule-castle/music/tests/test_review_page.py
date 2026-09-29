@@ -18,7 +18,7 @@ redesign keeps these tests:
   album; `data-image="<name>"` on each image the plan writes
 - `data-field` and `data-position` on each input
 - the decision radios by value: `accept`, `repoint`, `skip`, a candidate's
-  MBID, and `video game music` / `not game music`
+  MBID, and `video game music` / `soundtrack` / `neither`
 - `data-repoint` on the box a release URL or MBID is pasted into
 - `id="plan"`, `id="decisions-skeleton"` and `id="export"`
 """
@@ -167,7 +167,7 @@ def plan_doc() -> dict:
             ),
             entry(
                 OCARINA, "held", "review",
-                holds=[{"kind": "status", "detail": "review: unsettled soundtrack"}],
+                holds=[{"kind": "status", "detail": "review: soundtrack choice"}],
                 release_id=OCARINA_ID,
                 # Planned where it already is: no path changes.
                 destination=OCARINA,
@@ -478,18 +478,20 @@ class HeldAlbum(_Rendered):
             wanted = [r["key"]] + ([r["value"]] if r["value"] is not None else [])
             self.assertTrue(any(all(w in t for w in wanted) for t in items), r)
 
-    def test_a_game_album_offers_video_game_music_or_not_game_music_and_no_other_album_does(self) -> None:
-        def offered(section: Node) -> set[str]:
-            values = set()
-            for n in section.tags("input", "option"):
-                if n.tag == "input" and n.attrs.get("type", "").lower() not in ("radio", "checkbox"):
-                    continue
-                values.add(n.attrs.get("value", n.text()).strip())
-            return values & {"video game music", "not game music"}
+    def test_a_soundtrack_type_album_offers_three_game_radios_and_no_other_album_does(self) -> None:
+        # 003 criterion 58. `not game music` is looked for too, so a page
+        # still offering the old pair fails here.
+        def offered(section: Node) -> list[tuple[str, str]]:
+            return sorted((n.attrs.get("name", ""), n.attrs["value"]) for n in section.tags("input")
+                          if n.attrs.get("type", "").lower() == "radio"
+                          and n.attrs.get("value") in GAME | {"not game music"})
 
-        self.assertEqual(offered(self.album(OCARINA)), {"video game music", "not game music"})
+        radios = offered(self.album(OCARINA))
+        self.assertEqual(sorted(value for _name, value in radios), sorted(GAME))
+        # One group, so the browser lets the owner pick one of the three.
+        self.assertEqual(len({name for name, _value in radios}), 1, radios)
         for key in (DISINTEGRATION, WISH, AUTO):
-            self.assertEqual(offered(self.album(key)), set(), key)
+            self.assertEqual(offered(self.album(key)), [], key)
 
 
 def field_values(control: Node) -> list[str]:
@@ -648,7 +650,7 @@ class PathChanges(_Rendered):
 # --- a decision already folded in ----------------------------------------------
 
 ACTIONS = {"accept", "repoint", "skip"}
-GAME = {"video game music", "not game music"}
+GAME = {"video game music", "soundtrack", "neither"}
 
 
 def checked_radios(section: Node, values: set[str]) -> list[str]:
@@ -661,7 +663,7 @@ def folded_doc() -> dict:
     """The fixture after identify folded a `decisions.json` in.
 
     Disintegration accepted against its second candidate, with the owner's
-    title edit on top of the memory's; Ocarina accepted as not game music;
+    title edit on top of the memory's; Ocarina accepted as neither;
     Wish repointed; the auto album accepted with a date edit.
     """
     doc = plan_doc()
@@ -670,9 +672,9 @@ def folded_doc() -> dict:
     dis["inputs"] = dict(dis["inputs"], release_id=DIS_OTHER_ID, chosen=True,
                          edits={"1-1": {"date": ["1989-05-02"]}, "1-2": {"title": ["Pictures Of You"]}})
     dis["owner_edits"] = copy.deepcopy(dis["inputs"]["edits"])
-    ocarina.update(decision="accept", game="not game music",
+    ocarina.update(decision="accept", game="neither",
                    inputs={"release_id": OCARINA_ID, "chosen": False, "status": "review",
-                           "owner_input": {"composers": {KONDO_ID: "not game music"}}, "edits": {}})
+                           "owner_input": {}, "edits": {}})
     wish.update(decision="repoint", release_id=WISH_ID)
     wish["holds"].append({"kind": "repointed", "detail": WISH_ID})
     auto.update(decision="accept",
@@ -703,10 +705,11 @@ class FoldedDecision(unittest.TestCase):
         self.assertEqual(checked_radios(section, {DIS_ID, DIS_OTHER_ID}), [DIS_OTHER_ID])
 
     def test_an_accepted_game_album_opens_with_its_game_choice_selected(self) -> None:
-        # `not game music` is the second of the two, so a page checking the first fails.
+        # `neither` is the last of the three, so a page checking the first
+        # fails, and it is the one a check for a truthy game value drops.
         section = self.section(OCARINA)
         self.assertEqual(checked_radios(section, ACTIONS), ["accept"])
-        self.assertEqual(checked_radios(section, GAME), ["not game music"])
+        self.assertEqual(checked_radios(section, GAME), ["neither"])
 
     def test_a_repointed_album_opens_with_repoint_selected_and_its_release_in_the_box(self) -> None:
         section = self.section(WISH)
@@ -730,7 +733,7 @@ class FoldedDecision(unittest.TestCase):
                        "edits": by_source[AUTO]["owner_edits"], "game": None},
                 DISINTEGRATION: {"action": "accept", "release_id": DIS_OTHER_ID,
                                  "edits": by_source[DISINTEGRATION]["owner_edits"], "game": None},
-                OCARINA: {"action": "accept", "release_id": OCARINA_ID, "edits": {}, "game": "not game music"},
+                OCARINA: {"action": "accept", "release_id": OCARINA_ID, "edits": {}, "game": "neither"},
                 WISH: {"action": "repoint", "release": WISH_ID},
             },
         })
@@ -751,10 +754,10 @@ class FoldedDecision(unittest.TestCase):
 class NoComposerGameChoice(unittest.TestCase):
     """A game choice on an album with no composer, after a fold, stays the owner's to change.
 
-    With no single album artist, `video game music` becomes a genre edit in
-    `inputs.edits`. If the page carried that edit forward, flipping the radio
-    to `not game music` would still write the genre, and the owner could
-    never take it back. So the page carries `owner_edits`, which never holds it.
+    `inputs.edits` can hold a genre the batch laid for `video game music`. If
+    the page carried that edit forward, flipping the radio to `soundtrack` or
+    `neither` would still write the genre, and the owner could never take it
+    back. So the page carries `owner_edits`, which never holds it.
     """
 
     @classmethod

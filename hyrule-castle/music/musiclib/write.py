@@ -262,19 +262,20 @@ def _prior_tags(plan: Plan, root: Path) -> dict[str, dict]:
 
 
 def rollback_target(current: files.Track, prior: dict) -> dict:
-    """`prior`, with every picture key swapped for `current`'s own value.
+    """`prior`, with every key that cannot be rebuilt swapped for `current`'s own value.
 
-    A picture cannot be restored from `prior`: `files.snapshot` keeps only a
-    digest of one (`files.py`, `snapshot`), never its bytes, so writing `prior`
-    as it stands would either crash rebuilding a frame from that digest or,
-    on FLAC/Ogg where the digest is comparable text, just fail to verify. A
-    rollback does not owe the picture back regardless: only every other tag
-    and every path.
+    A picture, an MP3 `PRIV`, `GEOB` or URL frame, or an MP4 or ASF value kept
+    as a digest (`tagwrite.is_unrestorable`), cannot be restored from `prior`:
+    `files.snapshot` keeps only a digest of it (`files.py`, `snapshot`), never its bytes, so writing `prior` as it stands would
+    either crash rebuilding a frame from that digest or, on FLAC/Ogg where
+    the digest is comparable text, just fail to verify. An MP3 `USER` frame is
+    kept as text but the writer does not rebuild it either. A rollback does
+    not owe those back regardless: only every other tag and every path.
     """
     result = {key: value for key, value in prior.items()
-             if not tagwrite.is_picture_key(current.family, key)}
+             if not tagwrite.is_unrestorable(current.family, key, value)}
     for key, value in current.tags.items():
-        if tagwrite.is_picture_key(current.family, key):
+        if tagwrite.is_unrestorable(current.family, key, value):
             result[key] = value
     return result
 

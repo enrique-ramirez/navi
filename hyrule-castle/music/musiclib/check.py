@@ -42,6 +42,7 @@ _REQUIRED = [
 
 _DISC_DIR_RE = re.compile(r"^CD\d+$")
 _ALBUM_FOLDER_RE = re.compile(r"^\((?P<year>[^)]*)\)(?P<prefixes>(?: \[[^\]]+\])*) (?P<title>.+)$")
+_EDITION_RE = re.compile(r" \[[^\[\]]+\]$")
 _PREFIX_RE = re.compile(r"\[([^\]]+)\]")
 _ALLOWED_PREFIXES = {"EP", "Single", "Mixtape", "Live"}
 
@@ -504,7 +505,12 @@ def _album_folder_violations(state: AlbumState) -> list[tuple[str, str]]:
         if album_title is not None:
             head = f"({year}){''.join(f' [{p}]' for p in prefixes)} "
             expected = names.fit(names.sanitize(f"{head}{album_title}"), start=len(head))
-            bad = bad or expected != state.folder
+            # One trailing ` [edition]` is what a job adds to editions that
+            # would share a folder; the tags do not say which field it is.
+            edition = _EDITION_RE.search(state.folder)
+            with_edition = edition and names.fit(
+                names.sanitize(f"{head}{album_title}"), suffix=edition.group(0), start=len(head))
+            bad = bad or state.folder not in (expected, with_edition)
         if bad:
             out.append(("album folder", f"{state.folder!r}"))
         if len(year) == 4 and year.isdigit():

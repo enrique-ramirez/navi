@@ -116,8 +116,12 @@ def album_folder(
     title: str,
     primary_type: str | None = None,
     secondary_types: tuple[str, ...] = (),
+    edition: str | None = None,
 ) -> str:
-    """The album folder: `(YYYY) Title` or `(YYYY) [Prefix] Title`."""
+    """The album folder: `(YYYY) Title` or `(YYYY) [Prefix] Title`, then ` [edition]` where given.
+
+    A title too long for the folder is cut before the edition, which stays.
+    """
     year = date[:4]
     prefix = None
     for candidate in _PREFIX_ORDER:
@@ -127,7 +131,8 @@ def album_folder(
     year_part = f"({year}) "
     prefix_part = f"[{prefix}] " if prefix else ""
     name = sanitize(f"{year_part}{prefix_part}{title}")
-    return fit(name, start=len(year_part) + len(prefix_part))
+    label = sanitize(edition) if edition else ""
+    return fit(name, suffix=f" [{label}]" if label else "", start=len(year_part) + len(prefix_part))
 
 
 def disc_folder(position: int, medium_count: int) -> str | None:

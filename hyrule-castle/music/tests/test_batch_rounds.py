@@ -40,7 +40,7 @@ NEW_ALBUM = "Renamed Record"
 VARIOUS = "V/Various Artists/Boss Battles [rip]"
 VARIOUS_ARTISTS = "89ad4ac3-39f7-470e-963a-56509c546377"
 VGM = "video game music"
-NOT_GAME = "not game music"
+NEITHER = "neither"
 
 #: A key no job here ever had: not in any `plan.json`, not in any `applied.jsonl`.
 STRANGER = "Z/Nobody/Nothing [rip]"
@@ -67,7 +67,7 @@ def identify(lib, reopen: tuple[str, ...] = ()) -> tuple[int, str, str]:
 
 
 def add_various_soundtrack(lib) -> str:
-    """A Various Artists Soundtrack-type album at VARIOUS: no composer, so its game choice is a genre edit."""
+    """A Various Artists Soundtrack-type album at VARIOUS, held for the owner's game choice."""
     found, group = release(6, "Various Artists", "Boss Battles", ["One", "Two"])
     group["secondary-types"] = ["Soundtrack"]
     found["release-group"]["secondary-types"] = ["Soundtrack"]
@@ -299,12 +299,12 @@ class DecisionsNobodyCanPlace(unittest.TestCase):
 
 
 class GameChoiceChangedAfterAFold(unittest.TestCase):
-    """A Various Artists soundtrack accepted as `video game music`, folded, then re-exported as `not game music`.
+    """A Various Artists soundtrack accepted as `video game music`, folded, then re-exported as `neither`.
 
     The page re-exports an accept with the entry's `owner_edits` as its
-    edits. A no-composer album's game choice is a genre edit the batch makes
-    itself, so it must not be among them, or flipping the radio changes
-    nothing that identify writes.
+    edits. The genre the game choice gives is the batch's own doing, so it
+    must not be among them, or flipping the radio changes nothing that
+    identify writes.
     """
 
     @classmethod
@@ -318,19 +318,20 @@ class GameChoiceChangedAfterAFold(unittest.TestCase):
         cls.first = lib.entries()[VARIOUS]
         # What the page exports from this entry.
         carried = cls.first.get("owner_edits", cls.first["inputs"]["edits"])
-        lib.decide({VARIOUS: accept(release_id, carried, NOT_GAME)})
+        lib.decide({VARIOUS: accept(release_id, carried, NEITHER)})
         cls.flipped = lib.entries()[VARIOUS]
 
-    def test_the_owner_edits_leave_out_the_genre_edit_the_game_choice_made(self):
-        # Precondition, and the reason the key exists: the plan did carry it.
+    def test_the_owner_edits_leave_out_the_genre_the_game_choice_gave(self):
+        # Precondition: the first fold did plan the genre.
         for position in ("1-1", "1-2"):
-            self.assertEqual(self.first["inputs"]["edits"][position]["genre"][0], VGM, position)
+            self.assertEqual(self.first["fields"][position]["genre"][0], VGM, position)
         self.assertIn("owner_edits", self.first)
         self.assertEqual(self.first["owner_edits"], {})
 
-    def test_re_exporting_with_not_game_music_plans_the_album_without_video_game_music(self):
+    def test_re_exporting_with_neither_plans_the_album_with_only_musicbrainzs_genres(self):
+        # `rock` is the release group's one genre (`tests.test_batch_identify`).
         for position in ("1-1", "1-2"):
-            self.assertNotIn(VGM, self.flipped["fields"][position]["genre"], position)
+            self.assertEqual(self.flipped["fields"][position]["genre"], ["rock"], position)
 
 
 class CanaryWithAnAcceptLeftForLater(unittest.TestCase):

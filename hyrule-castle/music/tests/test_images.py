@@ -28,10 +28,11 @@ from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggvorbis import OggVorbis
 from PIL import Image
 
-from musiclib import caa, images, mb
+from musiclib import caa, check, images, mb
 from musiclib.cache import Cache
 from tests import builders
-from tests.test_check import _names, _Planning, _plan_album, _release, _release_group, _rip, _Services
+from tests.test_check import (_names, _Planning, _plan_album, _release, _release_group, _rip, _Services,
+                              _write_album)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RELEASE = json.loads((FIXTURES / "caa" / "release.json").read_text())
@@ -464,11 +465,13 @@ class Archives:
         self.musicbrainz = _Services(release, _release_group(), front=False)
         self.listings = {f"/release/{self.release_id}": list(release_images),
                          f"/release-group/{self.group_id}": list(group_images)}
+        self.asked: list[str] = []
 
     def __call__(self, url: str, headers: dict[str, str]) -> tuple[int, bytes]:
         parts = urlsplit(url)
         if parts.netloc != "coverartarchive.org":
             return self.musicbrainz(url, headers)
+        self.asked.append(url)
         listing = self.listings.get(parts.path.rstrip("/"))
         if listing is not None:
             if not listing:
@@ -495,7 +498,7 @@ class _FrontPlanning(_Planning):
             (album / name).parent.mkdir(parents=True, exist_ok=True)
             (album / name).write_bytes(data)
         release = _release(self.TITLES)
-        services = Archives(release, **archive)
+        services = self.archives = Archives(release, **archive)
         cache = Cache(Path(tempfile.mkdtemp(prefix="cache-", dir=self.tmp)))
         client = mb.MusicBrainz(cache, transport=services, clock=lambda: 0.0, sleep=lambda s: None)
         art = caa.CoverArt(cache, transport=services)
@@ -574,6 +577,24 @@ class TheFrontFallsBack(_FrontPlanning):
                 self.assertIn("cover.jpg", plan.images, plan.problems)
                 self.assertEqual(size(plan.images["cover.jpg"]), expected)
 
+    def test_a_folder_image_passed_over_for_an_archive_front_stays_where_it_is(self) -> None:
+        # Only a folder image that became `cover.jpg` is removed; one the
+        # archive's front beat is left alone, so a plan that deletes every
+        # cover-named image it looked at loses the owner's file.
+        mine = builders.jpeg(501, 501)
+        cases = {
+            "the release's front": (dict(release_images=[RELEASE_FRONT]), RELEASE_FRONT[2]),
+            "the release group's front": (dict(release_images=[RELEASE_BACK], group_images=[GROUP_FRONT]),
+                                          GROUP_FRONT[2]),
+        }
+        for case, (archive, front) in cases.items():
+            with self.subTest(case):
+                plan = self.plan_rip({"folder.jpg": mine}, **archive)
+                self.assertEqual(plan.images.get("cover.jpg"), front)
+                self.assertNotIn("folder.jpg", _names(plan.deletions))
+                self.assertIn("folder.jpg", _names(plan.kept))
+                self.assertEqual(list(plan.problems), [])
+
     def test_a_name_or_extension_off_the_list_or_a_file_in_a_subfolder_is_not_a_cover(self) -> None:
         for name in ("cover.gif", "cover.bmp", "covers.jpg", "front cover.jpg", "back.jpg", "scans/cover.jpg"):
             with self.subTest(name):
@@ -603,6 +624,20 @@ class ADownloadThatIsNotAnImage(_FrontPlanning):
             with self.subTest(case):
                 plan = self.plan_rip({"cover.jpg": builders.jpeg(501, 501)}, **archive)
                 self.assertIn(f"cover art archive: {url} is not an image", plan.problems)
+
+    def test_a_broken_release_front_holds_the_album_and_neither_the_release_group_nor_the_folder_stands_in(
+            self) -> None:
+        # The release has a front, so the release group is never asked; a
+        # broken download is the archive failing, not the front being missing.
+        # Falling back would plan a good-looking cover from another release
+        # and hide the problem that holds the album.
+        plan = self.plan_rip({"folder.jpg": builders.jpeg(501, 501)},
+                             release_images=[("Front", RELEASE_FRONT[1], NOT_AN_IMAGE)],
+                             group_images=[GROUP_FRONT])
+        self.assertIn(f"cover art archive: {RELEASE_FRONT[1]} is not an image", plan.problems)
+        self.assertNotIn("cover.jpg", plan.images)
+        self.assertEqual([url for url in self.archives.asked if "/release-group/" in url], [])
+        self.assertNotIn("folder.jpg", _names(plan.deletions))
 
     def test_a_truncated_jpeg_or_one_pillow_raises_valueerror_or_syntaxerror_on_is_the_same_problem(self) -> None:
         # A JPEG's first three bytes prove nothing about the rest, so one cut
@@ -652,6 +687,114 @@ class ABrokenImageInTheFolder(_FrontPlanning):
                     self.assertIsNotNone(cover, plan.problems)
                     self.assertEqual(size(cover), (64, 32))
                     self.assertEqual(list(plan.problems), [])
+
+
+#: Two PDFs that differ, so a name holding the other one shows. Pillow cannot
+#: open either, which is how one was held as "not an image" before.
+PDF_1 = b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n% the first booklet\n%%EOF\n"
+PDF_2 = b"%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n% the second booklet\n%%EOF\n"
+RELEASE_PDF = f"https://coverartarchive.org/release/{builders.RELEASE_ID}/3.pdf"
+
+
+def caa_image(image_id: int, types: list[str], url: str, *, front: bool = False) -> dict:
+    """One entry of a Cover Art Archive listing, in the shape `release.json` has."""
+    return {"approved": True, "back": "Back" in types, "comment": "", "edit": 90000000 + image_id,
+            "front": front, "id": image_id, "image": url, "thumbnails": {}, "types": types}
+
+
+class APdfFromTheArchive(_FrontPlanning):
+    """Criterion 62: a `%PDF` download is saved as it is and is never the cover."""
+
+    def test_a_single_pdf_is_saved_as_booklet_pdf_byte_for_byte_and_is_not_embedded(self) -> None:
+        plan = self.plan_rip({}, release_images=[RELEASE_FRONT, ("Booklet", RELEASE_PDF, PDF_1)])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(plan.images, {"cover.jpg": RELEASE_FRONT[2], "booklet.pdf": PDF_1})
+        # The front is 301 px, under the 1200 px limit, so what every track
+        # carries is the front itself.
+        self.assertEqual(plan.embedded, RELEASE_FRONT[2])
+
+    def test_a_written_booklet_pdf_is_on_disk_as_downloaded_and_check_finds_nothing(self) -> None:
+        # `docs/music-library.md` allows a PDF in the album folder. The plan's
+        # own check never sees image files, so only the tree once written
+        # shows whether `check` would complain about where the PDF landed.
+        plan = self.plan_rip({}, release_images=[RELEASE_FRONT, ("Booklet", RELEASE_PDF, PDF_1)])
+        self.assertEqual(list(plan.problems), [])
+        _write_album(plan, self.tmp / "extras")
+        root = Path(plan.root)
+        self.assertEqual((root / plan.destination / "booklet.pdf").read_bytes(), PDF_1)
+        self.assertEqual(check.check(root), [])
+
+    def test_several_pdfs_are_numbered_in_the_archives_order_and_the_jpeg_images_keep_their_names(self) -> None:
+        # The first PDF has the higher id and the later type name, so
+        # numbering by id or by type swaps the pair. Neither PDF is a JPEG of
+        # its type: the one typed Back must not make the JPEG back
+        # `back-1.jpg`, and the Booklet between the two JPEG booklets must not
+        # make the second `booklet-03.jpg`.
+        base = f"https://coverartarchive.org/release/{builders.RELEASE_ID}"
+        bodies = {f"{base}/1.jpg": builders.jpeg(301, 301), f"{base}/2.jpg": builders.jpeg(302, 302),
+                  f"{base}/4.jpg": builders.jpeg(304, 304), f"{base}/5.jpg": builders.jpeg(305, 305),
+                  f"{base}/20.pdf": PDF_1, f"{base}/10.pdf": PDF_2}
+        listing = [
+            caa_image(1, ["Front"], f"{base}/1.jpg", front=True),
+            caa_image(2, ["Booklet"], f"{base}/2.jpg"),
+            caa_image(20, ["Booklet"], f"{base}/20.pdf"),
+            caa_image(4, ["Back"], f"{base}/4.jpg"),
+            caa_image(5, ["Booklet"], f"{base}/5.jpg"),
+            caa_image(10, ["Back"], f"{base}/10.pdf"),
+        ]
+        plan = images.plan_images(listing, bodies.__getitem__)
+        self.assertEqual(plan.problems, [])
+        self.assertEqual(plan.files, {
+            "cover.jpg": bodies[f"{base}/1.jpg"],
+            "booklet-01.jpg": bodies[f"{base}/2.jpg"],
+            "back.jpg": bodies[f"{base}/4.jpg"],
+            "booklet-02.jpg": bodies[f"{base}/5.jpg"],
+            "booklet-1.pdf": PDF_1,
+            "booklet-2.pdf": PDF_2,
+        })
+
+    def test_a_pdf_is_named_booklet_pdf_whatever_its_type_or_address(self) -> None:
+        # It is the bytes that make a PDF. The last case's address ends in
+        # `.jpg`, so telling a PDF by its URL misses it.
+        front = caa_image(1, ["Front"], f"https://coverartarchive.org/release/{builders.RELEASE_ID}/1.jpg",
+                          front=True)
+        for types, url in ((["Back"], RELEASE_PDF), (["Medium"], RELEASE_PDF), (["Spine", "Tray"], RELEASE_PDF),
+                           ([], RELEASE_PDF), (["Booklet"], RELEASE_PDF.replace(".pdf", ".jpg"))):
+            with self.subTest(types=types, url=url):
+                bodies = {front["image"]: RELEASE_FRONT[2], url: PDF_1}
+                plan = images.plan_images([front, caa_image(3, types, url)], bodies.__getitem__)
+                self.assertEqual(plan.problems, [])
+                self.assertEqual(plan.files, {"cover.jpg": RELEASE_FRONT[2], "booklet.pdf": PDF_1})
+
+    def test_a_pdf_front_is_no_front_so_the_release_groups_front_is_the_cover_and_the_pdf_is_still_saved(
+            self) -> None:
+        plan = self.plan_rip({"folder.jpg": builders.jpeg(501, 501)},
+                             release_images=[("Front", RELEASE_PDF, PDF_1), RELEASE_BACK],
+                             group_images=[GROUP_FRONT])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(plan.images, {"cover.jpg": GROUP_FRONT[2], "back.jpg": RELEASE_BACK[2],
+                                       "booklet.pdf": PDF_1})
+        self.assertEqual(plan.embedded, GROUP_FRONT[2])
+        self.assertNotIn("folder.jpg", _names(plan.deletions))
+
+    def test_a_pdf_is_no_front_whether_it_is_marked_front_or_only_typed_front(self) -> None:
+        # The fake archive above marks every Front-typed image `front: true`,
+        # so the two ways the archive names a front are taken apart here.
+        group = [caa_image(7, ["Front"], GROUP_FRONT[1], front=True)]
+        bodies = {RELEASE_PDF: PDF_1, GROUP_FRONT[1]: GROUP_FRONT[2]}
+        for types, marked in ((["Booklet"], True), (["Front"], False), (["Front", "Booklet"], True)):
+            with self.subTest(types=types, marked=marked):
+                plan = images.plan_images([caa_image(3, types, RELEASE_PDF, front=marked)], bodies.__getitem__,
+                                          group_images=lambda: group)
+                self.assertEqual(plan.problems, [])
+                self.assertEqual(plan.files, {"cover.jpg": GROUP_FRONT[2], "booklet.pdf": PDF_1})
+
+    def test_with_a_pdf_front_and_no_release_group_front_a_cover_image_in_the_folder_is_the_cover(self) -> None:
+        mine = builders.jpeg(501, 501)
+        plan = self.plan_rip({"folder.jpg": mine}, release_images=[("Front", RELEASE_PDF, PDF_1)])
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(plan.images, {"cover.jpg": mine, "booklet.pdf": PDF_1})
+        self.assertIn("folder.jpg", _names(plan.deletions))
 
 
 if __name__ == "__main__":

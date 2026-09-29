@@ -114,6 +114,22 @@ class Agree(unittest.TestCase):
     def test_different_songs_do_not_agree(self) -> None:
         self.assertAgree("Frontier City", "The Bucket (CSS remix)", False)
 
+    def test_one_title_inside_the_other_agrees_only_when_the_shorter_has_3_characters_or_more(self) -> None:
+        # Criterion 54. A letter or two is inside almost any name, and the
+        # ratio is far from 0.8 in every pair here, so containment alone
+        # decides. `Air` against `Airbag` is the 3-character edge, and `Up`
+        # against `Upside Down` the 2-character one.
+        self.assertAgree("I", "Nightmare", False)
+        self.assertAgree("M", "Eminem", False)
+        self.assertAgree("Up", "Upside Down", False)
+        self.assertAgree("Air", "Airbag", True)
+
+    def test_a_short_title_equal_once_normalised_still_agrees(self) -> None:
+        # Equal is not containment, so the 3-character floor never applies
+        # to it: `I` is `I`.
+        self.assertAgree("Air", "Air (Remastered)", True)
+        self.assertAgree("I", "I", True)
+
 
 class Placeholder(unittest.TestCase):
     def test_each_placeholder_on_the_list_is_one(self) -> None:
