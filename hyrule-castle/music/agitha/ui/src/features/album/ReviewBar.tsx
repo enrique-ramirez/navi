@@ -1,5 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LoaderCircle, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import {
+	LoaderCircle,
+	RefreshCw,
+	ScanSearch,
+	Trash2,
+	Undo2,
+} from "lucide-react";
 import { useState } from "react";
 import { isRunning } from "@/domain/album/albumQuery";
 import { albumTags } from "@/domain/album/albumTags";
@@ -29,8 +35,17 @@ export function ReviewBar({
 	const { t } = useTranslate();
 	const navigate = useNavigate();
 	const [asking, setAsking] = useState(false);
-	const { refusal, changed, awaiting, busy, submit, send, approve, move } =
-		useDecision(view, pending);
+	const {
+		refusal,
+		changed,
+		awaiting,
+		busy,
+		submit,
+		send,
+		approve,
+		move,
+		refresh,
+	} = useDecision(view, pending);
 
 	const running = isRunning(view.state);
 	const tags = albumTags(view);
@@ -145,6 +160,21 @@ export function ReviewBar({
 									{t("review.repreview")}
 								</button>
 							)}
+						{!busy && view.state === "ready" && !pending.dirty && (
+							<button
+								type="button"
+								className={styles.ghost}
+								title={t("review.reidentifyWhy")}
+								onClick={() =>
+									void submit("reidentify", {}).then(async (ok) => {
+										if (ok) await refresh();
+									})
+								}
+							>
+								<ScanSearch size={14} aria-hidden="true" />
+								{t("review.reidentify")}
+							</button>
+						)}
 						{primary !== null && (
 							<button
 								type="button"

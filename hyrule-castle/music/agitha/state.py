@@ -147,7 +147,7 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
     if busy:
         actions: list[str] = []
     elif state == "ready":
-        actions = (["approve"] if approvable(config, drop, n, entry)["ok"] else []) + ["discard"]
+        actions = (["approve"] if approvable(config, drop, n, entry)["ok"] else []) + ["reidentify", "discard"]
     elif state == "written, not moved" and duplicates.stranded(folder):
         actions = ["move"]
     else:

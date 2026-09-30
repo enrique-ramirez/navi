@@ -357,6 +357,29 @@ class Failing(QueueCase):
         self.assertEqual([call["argv"] for call in self.calls()],
                          [self.identify(drop, "01"), self.identify(drop, "02"), self.identify(drop, "01")])
 
+    def test_identify_again_runs_a_ready_album_again_and_refuses_a_failed_one(self) -> None:
+        (self.control / "mode-1").write_text("fail")
+        drop = self.make_drop([("Failing Album", CLEAN), ("Ready Album", OTHER)])
+        a1, a2 = (drop, "01"), (drop, "02")
+        self.done(drop)
+        self.go(1)
+        self.go(2)
+        albums = self.watch(lambda albums: states(albums, a1, a2) == ["identify failed", "ready"]
+                            and not albums[a2]["busy"])
+        self.assertIn("reidentify", albums[a2]["actions"])
+        self.assertNotIn("reidentify", albums[a1]["actions"])
+
+        status, body = self.request("POST", f"/api/drops/{drop}/albums/01/reidentify")
+        self.assertEqual(status, 409, body)
+
+        status, body = self.request("POST", f"/api/drops/{drop}/albums/02/reidentify")
+        self.assertLess(status, 300, body)
+        self.wait_for_call(3)
+        self.go(3)
+        self.watch(lambda albums: states(albums, a2) == ["ready"] and not albums[a2]["busy"])
+        self.assertEqual([call["argv"] for call in self.calls()],
+                         [self.identify(drop, "01"), self.identify(drop, "02"), self.identify(drop, "02")])
+
     def test_an_identify_that_exits_0_with_no_album_in_its_plan_counts_as_failed(self) -> None:
         (self.control / "mode-1").write_text("empty")
         (self.control / "open").touch()

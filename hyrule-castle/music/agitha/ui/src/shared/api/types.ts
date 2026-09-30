@@ -205,7 +205,12 @@ export type AlbumState =
 	| "discarded";
 
 /** What the list offers for an album or drop; the server derives it from state and `busy`. */
-export type AlbumAction = "discard" | "retry" | "move" | "approve";
+export type AlbumAction =
+	| "discard"
+	| "retry"
+	| "reidentify"
+	| "move"
+	| "approve";
 
 /** `file` is a loose non-audio file at the top level of a drop; the page lists it as ignored and does not send it, the server accepts it. */
 export type ItemKind = "folder" | "archive" | "file";

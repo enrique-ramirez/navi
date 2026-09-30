@@ -270,6 +270,9 @@ export const en = {
 	"uploaded.tags": "Tags now",
 	"uploaded.tagsOf": "Tags of {file}",
 	"review.repreview": "Re-preview",
+	"review.reidentify": "Identify again",
+	"review.reidentifyWhy":
+		"Run identify again from scratch, as if the album had just been dropped. A release you chose is kept.",
 	"review.changed":
 		"Identify planned something different from what was on screen, so nothing was approved. Look it over and approve again.",
 	"duplicate.lede":

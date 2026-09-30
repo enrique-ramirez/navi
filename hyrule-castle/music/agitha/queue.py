@@ -216,13 +216,23 @@ def done(request: Handler, match: re.Match[str], config: Config) -> None:
 
 
 def retry(request: Handler, match: re.Match[str], config: Config) -> None:
+    _identify_again(request, match, config, RETRYABLE, "retried")
+
+
+def reidentify(request: Handler, match: re.Match[str], config: Config) -> None:
+    """Identify a ready album again under its own decision, or none, so a changed engine or MusicBrainz shows."""
+    _identify_again(request, match, config, ("ready",), "identified again")
+
+
+def _identify_again(request: Handler, match: re.Match[str], config: Config,
+                    allowed: tuple[str, ...], verb: str) -> None:
     drop, n = match.group(1), match.group(2)
     queue = request.server.queue
     found = state.album(config, drop, n, queue) if _known(config, drop) is not None else None
     if found is None:
         request.fail(404, "No such album.")
-    elif found["state"] not in RETRYABLE or found["busy"]:
-        request.fail(409, f"An album that is {found['state']} cannot be retried.")
+    elif found["state"] not in allowed or found["busy"]:
+        request.fail(409, f"An album that is {found['state']} cannot be {verb}.")
     else:
         drops.write_album(config.inbox / drop / n, name=found["name"], state="queued", stderr="", error=None)
         queue.enqueue(drop, n, "identify")

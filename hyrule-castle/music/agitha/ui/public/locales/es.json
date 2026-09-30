@@ -263,6 +263,8 @@
 	"uploaded.tags": "Etiquetas actuales",
 	"uploaded.tagsOf": "Etiquetas de {file}",
 	"review.repreview": "Volver a previsualizar",
+	"review.reidentify": "Identificar de nuevo",
+	"review.reidentifyWhy": "Vuelve a identificar el álbum desde cero, como si se acabara de subir. Se conserva la edición que elegiste.",
 	"review.changed": "La identificación planeó algo distinto de lo que se mostraba, así que no se aprobó nada. Revísalo y vuelve a aprobar.",
 	"duplicate.lede": "Este álbum ya está en tu biblioteca. Conserva una copia; la otra se borra.",
 	"duplicate.release": "Edición",
