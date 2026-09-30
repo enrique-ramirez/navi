@@ -15,11 +15,12 @@ Approved:
 
 ## Acceptance criteria
 
-<!-- Observable and testable. Each one becomes a test in plan.md. RFC 2119 keywords carry the obligations. Cover the empty case, the error case and the second time, not only the intended path. -->
+<!-- Observable and testable. Each one becomes a test in plan.md. RFC 2119 keywords carry the obligations. Cover the empty case, the error case and the second time, not only the intended path. For a screen, name what it follows (the neighbouring screen or the design file, as `file:line`), and where a criterion changes with the viewport or the locale, say which it holds under. -->
 
 1. WHEN <trigger>, THE SYSTEM MUST <observable behaviour>.
 2. WHERE <precondition holds>, THE SYSTEM MUST <observable behaviour>.
 3. IF <error condition>, THEN THE SYSTEM MUST <observable behaviour>.
+4. WHEN <trigger> at <viewport> in <locale>, THE SCREEN MUST <what is visible, and where focus lands>.
 
 ## Not doing
 

@@ -6,60 +6,42 @@ argument-hint: [<brief>] | resume <n> | approve <n> | done <n>
 
 # Plan
 
-`spec-planner` does the work. This decides which of four jobs it is doing, and handles the two that are bookkeeping rather than judgement.
-
-## Work out the job
+`spec-planner` does the judgement. This picks the job and does the bookkeeping.
 
 | argument | job |
 |---|---|
-| a brief, or nothing | a new bundle. With nothing, ask for one sentence about the problem and stop there |
-| `resume <n>` or a slug | pick up an open bundle and carry on the interrogation |
+| a brief, or nothing | a new bundle. With nothing, ask for one sentence about the problem and stop |
+| `resume <n>` or a slug | carry on an open bundle's interrogation |
 | `approve <n>` | record the owner's approval |
-| `done <n>` | cleanup and move to `_done/` |
+| `done <n>` | close it out |
 
-Say the job and the bundle back before you start, so a wrong reading costs one line.
+Say the job and the bundle back before starting.
 
-## A new bundle
+## New
 
-Check `_todo/INDEX.md` first. A brief that matches an open row is a `resume`, not a new number, and two bundles for one piece of work is the commonest way this goes wrong.
-
-Launch `spec-planner` with the brief verbatim, plus any constraint the caller mentioned in passing. Wait for it.
-
-Relay its assumptions and its questions. Do not answer the questions on the owner's behalf, and do not soften the ones that sound like product decisions: those are the ones worth their turn.
-
-Feed the answers back to the same agent. Two rounds is normal. Where a third round is still moving the acceptance criteria, say that the idea is not settled and offer to split it.
+Check `_todo/INDEX.md` first: a brief matching an open row is a `resume`. Launch `spec-planner` with the brief verbatim and any constraint the caller mentioned. Relay its assumptions and questions without answering them for the owner or softening the ones that are product decisions. Feed the answers back to the same agent. Where a third round still moves the acceptance criteria, say the idea is unsettled and offer to split it.
 
 ## Resume
 
-Read the bundle before launching anything, and lead with where it stands: which open questions survive, and which acceptance criteria have no test in `plan.md` yet. Then launch `spec-planner` pointed at it.
-
-A bundle whose spec has not moved in weeks is usually dead. Ask whether to close it before spending a round on it.
+Read the bundle and lead with where it stands: open questions left, criteria without a test in `plan.md`. Then launch `spec-planner` on it. A bundle untouched for weeks is usually dead; ask before spending a round.
 
 ## Approve
 
-Approval is the owner's, and yours is the checking.
+Refuse, and say why, when:
 
-Refuse and say why when any of these holds:
-
-- Open questions is not empty, or a `[?]` survives anywhere in `spec.md`
-- an acceptance criterion has no row in the plan's verification table
+- Open questions is not empty, or a `[?]` survives in `spec.md`
+- a criterion has no row in the plan's verification table
 - Not doing is empty
-- no file scope, and no sentence saying why the change is tree-wide
+- there is no file scope and no sentence saying why the change is tree-wide
 
-Otherwise set `Status: approved` and write the Approved line as a fact: what was agreed, against which draft, and the date. Never the words they typed. "go ahead" records nothing, and it reads as nothing a year later.
+Otherwise set `Status: approved` and write the Approved line as a fact: what was agreed, against which draft, the date. Never the words the owner typed.
 
 ## Done
 
-The last task in `tasks.md` is the cleanup, and it is the one people skip.
+1. Walk the cleanup task: dead flags, unloaded fixtures, probes in `_tmp/`, commented-out code.
+2. Check each criterion against what shipped. Where one drifted, say which side is wrong rather than editing the spec to match.
+3. Run `/review` over the change if it has not run.
+4. Run `/review --docs` over every documentation file the change touched, and relay what it finds.
+5. `mv` the bundle to `_done/NNN-slug/` and drop its row from the index.
 
-Walk it before moving anything. Flags whose other branch is now dead, fixtures nothing loads, probes left in `_tmp/`, commented-out code. Check the acceptance criteria against what actually shipped, and where one drifted, say which side is wrong rather than editing the spec to match.
-
-Then run `/review` over the change if it has not been run, `git mv` nothing, and move the bundle with a plain `mv` to `_done/NNN-slug/`. Drop its row from `_todo/INDEX.md`.
-
-Nothing is archived into the repository. Where the work turned up a fact that outlives it, a way some outside system behaves that nobody would guess, propose one short present-tense line in the file the profile's documentation map names, and let the owner accept it.
-
-## Building from a bundle
-
-Whoever builds reads `spec.md` and `tasks.md`, takes the first unchecked task, does that one, and stops. Not the next one, and nothing outside the file scope.
-
-An unstated case met mid-task is a question, never a decision. Bring it back here and it becomes an acceptance criterion or a line under Not doing.
+Nothing is archived into the repository. A fact about an outside system the work turned up goes to the owner as one proposed present-tense line for the file the profile's map names.
