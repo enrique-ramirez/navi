@@ -732,5 +732,40 @@ class Cli(unittest.TestCase):
         self.assertEqual(code, 1, said)
 
 
+
+class KeptStrays(unittest.TestCase):
+    def test_each_stray_apply_moved_into_the_album_folder_is_back_at_its_old_path_under_covers(self):
+        # One stray kept under agitha's guess
+        # (`back.jpg`) and one under the owner's name, since the owner's
+        # answers reach the write by another road (the accept) than a guess does.
+        key = "A/Alpha/First [rip]"
+        guessed, named = "COVERS/first-back.jpg", "COVERS/IMG_0001.jpg"
+        lib = new_rips(self)
+        base = lib.rip(key, 1, "flac", ["One", "Two"])
+        (base / "COVERS").mkdir()
+        own = {guessed: builders.jpeg(700, 600), named: builders.jpeg(640, 480)}
+        for rel, data in own.items():
+            (base / rel).write_bytes(data)
+        lib.identify()
+        lib.decide({key: {**lib.accept(key), "strays": {named: "booklet-01.jpg"}}})
+        code, _out, err = lib.apply()
+        self.assertEqual(code, 0, err)
+        destination = lib.root / lib.log()[0]["destination"]
+        # Apply moved both, or a rollback that does nothing passes.
+        self.assertEqual((destination / "back.jpg").read_bytes(), own[guessed])
+        self.assertEqual((destination / "booklet-01.jpg").read_bytes(), own[named])
+        self.assertFalse((base / "COVERS").exists(), "apply left COVERS in the rip")
+
+        _code, out, err = lib.rollback()
+
+        said = out + err
+        for rel, data in own.items():
+            with self.subTest(stray=rel):
+                self.assertTrue((base / rel).is_file(), f"{rel} is not back: {said}")
+                self.assertEqual((base / rel).read_bytes(), data)
+        self.assertFalse((destination / "back.jpg").exists(), said)
+        self.assertFalse((destination / "booklet-01.jpg").exists(), said)
+
+
 if __name__ == "__main__":
     unittest.main()

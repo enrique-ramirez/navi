@@ -66,6 +66,7 @@ ROUTES: list[Route] = [
     Route("GET", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/cover/now"), review.cover_now),
     Route("GET", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/duplicate/cover"), review.duplicate_cover),
     Route("GET", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/audio/(.+)"), ranges.audio),
+    Route("GET", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/strays/(.+)"), ranges.stray),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/retry"), queue.retry),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/reidentify"), queue.reidentify),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/decision"), decisions.decide),

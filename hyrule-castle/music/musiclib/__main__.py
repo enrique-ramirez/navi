@@ -59,7 +59,7 @@ def _batch_identify(args: argparse.Namespace) -> int:
     memory = Path(args.memory) if args.memory else default_memory(job)
     rejudge = Path(args.rejudge) if args.rejudge else None
     return run(Path(args.root), job, memory, list(args.reopen or []), rejudge=rejudge, composer=not args.no_composer,
-               added=args.added)
+               added=args.added, drop_unreadable=args.drop_unreadable)
 
 
 def _batch_apply(args: argparse.Namespace) -> int:
@@ -97,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
                                  help="judge the albums a job tagged again from their original tags and covers under ORIGINAL")
     identify_parser.add_argument("--added", type=_minute, metavar="YYYY-MM-DDTHH:MM",
                                  help="write this local time as every planned file's ADDED (imports only)")
+    identify_parser.add_argument("--drop-unreadable", action="store_true",
+                                 help="plan each album from the files that can be read and hold it for every track or folder that cannot")
     identify_parser.add_argument("--no-composer", action="store_true",
                                  help="make no work relationship lookup and leave every file's composer tags as they are")
 

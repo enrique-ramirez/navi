@@ -1,0 +1,377 @@
+{
+ "albums": [
+  {
+   "candidates": [
+    {
+     "artist": "Missing Band",
+     "artist_agrees": false,
+     "checked": true,
+     "country": "GB",
+     "date": "2010-05-24",
+     "duration_diff": null,
+     "failing_tracks": null,
+     "format": "CD",
+     "matches_counts": false,
+     "release_id": "6f1a2b3c-0000-4000-8000-000100000005",
+     "status": "Official",
+     "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000005/front-250",
+     "title": "Missing Album",
+     "track_counts": [
+      3
+     ]
+    }
+   ],
+   "changes": [
+    "move: drop/album/Missing Album/01 one.mp3 -> M/Missing Band/(2010) Missing Album/01. One.mp3",
+    "tags: drop/album/Missing Album/01 one.mp3: does not match its planned target",
+    "cover: drop/album/Missing Album/01 one.mp3: embedded picture does not match the plan",
+    "move: drop/album/Missing Album/03 three.mp3 -> M/Missing Band/(2010) Missing Album/03. Three.mp3",
+    "tags: drop/album/Missing Album/03 three.mp3: does not match its planned target",
+    "cover: drop/album/Missing Album/03 three.mp3: embedded picture does not match the plan",
+    "delete: drop/album/Missing Album/cover.jpg"
+   ],
+   "decision": "accept",
+   "deletions": [
+    "drop/album/Missing Album/cover.jpg"
+   ],
+   "destination": "M/Missing Band/(2010) Missing Album",
+   "extras": [],
+   "fields": {
+    "1-1": {
+     "album": [
+      "Missing Album"
+     ],
+     "albumartist": [
+      "Missing Band"
+     ],
+     "albumartistsort": [
+      "Missing Band"
+     ],
+     "artist": [
+      "Missing Band"
+     ],
+     "artistsort": [
+      "Missing Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "One"
+     ]
+    },
+    "1-3": {
+     "album": [
+      "Missing Album"
+     ],
+     "albumartist": [
+      "Missing Band"
+     ],
+     "albumartistsort": [
+      "Missing Band"
+     ],
+     "artist": [
+      "Missing Band"
+     ],
+     "artistsort": [
+      "Missing Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Three"
+     ]
+    }
+   },
+   "files": [
+    {
+     "after": {
+      "TALB": [
+       "Missing Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "One"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Missing Band"
+      ],
+      "TPE2": [
+       "Missing Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TSO2": [
+       "Missing Band"
+      ],
+      "TSOP": [
+       "Missing Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000005"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000005"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000005"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000005"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100010001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100010002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Missing Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "one"
+      ],
+      "TPE1": [
+       "Missing Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000005"
+      ]
+     },
+     "destination": "M/Missing Band/(2010) Missing Album/01. One.mp3",
+     "position": "1-1",
+     "source": "drop/album/Missing Album/01 one.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Missing Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Three"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Missing Band"
+      ],
+      "TPE2": [
+       "Missing Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TSO2": [
+       "Missing Band"
+      ],
+      "TSOP": [
+       "Missing Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000005"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000005"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000005"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000005"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100030001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100030002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Missing Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "three"
+      ],
+      "TPE1": [
+       "Missing Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000005"
+      ]
+     },
+     "destination": "M/Missing Band/(2010) Missing Album/03. Three.mp3",
+     "position": "1-3",
+     "source": "drop/album/Missing Album/03 three.mp3"
+    }
+   ],
+   "game": null,
+   "game_choice": false,
+   "holds": [
+    {
+     "detail": "review",
+     "kind": "status"
+    },
+    {
+     "detail": "track 2, \"Two\": 02 two.mp3 could be it, but it cannot be read",
+     "kind": "missing"
+    }
+   ],
+   "images": {
+    "cover.jpg": {
+     "length": 25535,
+     "sha256": "8b791ddbb1e1889ea07a4e3b49046d9134e824a242422febcd74841770dd782e"
+    }
+   },
+   "inputs": {
+    "chosen": true,
+    "composer": true,
+    "edits": {},
+    "owner_input": {
+     "soundtracks": {}
+    },
+    "release_id": "6f1a2b3c-0000-4000-8000-000100000005",
+    "status": "review"
+   },
+   "kept": [],
+   "owner_edits": {},
+   "plan_digest": "8f6c17d5b156ffed96dbd1521bf8e4a2b87a23ef94c42c924ff996dadae3cc51",
+   "release_id": "6f1a2b3c-0000-4000-8000-000100000005",
+   "residue": [],
+   "source": "drop/album/Missing Album",
+   "state": "held",
+   "status": "review",
+   "strays": []
+  }
+ ],
+ "decisions_sha256": "90191fa45d28777e66c89307c92c48e6c009371411aac105dfe486c2d8b3dc87",
+ "job": "agitha-20260929-210000-01",
+ "root": "/srv/music/inbox/20260929-210000/01"
+}

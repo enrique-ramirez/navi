@@ -8,7 +8,10 @@ refuses the file, the album goes back to `ready` with identify's message and
 its earlier preview. The view derives whether Approve is on: it is for an
 accept the engine planned clean, and off naming why otherwise. The plan must
 also be the one made from the current `decisions.json`, so a refused decision
-leaves Approve off and the server refuses an approve.
+leaves Approve off and the server refuses an approve. An accept's `strays`,
+the owner's name or deletion for each file outside the album's rules, is
+refused with a sentence naming the path and the reason where a name breaks
+the library's naming rules or is taken, or the path is not one of the album's strays.
 
 Each case has one album staged the way agitha stages it and identified once
 by `tests/agitha_stub.py` (the real engine over a fake MusicBrainz), so the
@@ -30,11 +33,12 @@ import tempfile
 import threading
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from mutagen.id3 import ID3, TXXX
 
 from agitha.server import Config, make_server
+from musiclib import strays
 from musiclib.batch import decisions as engine_decisions
 from musiclib.batch.job import Job
 from tests import builders
@@ -110,6 +114,9 @@ def build_tracks(folder: Path) -> None:
 class AlbumCase(unittest.TestCase):
     """One identified album `01` of drop `DROP`, served over HTTP."""
 
+    #: Files beside the tracks and `cover.jpg`, by path under the album folder, laid before the first identify.
+    files: dict[str, bytes] = {}
+
     def setUp(self) -> None:
         # Resolved, so the paths the server passes on compare equal to these.
         self.root = Path(tempfile.mkdtemp()).resolve()
@@ -120,7 +127,11 @@ class AlbumCase(unittest.TestCase):
         (folders["static"] / "index.html").write_text("<!doctype html><title>agitha</title>\n")
         self.inbox, self.jobs, self.control = folders["inbox"], folders["jobs"], folders["control"]
 
-        build_tracks(stage_album(self.inbox, "01", ALBUM, "ready"))
+        self.album_folder = stage_album(self.inbox, "01", ALBUM, "ready")
+        build_tracks(self.album_folder)
+        for rel, data in self.files.items():
+            (self.album_folder / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.album_folder / rel).write_bytes(data)
         self.job = self.jobs / JOB
         first = subprocess.run([PYTHON, str(STUB), "batch", "identify", str(self.inbox / DROP / "01"),
                                 "--job", str(self.job)], capture_output=True, text=True)
@@ -168,7 +179,7 @@ class AlbumCase(unittest.TestCase):
     def identify_argv(self, n: str = "01") -> list[str]:
         # `stage_album` writes the drop as started at 2026-09-29T21:00:00, local.
         return ["batch", "identify", str(self.inbox / DROP / n), "--job", str(self.jobs / f"agitha-{DROP}-{n}"),
-                "--added", "2026-09-29T21:00"]
+                "--drop-unreadable", "--added", "2026-09-29T21:00"]
 
     def request(self, method: str, path: str, body: bytes | None = None,
                 headers: dict[str, str] | None = None) -> tuple[int, str, bytes]:
@@ -464,6 +475,128 @@ class Conflicts(AlbumCase):
                 self.assertEqual(content_type, "application/json; charset=utf-8")
                 self.assertIsInstance(json.loads(raw).get("error"), str)
         self.assertEqual(self.calls(), [])
+
+
+#: Strays under `COVERS/`: two images with no guess, a PDF and a text file agitha keeps under their own
+#: names. Beside them at the root, a `back.jpg` and a `notes.txt` that are not strays and that the plan keeps.
+STRAY_FILES = {
+    "COVERS/Bowie00001.jpg": builders.jpeg(600, 600),
+    "COVERS/Bowie00002.jpg": builders.jpeg(500, 500),
+    "COVERS/liner notes.pdf": b"%PDF-1.4 liner notes\n",
+    "COVERS/notes.txt": b"the rip's notes, in COVERS\n",
+    "back.jpg": builders.jpeg(300, 300),
+    "notes.txt": b"the rip's notes, at the root\n",
+}
+
+
+class StrayNames(AlbumCase):
+    """The owner's names for strays: a 400 naming the path and the reason for each offence, a 202 otherwise."""
+
+    files = STRAY_FILES
+
+    def refused(self, strays: dict) -> str:
+        """Posts an accept carrying `strays`; asserts it was refused before anything was written or run."""
+        try:
+            status, body = self.post_decision(accept(edits={}, game=None, strays=strays))
+            self.assertEqual(status, 400, body)
+            self.assertIsInstance(body.get("error"), str)
+            self.assertIsNone(self.written())
+            self.assertEqual(self.calls(), [])
+            return body["error"]
+        finally:
+            # A case let through must not leave the album busy, or its decision behind, for the next one.
+            self.finish()
+            (self.job / "decisions.json").unlink(missing_ok=True)
+            (self.control / "calls.jsonl").unlink(missing_ok=True)
+
+    def test_a_path_that_is_not_a_stray_of_the_album_is_400_naming_the_path(self) -> None:
+        cases = [
+            ("a track", "01 one.mp3"),
+            ("the root cover", "cover.jpg"),
+            # A library name at the root is kept where it is, and is not a stray.
+            ("a root file the plan keeps", "back.jpg"),
+            ("no such file", "COVERS/Bowie00009.jpg"),
+            # Reaches a real file that is not a stray.
+            ("a path that climbs", "COVERS/../back.jpg"),
+        ]
+        for name, path in cases:
+            with self.subTest(name):
+                self.assertIn(path, self.refused({path: None}))
+
+    def test_a_name_strays_name_offence_refuses_is_400_with_its_sentence(self) -> None:
+        cases = [
+            ("an image name outside the library's", "COVERS/Bowie00001.jpg", "Bowie.jpg"),
+            ("an image with another extension", "COVERS/Bowie00001.jpg", "front.png"),
+            ("an image named cover", "COVERS/Bowie00001.jpg", "cover.jpg"),
+            ("a PDF named cover", "COVERS/liner notes.pdf", "cover.pdf"),
+            ("a PDF with another extension", "COVERS/liner notes.pdf", "liner notes.txt"),
+            ("a name holding a /", "COVERS/liner notes.pdf", "Scans/liner notes.pdf"),
+            ("a name sanitize would change", "COVERS/liner notes.pdf", "liner: notes.pdf"),
+        ]
+        for name, path, wanted in cases:
+            with self.subTest(name):
+                offence = strays.name_offence(path, wanted)
+                # Without this the case would test nothing about the module's rule.
+                self.assertIsNotNone(offence)
+                error = self.refused({path: wanted})
+                self.assertIn(path, error)
+                self.assertIn(offence, error)
+
+    def test_a_name_two_strays_of_the_accept_both_take_is_400_naming_the_name(self) -> None:
+        error = self.refused({"COVERS/Bowie00001.jpg": "back-1.jpg", "COVERS/Bowie00002.jpg": "back-1.jpg"})
+        self.assertIn("back-1.jpg", error)
+        # Which of the two the sentence blames is not decided; it names one of them.
+        self.assertTrue("COVERS/Bowie00001.jpg" in error or "COVERS/Bowie00002.jpg" in error, error)
+
+    def test_a_name_a_file_the_plan_keeps_already_has_is_400_naming_the_path_and_the_name(self) -> None:
+        cases = [
+            ("an image under a kept root image's name", "COVERS/Bowie00001.jpg", "back.jpg"),
+            ("a text file under a kept root file's name", "COVERS/notes.txt", "notes.txt"),
+        ]
+        # Without these the root files could be strays, or not kept, and the case would test the wrong rule.
+        kept = {PurePosixPath(rel).relative_to(self.source).as_posix() for rel in self.entry["kept"]}
+        self.assertLessEqual({"back.jpg", "notes.txt"}, kept)
+        for name, path, wanted in cases:
+            with self.subTest(name):
+                self.assertIsNone(strays.name_offence(path, wanted))
+                error = self.refused({path: wanted})
+                self.assertIn(path, error)
+                self.assertIn(wanted, error)
+
+    def test_strays_that_are_not_a_map_of_names_are_400_naming_strays(self) -> None:
+        for name, given in (("a list", ["COVERS/Bowie00001.jpg"]), ("a number for a name", {"COVERS/Bowie00001.jpg": 1})):
+            with self.subTest(name):
+                self.assertIn("strays", self.refused(given))
+
+    def assert_taken(self, given: dict) -> None:
+        """An accept carrying `given` is answered 202, written as sent, and identified once."""
+        decision = accept(edits={}, game=None, strays=given)
+        try:
+            status, body = self.post_decision(decision)
+            self.assertEqual(status, 202, body)
+            self.assertEqual(self.written(), {"job": JOB, "albums": {self.source: decision}})
+            self.finish()
+            self.assertEqual(self.calls(), [self.identify_argv()])
+        finally:
+            self.finish()
+            (self.job / "decisions.json").unlink(missing_ok=True)
+            (self.control / "calls.jsonl").unlink(missing_ok=True)
+
+    def test_a_valid_map_of_names_and_deletions_is_202_written_as_sent_and_identify_runs(self) -> None:
+        cases = [
+            ("names and a deletion", {"COVERS/Bowie00001.jpg": "booklet-01.jpg", "COVERS/Bowie00002.jpg": None,
+                                      "COVERS/liner notes.pdf": "Liner Notes (2014).pdf"}),
+            ("only deletions", {path: None for path in STRAY_FILES if path.startswith("COVERS/")}),
+        ]
+        for name, given in cases:
+            with self.subTest(name):
+                self.assert_taken(given)
+
+    def test_a_stray_given_the_name_agitha_already_keeps_it_under_is_202(self) -> None:
+        # Its own name is taken by no other file. A case of its own: any accept before it replans the PDF.
+        self.assertIn({"path": "COVERS/liner notes.pdf", "answer": {"keep": "liner notes.pdf"}},
+                      [{"path": row["path"], "answer": row["answer"]} for row in self.entry["strays"]])
+        self.assert_taken({"COVERS/liner notes.pdf": "liner notes.pdf"})
 
 
 if __name__ == "__main__":

@@ -198,6 +198,134 @@ class RemovalsAndExtras(unittest.TestCase):
                 self.assertEqual([p for p in self.root.rglob(name)], [])
 
 
+#: Strays under the album folder and the name each was given, as `Plan.moved`
+#: holds them once the album folder is prefixed. The names sort in a
+#: different order from the paths, so a write that pairs them up by position
+#: puts the wrong bytes under a name.
+STRAYS = {
+    "COVERS/back side.jpg": "back.jpg",
+    "COVERS/maroon_5_v-cd.jpg": "medium.jpg",
+    "Scans/inner/booklet 3.jpg": "booklet-03.jpg",
+    "Ziggy Stardust.jpg": "front.jpg",
+}
+#: A stray the plan deletes as a copy, which leaves `COVERS/` holding nothing
+#: the album keeps.
+STRAY_COPY = "COVERS/folder.jpg"
+#: What `builders.library_album` leaves at the album's root besides the
+#: tracks and `cover.jpg`, once the stray takes over `back.jpg`.
+ROOT_FILES = ("booklet.pdf", "credits.txt", "notes.txt", "rip.log")
+
+
+class MovedStrays(unittest.TestCase):
+    """A named stray is moved to the album folder under that name.
+
+    `Plan.moved` maps each stray's path under the library root to its name
+    in the album folder. The write moves it with the tracks, records it as a
+    library move, and leaves no `COVERS/` or `Scans/` behind.
+    """
+
+    CASES = {"the album moves": DESTINATION, "the album stays where it is": ALBUM}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.cover = builders.jpeg(900, 900)
+
+    def arrange(self, case: str, strays=(*STRAYS, STRAY_COPY)) -> None:
+        """A fresh library for `case`, the album holding `strays` beside its tracks."""
+        self.root = self.tmp / case / "library"
+        self.extras = self.tmp / case / "extras"
+        self.album = builders.library_album(self.root, discs=(TITLES,))
+        # The builder's album has a `back.jpg` of its own; here the back is
+        # one of the strays.
+        (self.album / "back.jpg").unlink()
+        for path in strays:
+            (self.album / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.album / path).write_bytes(f"the bytes of {path}".encode())
+        self.before = builders.tree(self.root)
+
+    def plan(self, destination: str):
+        """The album written to `destination`, its own folder when that is `ALBUM`."""
+        moving = destination != ALBUM
+        return builders.album_plan(
+            self.root, ALBUM, destination,
+            builders.retitled_tracks(self.root, self.album, destination),
+            images={"cover.jpg": self.cover},
+            deletions=[f"{ALBUM}/{STRAY_COPY}"] + ([f"{ALBUM}/cover.jpg"] if moving else []),
+            kept=[f"{ALBUM}/{name}" for name in ROOT_FILES],
+            moved={f"{ALBUM}/{path}": name for path, name in STRAYS.items()})
+
+    def test_each_stray_lands_at_the_album_folders_root_under_its_name_with_its_bytes(self):
+        for case, destination in self.CASES.items():
+            with self.subTest(case):
+                self.arrange(case)
+
+                write.write_album(self.plan(destination), self.extras)
+
+                after = builders.tree(self.root)
+                for path, name in STRAYS.items():
+                    self.assertEqual(after.get(f"{destination}/{name}"), self.before[f"{ALBUM}/{path}"],
+                                     f"{path} as {name}")
+                old_names = {Path(path).name for path in STRAYS}
+                self.assertEqual([p for p in self.root.rglob("*") if p.name in old_names], [],
+                                 "a stray is still under its old name")
+
+    def test_the_subfolders_the_strays_came_from_are_gone_once_the_album_lands(self):
+        # `COVERS/` also held a copy the plan deletes, so it
+        # is emptied only once the deletions are done as well.
+        for case, destination in self.CASES.items():
+            with self.subTest(case):
+                self.arrange(case)
+
+                write.write_album(self.plan(destination), self.extras)
+
+                folders = [p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if p.is_dir()]
+                self.assertEqual([f for f in folders if f.startswith(f"{destination}/")], [],
+                                 "a folder inside the album")
+                if destination != ALBUM:
+                    self.assertFalse(self.album.exists(), f"the old folder is still there: {folders}")
+
+    def test_the_record_lists_each_stray_as_a_library_move_to_its_new_name(self):
+        self.arrange("record")
+
+        record = json.loads(json.dumps(write.write_album(self.plan(DESTINATION), self.extras)))
+
+        for path, name in STRAYS.items():
+            self.assertIn([f"{ALBUM}/{path}", f"{DESTINATION}/{name}", "library"], record["moves"])
+
+    def test_the_record_after_a_trip_through_json_puts_each_stray_back_at_its_old_path(self):
+        # A rollback needs nothing but the record to undo a
+        # stray's move, as it does for a track or a kept file.
+        self.arrange("rollback")
+        record = json.loads(json.dumps(write.write_album(self.plan(DESTINATION), self.extras)))
+        moved = [name for name in STRAYS.values() if (self.root / DESTINATION / name).is_file()]
+        self.assertEqual(sorted(moved), sorted(STRAYS.values()), "the write never moved the strays to undo")
+
+        replay_reverse(record, self.root, self.extras)
+
+        for path, name in STRAYS.items():
+            with self.subTest(path):
+                self.assertEqual((self.album / path).read_bytes(), self.before[f"{ALBUM}/{path}"])
+                self.assertFalse((self.root / DESTINATION / name).exists())
+
+    def test_a_stray_that_won_its_name_from_a_file_in_the_album_folder_replaces_it(self):
+        # A winner over a file already at the root: the plan
+        # deletes that file and moves the stray onto its name. A write that
+        # moves first and deletes after removes the stray it just moved.
+        self.arrange("replaces", strays=("COVERS/back side.jpg",))
+        (self.album / "back.jpg").write_bytes(b"a smaller back the stray beat")
+        plan = builders.album_plan(
+            self.root, ALBUM, ALBUM, builders.retitled_tracks(self.root, self.album),
+            deletions=[f"{ALBUM}/back.jpg"],
+            moved={f"{ALBUM}/COVERS/back side.jpg": "back.jpg"})
+
+        write.write_album(plan, self.extras)
+
+        self.assertEqual(builders.tree(self.album).get("back.jpg"), self.before[f"{ALBUM}/COVERS/back side.jpg"])
+        self.assertFalse((self.album / "COVERS").exists())
+
+
 class APlannedWrite(_Planning):
     """Real `plan_album`, then `write_album`: what is left once a rip is filed."""
 

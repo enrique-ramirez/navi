@@ -50,6 +50,10 @@ THIRD = release(73, "Third Band", "Third Album", TITLES)
 STUB_FAILURE = [f"agitha stub: line {n}" for n in range(5, 25)]
 NOTHING_PLANNED = ["agitha test: looked everywhere", "agitha test: planned nothing"]
 
+#: What agitha adds to `batch identify` so an unreadable file holds the album
+#: instead of stopping it; nothing else musiclib runs carries it.
+DROP_UNREADABLE = "--drop-unreadable"
+
 WRAPPER = """\
 #!{python}
 # musiclib for one test: records the call, waits to be let go, runs the stub.
@@ -192,10 +196,15 @@ class QueueCase(unittest.TestCase):
         (self.control / f"go-{k}").touch()
 
     def identify(self, drop: str, n: str) -> list[str]:
+        """The words agitha runs `musiclib` with to identify album `n`, as `argv` gives them."""
         # `started` is the server's local time, naive: its first 16 characters are the minute.
         started = json.loads((self.inbox / drop / "drop.json").read_text(encoding="utf-8"))["started"]
         return ["batch", "identify", str(self.inbox / drop / n), "--job", str(self.jobs / f"agitha-{drop}-{n}"),
-                "--added", started[:16]]
+                "--added", started[:16], DROP_UNREADABLE]
+
+    def argvs(self) -> list[list[str] | None]:
+        """Each call's words, with `--drop-unreadable` moved to the end, where `identify` puts it."""
+        return [argv(call["argv"]) for call in self.calls()]
 
     def watch(self, until, check=None, seconds: float = 15) -> dict[tuple[str, str], dict]:
         """Polls `GET /api/drops` until `until(albums)`; records every state each album showed.
@@ -216,6 +225,17 @@ class QueueCase(unittest.TestCase):
             if time.monotonic() > deadline:
                 self.fail(f"gave up waiting; states seen: {self.seen}")
             time.sleep(0.03)
+
+
+def argv(words: list[str] | None) -> list[str] | None:
+    """`words` with every `--drop-unreadable` moved to the end.
+
+    It is a switch, so where agitha puts it among the words changes nothing
+    musiclib reads; how many times it is there still shows.
+    """
+    if words is None:
+        return None
+    return [word for word in words if word != DROP_UNREADABLE] + [word for word in words if word == DROP_UNREADABLE]
 
 
 def build_album(base: Path, folder: str, found: dict) -> None:
@@ -272,7 +292,7 @@ class Identifying(QueueCase):
         self.watch(lambda albums: states(albums, x, y1, y2) == ["ready", "ready", "ready"], one_at_a_time)
 
         calls = self.calls()
-        self.assertEqual([call["argv"] for call in calls],
+        self.assertEqual(self.argvs(),
                          [self.identify(first, "01"), self.identify(second, "01"), self.identify(second, "02")])
         for before, after in zip(calls, calls[1:]):
             self.assertLessEqual(before["end"], after["start"], "two musiclib processes overlapped")
@@ -282,6 +302,21 @@ class Identifying(QueueCase):
         self.assertIn(self.seen[x], (["queued", "identifying", "ready"], ["identifying", "ready"]))
         self.assertEqual(self.seen[y1], ["queued", "identifying", "ready"])
         self.assertEqual(self.seen[y2], ["queued", "identifying", "ready"])
+
+
+    def test_agitha_identifies_with_drop_unreadable_so_an_unreadable_file_holds_the_album_rather_than_stopping_it(
+            self) -> None:
+        # Run from anywhere else, `batch identify` still plans nothing for
+        # such an album (`tests.test_batch_identify`): only agitha asks.
+        (self.control / "open").touch()
+        drop = self.make_drop([("Flagged Album", CLEAN)])
+        self.done(drop)
+        # Ready, not failed: the command musiclib is given is one it takes.
+        self.watch(lambda albums: states(albums, (drop, "01")) == ["ready"] and not albums[(drop, "01")]["busy"])
+
+        [words] = self.argvs()
+        self.assertEqual(words.count(DROP_UNREADABLE), 1, words)
+        self.assertEqual(words, self.identify(drop, "01"))
 
 
 class AddedStamp(unittest.TestCase):
@@ -354,7 +389,7 @@ class Failing(QueueCase):
         self.watch(lambda albums: states(albums, a1, a2) == ["ready", "ready"])
 
         # 02's refused retry ran nothing; 01's ran the same command again.
-        self.assertEqual([call["argv"] for call in self.calls()],
+        self.assertEqual(self.argvs(),
                          [self.identify(drop, "01"), self.identify(drop, "02"), self.identify(drop, "01")])
 
     def test_identify_again_runs_a_ready_album_again_and_refuses_a_failed_one(self) -> None:
@@ -377,7 +412,7 @@ class Failing(QueueCase):
         self.wait_for_call(3)
         self.go(3)
         self.watch(lambda albums: states(albums, a2) == ["ready"] and not albums[a2]["busy"])
-        self.assertEqual([call["argv"] for call in self.calls()],
+        self.assertEqual(self.argvs(),
                          [self.identify(drop, "01"), self.identify(drop, "02"), self.identify(drop, "02")])
 
     def test_an_identify_that_exits_0_with_no_album_in_its_plan_counts_as_failed(self) -> None:

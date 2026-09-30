@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from musiclib import images
+from musiclib import images, strays
 from musiclib.genres import NEITHER, SOUNDTRACK, VIDEO_GAME_MUSIC
 
 from . import drops, state
@@ -53,6 +53,9 @@ def _invalid(body: Any, entry: dict[str, Any], job: Path) -> str | None:
                 values is None or isinstance(values, list) and all(isinstance(v, str) for v in values)
                 for values in fields.values()):
             return f"edits at {position!r} must map each tag to a list of strings, or null."
+    if body.get("strays") is not None:
+        if offences := strays.answer_offences(entry, body["strays"]):
+            return "; ".join(offences)
     cover = body.get("cover")
     if cover is not None and not (isinstance(cover, str) and OWNER_COVER.fullmatch(cover)
                                   and (job / cover).is_file()):

@@ -479,7 +479,7 @@
      "kind": "validation"
     },
     {
-     "detail": "",
+     "detail": "accepted, but this stops it being written: no genre: 01. One.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again; no genre: 02. Two.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again; no genre: 03. Three.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again",
      "kind": "decision"
     }
    ],
@@ -501,12 +501,13 @@
    },
    "kept": [],
    "owner_edits": {},
-   "plan_digest": "b89fb1bb42952eafdb1e43793089c67309faffc1fa65e4c72528a6ad718dceeb",
+   "plan_digest": "b4a7ea07af777d9b995b01f5719ba121c2c18fea0739fdf9cc85c45fcdf66d72",
    "release_id": "6f1a2b3c-0000-4000-8000-000100000002",
    "residue": [],
    "source": "drop/album/Bare Album",
    "state": "held",
-   "status": "certain"
+   "status": "certain",
+   "strays": []
   }
  ],
  "decisions_sha256": "5bc244a41b9755630b9919915ca19f8087c64b554251d62c6d8f1bf157982afc",

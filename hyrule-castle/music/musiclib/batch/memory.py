@@ -19,13 +19,13 @@ same `edits` dict either way, so the two give the same `Plan.to_json()`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from musiclib import ascii as ascii_
 from musiclib import check, files, mapping, names
 from musiclib.batch import job as job_module
 from musiclib.genres import SOUNDTRACK
-from musiclib.plan import Plan, is_compilation, sort_others, state_from_plan
+from musiclib.plan import Plan, is_compilation, lay_strays, sort_others, state_from_plan
 from musiclib.units import TrackPair, Unit, position_key
 
 #: What the second choice was called before it was one of three; it did what
@@ -145,7 +145,7 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs:
 
 def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs: list[TrackPair],
              family_by_source: dict[str, str], unit: Unit, edition: str | None,
-             artist_name: str | None, created: Sequence[str] = ()) -> Plan:
+             artist_name: str | None, created: Sequence[str] = (), strays: Mapping[str, str | None] | None = None) -> Plan:
     """`plan`, with `edits` laid over it, mutated and returned.
 
     A key not in `mapping.PICARD` is a raw key of the file's own format,
@@ -162,7 +162,9 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
     edit re-derives the folder. `artist_name` is the artist's current name,
     ASCII-converted as `plan_album` does (see `_rederive_destination`).
     `created` is the earlier job's images `plan_album` was given, so the
-    second sort deletes them as the first did.
+    second sort deletes them as the first did. The second sort lays
+    `plan.strays` as `plan_album` settled them, so the accept and the
+    archive's images are not read again.
 
     A destination that moves also re-sorts `unit`'s other files exactly as
     `plan_album` does: whether the existing cover.jpg is a deletion or a file
@@ -212,6 +214,7 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
         image_names = {"cover.jpg"} | {name.casefold() for name in plan.images}
         plan.deletions, plan.extras, plan.kept = sort_others(
             unit, image_names, plan.source != plan.destination, plan.consumed, created)
+        plan.deletions, plan.kept, plan.moved = lay_strays(unit, plan.strays, plan.deletions, plan.kept)
 
     plan.problems = _dedupe(kept_problems + _check_problems(plan, edition))
     return plan

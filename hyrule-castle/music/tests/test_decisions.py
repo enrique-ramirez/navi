@@ -750,5 +750,182 @@ class JobT1sExportFromBeforeTheAmendment(unittest.TestCase):
         self.assertPlannedAgainst(TWO_EDITIONS, CLOSEST["id"])
 
 
+
+def _png(width: int, height: int) -> bytes:
+    """A plain PNG of the given size."""
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (width, height), (70, 40, 40)).save(out, "PNG")
+    return out.getvalue()
+
+
+#: ACCEPTED's strays in `StrayAnswers`, each with bytes no other file has.
+#: `first-back.jpg` is guessed as `back.jpg`, `IMG_0001.jpg` has no guess,
+#: `scan.png` has no guess either, `info.txt` keeps its own name and `notes.pdf` is the booklet.
+STRAY_BYTES = {"COVERS/first-back.jpg": builders.jpeg(700, 600), "COVERS/IMG_0001.jpg": builders.jpeg(640, 480),
+               "COVERS/scan.png": _png(620, 460),
+               "Extras/info.txt": b"ripped by me", "Scans/notes.pdf": b"%PDF-1.4 notes"}
+UNNAMED = "COVERS/IMG_0001.jpg"
+#: An image stray whose extension differs from GUESSED_BACK's, so a name of its own can share only the stem.
+UNNAMED_PNG = "COVERS/scan.png"
+GUESSED_BACK = "COVERS/first-back.jpg"
+INFO = "Extras/info.txt"
+#: A file at ACCEPTED's root that the plan keeps, and which is not a stray: a `.txt` at the root is allowed there.
+KEPT_NOTES = "notes.txt"
+
+
+class StrayAnswers(unittest.TestCase):
+    """An accept's `strays` read by `decisions.read`.
+
+    ACCEPTED carries the strays in `STRAY_BYTES` and a kept `notes.txt` at its
+    root; the other two albums are `Reading`'s. The job is planned once for the
+    class and copied for each case. The reason for a name the rules refuse is
+    `strays.name_offence`'s sentence, which is what the refusal must carry.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        no_throttle(cls)
+        library(base / "library")
+        folder = base / "library" / ACCEPTED
+        for rel, data in STRAY_BYTES.items():
+            (folder / rel).parent.mkdir(parents=True, exist_ok=True)
+            (folder / rel).write_bytes(data)
+        (folder / KEPT_NOTES).write_bytes(b"notes")
+        cls.template = base / ".musiclib" / "jobs" / "j1"
+        cls.template.mkdir(parents=True)
+        cls.planned = run_identify(base / "library", cls.template, base / ".musiclib" / "memory.json",
+                                   Services(SERVICES))
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.job = Path(tmp.name) / "jobs" / "j1"
+        self.assertTrue((self.template / "plan.json").is_file(), self.planned)
+        shutil.copytree(self.template, self.job)
+        [entry] = [e for e in json.loads((self.job / "plan.json").read_text(encoding="utf-8"))["albums"]
+                   if e["source"] == ACCEPTED]
+        # `notes.txt` has to be a file the plan keeps, or the case refusing its name tests nothing.
+        self.assertIn(f"{ACCEPTED}/{KEPT_NOTES}", entry["kept"])
+        # Every stray the cases name must be one, or a refusal for "not a stray" passes a case meant for another offence.
+        self.assertTrue({UNNAMED, UNNAMED_PNG, GUESSED_BACK, INFO} <= {row["path"] for row in entry.get("strays") or []},
+                        entry.get("strays"))
+
+    def read(self):
+        from musiclib.batch import decisions
+
+        return decisions.read(Job(self.job))
+
+    def doc(self, strays) -> dict:
+        """`Reading`'s valid file, with ACCEPTED's accept carrying `strays`."""
+        doc = valid()
+        doc["albums"][ACCEPTED]["strays"] = strays
+        return doc
+
+    def refusal(self, strays) -> str:
+        """The message `decisions.read` refuses ACCEPTED's `strays` with. Fails the case if it reads the file."""
+        from musiclib.batch import decisions
+
+        write_decisions(self.job, self.doc(strays))
+        with self.assertRaises(decisions.DecisionsRejected) as raised:
+            self.read()
+        message = str(raised.exception)
+        self.assertIn(ACCEPTED, message)
+        return message
+
+    def assertRefusedByTheNameRules(self, path: str, name: str) -> None:
+        from musiclib import strays
+
+        reason = strays.name_offence(path, name)
+        # The fixture's own check: a name the rules allow would make this case pass for another reason.
+        self.assertIsNotNone(reason, f"{name!r} is a name {path} may take")
+        self.assertIn(reason, self.refusal({path: name}))
+
+    def test_an_accept_naming_deleting_and_leaving_out_its_strays_is_read(self):
+        # The control for every refusal below: a name, a null (delete) and a path left out
+        # (`Scans/notes.pdf`, which keeps agitha's answer).
+        write_decisions(self.job, self.doc({UNNAMED: "booklet-01.jpg", GUESSED_BACK: None,
+                                            INFO: "Rip notes.txt"}))
+        self.assertIsInstance(self.read(), dict)
+
+    def test_a_path_that_is_not_a_stray_of_the_album_is_refused_naming_it(self):
+        # `notes.txt` is in the album folder, and the plan keeps it where it is: a file, but not a stray.
+        for path in (KEPT_NOTES, "COVERS/IMG_0002.jpg"):
+            with self.subTest(path=path):
+                self.assertIn(path, self.refusal({path: "readme.txt" if path.endswith(".txt") else "back.jpg"}))
+
+    def test_an_image_name_that_is_not_a_library_name_is_refused_for_that_reason(self):
+        self.assertRefusedByTheNameRules(UNNAMED, "scan-01.jpg")
+
+    def test_a_name_with_another_extension_than_the_files_own_is_refused_for_that_reason(self):
+        for path, name in ((UNNAMED, "booklet-01.png"), (INFO, "info.log")):
+            with self.subTest(path=path, name=name):
+                self.assertRefusedByTheNameRules(path, name)
+
+    def test_cover_jpg_is_refused_as_a_strays_name(self):
+        self.assertRefusedByTheNameRules(UNNAMED, "cover.jpg")
+
+    def test_a_name_the_owner_gives_two_strays_is_refused_naming_it(self):
+        message = self.refusal({UNNAMED: "tray.jpg", GUESSED_BACK: "tray.jpg"})
+        self.assertIn("tray.jpg", message)
+        # Either stray may be the one named as taking a name already taken.
+        self.assertTrue(UNNAMED in message or GUESSED_BACK in message, message)
+
+    def test_a_name_taken_by_a_file_the_plan_keeps_is_refused_naming_the_stray_and_the_name(self):
+        message = self.refusal({INFO: KEPT_NOTES})
+        self.assertIn(INFO, message)
+        self.assertIn(KEPT_NOTES, message)
+
+    def guessed_back_is_kept_as_back_jpg(self) -> None:
+        """The fixture's own check: agitha keeps GUESSED_BACK as `back.jpg`, or the cases below test nothing."""
+        [entry] = [e for e in json.loads((self.job / "plan.json").read_text(encoding="utf-8"))["albums"]
+                   if e["source"] == ACCEPTED]
+        rows = {row["path"]: row for row in entry.get("strays") or []}
+        self.assertEqual((rows.get(GUESSED_BACK) or {}).get("answer"), {"keep": "back.jpg"}, entry.get("strays"))
+
+    def test_a_name_agitha_keeps_another_stray_under_is_refused_naming_both_strays(self):
+        # The accept leaves GUESSED_BACK out, so it keeps agitha's `back.jpg`;
+        # taking the name from it would leave it undecided behind the owner's back.
+        self.guessed_back_is_kept_as_back_jpg()
+        message = self.refusal({UNNAMED: "back.jpg"})
+        self.assertIn(UNNAMED, message)
+        self.assertIn(GUESSED_BACK, message)
+        self.assertIn("back.jpg", message)
+
+    def test_a_name_agitha_kept_another_stray_under_is_read_when_the_accept_also_deletes_or_renames_that_stray(self):
+        self.guessed_back_is_kept_as_back_jpg()
+        for strays in ({UNNAMED: "back.jpg", GUESSED_BACK: None},
+                       {UNNAMED: "back.jpg", GUESSED_BACK: "tray.jpg"},
+                       # Deleting the stray frees its name for an image of another extension too.
+                       {UNNAMED_PNG: "back.png", GUESSED_BACK: None},
+                       # A stray given the name agitha guessed for it takes it from nobody.
+                       {GUESSED_BACK: "back.jpg"}):
+            with self.subTest(strays=strays):
+                write_decisions(self.job, self.doc(strays))
+                self.assertIsInstance(self.read(), dict)
+
+    def test_an_image_name_sharing_only_its_stem_with_one_agitha_keeps_is_refused_naming_both_strays(self):
+        # `back.png` beside `back.jpg` is the same name to the engine (`strays.name_key`), which
+        # would leave GUESSED_BACK undecided behind the owner's back.
+        self.guessed_back_is_kept_as_back_jpg()
+        message = self.refusal({UNNAMED_PNG: "back.png"})
+        self.assertIn(UNNAMED_PNG, message)
+        self.assertIn(GUESSED_BACK, message)
+
+    def test_two_image_strays_given_one_stem_under_two_extensions_are_refused(self):
+        # GUESSED_BACK is deleted, so the only clash is between the two names the accept gives.
+        message = self.refusal({GUESSED_BACK: None, UNNAMED: "back.jpg", UNNAMED_PNG: "back.png"})
+        self.assertTrue(UNNAMED in message or UNNAMED_PNG in message, message)
+
+    def test_every_stray_offence_in_an_accept_is_named_not_only_the_first(self):
+        message = self.refusal({"COVERS/IMG_0002.jpg": "back.jpg", UNNAMED: "cover.jpg"})
+        self.assertIn("COVERS/IMG_0002.jpg", message)
+        self.assertIn(UNNAMED, message)
+
+
 if __name__ == "__main__":
     unittest.main()

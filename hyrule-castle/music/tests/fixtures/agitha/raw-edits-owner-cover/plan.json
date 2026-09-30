@@ -549,12 +549,13 @@
      ]
     }
    },
-   "plan_digest": "1daf94f29cb7e2654cbf2a5f4ed535495667fd6ac88ee136ac072413ee1778b6",
+   "plan_digest": "68f913eeb20778974d634d4ffc8ab90774be847693f0f178b7c0a7e7a7a7e277",
    "release_id": "6f1a2b3c-0000-4000-8000-000100000004",
    "residue": [],
    "source": "drop/album/Edited Album",
    "state": "auto",
-   "status": "certain"
+   "status": "certain",
+   "strays": []
   }
  ],
  "decisions_sha256": "7bff358f995fb82446f8d95540ca6fb1effdc822b7dee1d86b33560b9a3aecbf",

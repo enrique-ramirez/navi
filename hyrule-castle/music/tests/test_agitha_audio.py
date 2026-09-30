@@ -34,6 +34,7 @@ import mutagen
 from mutagen.id3 import ID3, TIT2
 from PIL import Image
 
+from agitha import review
 from agitha.audio import facts
 from agitha.server import Config, make_server
 from musiclib import files as engine_files
@@ -519,6 +520,101 @@ class AlbumView(unittest.TestCase):
         want = dict(planned["after"])
         want.update({key: [shown] for key, shown in self.picture_sizes(TRACKS[0]).items()})
         self.assertEqual(self.picture_view["preview"]["files"][0]["after"], want)
+
+
+KEPT_STRAY_DROP = "20260930-120000"
+UNDECIDED_STRAY_DROP = "20260930-120000-2"
+ROOT_STRAY_DROP = "20260930-120000-3"
+LANDED_TRACKS = ["01. One.mp3", "02. Two.mp3", "03. Three.mp3"]
+
+
+def stray_row(path: str, answer: dict | None, why: str) -> dict:
+    """One row of a plan entry's `strays`, the shape `musiclib.strays.Stray.to_json` writes."""
+    return {"path": path, "kind": "image", "answer": answer, "why": why, "against": None, "size": [500, 500]}
+
+
+class LandingTreeWithStrays(unittest.TestCase):
+    """The tree shows each kept stray at its new name, and no folder the moves leave empty.
+
+    Each entry is the auto-clean plan's, with its strays laid the way
+    `musiclib.plan.lay_strays` and `batch identify` leave them: a kept stray
+    has left `kept` and has a `move:` line in `changes`, a deleted one is in
+    `deletions`, an undecided one stays in `kept`. The entry carries no
+    `moved`, since `batch identify` does not write one.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(tempfile.mkdtemp())
+        folders = {name: cls.root / name for name in ("inbox", "jobs", "library", "extras", "static")}
+        for folder in folders.values():
+            folder.mkdir()
+        cls.config = Config(
+            inbox=folders["inbox"], jobs=folders["jobs"], library=folders["library"],
+            extras=folders["extras"], musiclib=str(STUB), static=folders["static"],
+            port=0, host="127.0.0.1",
+        )
+        cls.folders = folders
+        cls.plan = json.loads(AUTO_CLEAN.read_text(encoding="utf-8"))
+
+        # The back is kept under a library name and the inside is deleted,
+        # which leaves COVERS/ empty.
+        cls.stage(KEPT_STRAY_DROP, kept=[], deleted=["COVERS/Clean Album-inside.jpg"],
+                  moved={"COVERS/Clean Album-back.jpg": "back.jpg"}, rows=[
+                      stray_row("COVERS/Clean Album-back.jpg", {"keep": "back.jpg"}, "guessed"),
+                      stray_row("COVERS/Clean Album-inside.jpg", {"delete": True}, "owner"),
+                  ])
+        cls.stage(UNDECIDED_STRAY_DROP, kept=["COVERS/x.jpg"], deleted=[], moved={},
+                  rows=[stray_row("COVERS/x.jpg", None, "no guess")])
+        cls.stage(ROOT_STRAY_DROP, kept=[], deleted=[], moved={"Ziggy Stardust.jpg": "front.jpg"},
+                  rows=[stray_row("Ziggy Stardust.jpg", {"keep": "front.jpg"}, "guessed")])
+
+    @classmethod
+    def stage(cls, drop: str, kept: list[str], deleted: list[str], moved: dict[str, str], rows: list[dict]) -> None:
+        """An album whose strays are on disk and in its plan entry; paths are relative to the album folder."""
+        folder = stage_album(cls.folders["inbox"], drop, "01", ALBUM, {"state": "ready", "stderr": "", "error": None})
+        stage_tracks(folder)
+        for row in rows:
+            target = folder / row["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(builders.jpeg(500, 500))
+        plan = copy.deepcopy(cls.plan)
+        entry = plan["albums"][0]
+        source, destination = entry["source"], entry["destination"]
+        entry["strays"] = rows
+        entry["kept"] = [f"{source}/{rel}" for rel in kept]
+        entry["deletions"] = entry["deletions"] + [f"{source}/{rel}" for rel in deleted]
+        entry["changes"] = entry["changes"] \
+            + [f"move: {source}/{rel} -> {destination}/{rel}" for rel in kept] \
+            + [f"move: {source}/{rel} -> {destination}/{name}" for rel, name in sorted(moved.items())] \
+            + [f"delete: {source}/{rel}" for rel in deleted]
+        job = cls.folders["jobs"] / f"agitha-{drop}-01"
+        job.mkdir()
+        (job / "plan.json").write_text(json.dumps(plan, indent=1), encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.root)
+
+    def tree(self, drop: str) -> list[str]:
+        view = review.album(self.config, drop, "01")
+        self.assertIsNotNone(view, f"no view for {drop}")
+        return view["tree"]
+
+    def test_a_kept_stray_lands_at_its_new_name_and_its_emptied_folder_is_not_shown(self) -> None:
+        # The deleted stray goes too, so no COVERS/ path of either kind may
+        # stay; `back.jpg` sorting before `cover.jpg` catches a name appended unsorted.
+        self.assertEqual(self.tree(KEPT_STRAY_DROP), [*LANDED_TRACKS, "back.jpg", "cover.jpg"])
+
+    def test_a_kept_root_stray_lands_under_its_new_name_and_not_its_old_one(self) -> None:
+        self.assertEqual(self.tree(ROOT_STRAY_DROP), [*LANDED_TRACKS, "cover.jpg", "front.jpg"])
+
+    def test_an_undecided_stray_in_a_subfolder_shows_where_the_plan_leaves_it(self) -> None:
+        # The plan keeps it at its old path and the album is not approvable
+        # until it is decided. The tree shows the plan as it
+        # stands, so the folder is still there: hiding it would show a
+        # landing the plan does not describe.
+        self.assertEqual(self.tree(UNDECIDED_STRAY_DROP), [*LANDED_TRACKS, "COVERS/x.jpg", "cover.jpg"])
 
 
 if __name__ == "__main__":

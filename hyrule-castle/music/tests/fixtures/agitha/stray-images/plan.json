@@ -1,0 +1,642 @@
+{
+ "albums": [
+  {
+   "candidates": [
+    {
+     "artist": "Stray Band",
+     "artist_agrees": false,
+     "checked": true,
+     "country": "GB",
+     "date": "2010-05-24",
+     "duration_diff": 0.45599999999999974,
+     "failing_tracks": 0,
+     "format": "CD",
+     "matches_counts": true,
+     "release_id": "6f1a2b3c-0000-4000-8000-000100000006",
+     "status": "Official",
+     "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000006/front-250",
+     "title": "Stray Album",
+     "track_counts": [
+      3
+     ]
+    }
+   ],
+   "changes": [
+    "move: drop/album/Stray Album/01 one.mp3 -> S/Stray Band/(2010) Stray Album/01. One.mp3",
+    "tags: drop/album/Stray Album/01 one.mp3: does not match its planned target",
+    "cover: drop/album/Stray Album/01 one.mp3: embedded picture does not match the plan",
+    "move: drop/album/Stray Album/02 two.mp3 -> S/Stray Band/(2010) Stray Album/02. Two.mp3",
+    "tags: drop/album/Stray Album/02 two.mp3: does not match its planned target",
+    "cover: drop/album/Stray Album/02 two.mp3: embedded picture does not match the plan",
+    "move: drop/album/Stray Album/03 three.mp3 -> S/Stray Band/(2010) Stray Album/03. Three.mp3",
+    "tags: drop/album/Stray Album/03 three.mp3: does not match its planned target",
+    "cover: drop/album/Stray Album/03 three.mp3: embedded picture does not match the plan",
+    "move: drop/album/Stray Album/COVERS/IMG_0001.jpg -> S/Stray Band/(2010) Stray Album/COVERS/IMG_0001.jpg",
+    "move: drop/album/Stray Album/tray.jpg -> S/Stray Band/(2010) Stray Album/tray.jpg",
+    "move: drop/album/Stray Album/COVERS/IMG_0002.jpg -> S/Stray Band/(2010) Stray Album/booklet-01.jpg",
+    "move: drop/album/Stray Album/COVERS/stray_album-obi.jpg -> S/Stray Band/(2010) Stray Album/obi.jpg",
+    "move: drop/album/Stray Album/COVERS/stray_band_stray_album-back.jpg -> S/Stray Band/(2010) Stray Album/back.jpg",
+    "delete: drop/album/Stray Album/cover.jpg",
+    "delete: drop/album/Stray Album/COVERS/folder.jpg",
+    "delete: drop/album/Stray Album/COVERS/stray_band-tray.jpg",
+    "delete: drop/album/Stray Album/Scans/IMG_0001 copy.jpg",
+    "delete: drop/album/Stray Album/back.jpg"
+   ],
+   "decision": "accept",
+   "deletions": [
+    "drop/album/Stray Album/cover.jpg",
+    "drop/album/Stray Album/COVERS/folder.jpg",
+    "drop/album/Stray Album/COVERS/stray_band-tray.jpg",
+    "drop/album/Stray Album/Scans/IMG_0001 copy.jpg",
+    "drop/album/Stray Album/back.jpg"
+   ],
+   "destination": "S/Stray Band/(2010) Stray Album",
+   "extras": [],
+   "fields": {
+    "1-1": {
+     "album": [
+      "Stray Album"
+     ],
+     "albumartist": [
+      "Stray Band"
+     ],
+     "albumartistsort": [
+      "Stray Band"
+     ],
+     "artist": [
+      "Stray Band"
+     ],
+     "artistsort": [
+      "Stray Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "One"
+     ]
+    },
+    "1-2": {
+     "album": [
+      "Stray Album"
+     ],
+     "albumartist": [
+      "Stray Band"
+     ],
+     "albumartistsort": [
+      "Stray Band"
+     ],
+     "artist": [
+      "Stray Band"
+     ],
+     "artistsort": [
+      "Stray Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Two"
+     ]
+    },
+    "1-3": {
+     "album": [
+      "Stray Album"
+     ],
+     "albumartist": [
+      "Stray Band"
+     ],
+     "albumartistsort": [
+      "Stray Band"
+     ],
+     "artist": [
+      "Stray Band"
+     ],
+     "artistsort": [
+      "Stray Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Three"
+     ]
+    }
+   },
+   "files": [
+    {
+     "after": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "One"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPE2": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TSO2": [
+       "Stray Band"
+      ],
+      "TSOP": [
+       "Stray Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000006"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100010001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100010002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "one"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ]
+     },
+     "destination": "S/Stray Band/(2010) Stray Album/01. One.mp3",
+     "position": "1-1",
+     "source": "drop/album/Stray Album/01 one.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Two"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPE2": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TSO2": [
+       "Stray Band"
+      ],
+      "TSOP": [
+       "Stray Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000006"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100020001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100020002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "two"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ]
+     },
+     "destination": "S/Stray Band/(2010) Stray Album/02. Two.mp3",
+     "position": "1-2",
+     "source": "drop/album/Stray Album/02 two.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Three"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPE2": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TSO2": [
+       "Stray Band"
+      ],
+      "TSOP": [
+       "Stray Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000006"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000006"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100030001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100030002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Stray Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "three"
+      ],
+      "TPE1": [
+       "Stray Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000006"
+      ]
+     },
+     "destination": "S/Stray Band/(2010) Stray Album/03. Three.mp3",
+     "position": "1-3",
+     "source": "drop/album/Stray Album/03 three.mp3"
+    }
+   ],
+   "game": null,
+   "game_choice": false,
+   "holds": [
+    {
+     "detail": "subfolder: COVERS",
+     "kind": "validation"
+    },
+    {
+     "detail": "accepted, but this stops it being written: subfolder: COVERS",
+     "kind": "decision"
+    }
+   ],
+   "images": {
+    "cover.jpg": {
+     "length": 25535,
+     "sha256": "8b791ddbb1e1889ea07a4e3b49046d9134e824a242422febcd74841770dd782e"
+    }
+   },
+   "inputs": {
+    "chosen": false,
+    "composer": true,
+    "edits": {},
+    "owner_input": {
+     "soundtracks": {}
+    },
+    "release_id": "6f1a2b3c-0000-4000-8000-000100000006",
+    "status": "certain",
+    "strays": {
+     "answers": {
+      "COVERS/IMG_0002.jpg": "booklet-01.jpg"
+     },
+     "sha256": {
+      "COVERS/IMG_0002.jpg": "0a276afc71f1e6712c7ca2a77b171d286b698b502a03d672364140027b2942f0",
+      "COVERS/stray_album-obi.jpg": "350850a9c6d49410bfb35236ee20ba4d8bb573acc8382e0ab92c17c5406bb039",
+      "COVERS/stray_band_stray_album-back.jpg": "1f81f56ac282867eedc7f5fae84e6a66109729386677d44f0cf1adca03049d2c"
+     }
+    }
+   },
+   "kept": [
+    "drop/album/Stray Album/COVERS/IMG_0001.jpg",
+    "drop/album/Stray Album/tray.jpg"
+   ],
+   "owner_edits": {},
+   "plan_digest": "f0fb89a4001650a557db14d4810e6c1394c69b3644ff421877d226c1d7a8f8d5",
+   "release_id": "6f1a2b3c-0000-4000-8000-000100000006",
+   "residue": [],
+   "source": "drop/album/Stray Album",
+   "state": "held",
+   "status": "certain",
+   "strays": [
+    {
+     "against": "cover.jpg",
+     "answer": {
+      "delete": true
+     },
+     "kind": "image",
+     "path": "COVERS/folder.jpg",
+     "size": [
+      1600,
+      900
+     ],
+     "why": "copy"
+    },
+    {
+     "against": null,
+     "answer": null,
+     "kind": "image",
+     "path": "COVERS/IMG_0001.jpg",
+     "size": [
+      1200,
+      1200
+     ],
+     "why": "no guess"
+    },
+    {
+     "against": null,
+     "answer": {
+      "keep": "booklet-01.jpg"
+     },
+     "kind": "image",
+     "path": "COVERS/IMG_0002.jpg",
+     "size": [
+      1100,
+      900
+     ],
+     "why": "owner"
+    },
+    {
+     "against": null,
+     "answer": {
+      "keep": "obi.jpg"
+     },
+     "kind": "image",
+     "path": "COVERS/stray_album-obi.jpg",
+     "size": [
+      1400,
+      1300
+     ],
+     "why": "guessed"
+    },
+    {
+     "against": "tray.jpg",
+     "answer": {
+      "delete": true
+     },
+     "kind": "image",
+     "path": "COVERS/stray_band-tray.jpg",
+     "size": [
+      800,
+      700
+     ],
+     "why": "lost"
+    },
+    {
+     "against": "back.jpg",
+     "answer": {
+      "keep": "back.jpg"
+     },
+     "kind": "image",
+     "path": "COVERS/stray_band_stray_album-back.jpg",
+     "size": [
+      1688,
+      1476
+     ],
+     "why": "won"
+    },
+    {
+     "against": "COVERS/IMG_0001.jpg",
+     "answer": {
+      "delete": true
+     },
+     "kind": "image",
+     "path": "Scans/IMG_0001 copy.jpg",
+     "size": [
+      1200,
+      1200
+     ],
+     "why": "copy"
+    }
+   ]
+  }
+ ],
+ "decisions_sha256": "b8398bd0a20d3f3a0d5604f0d50e45c6762d26baa31248b573bfbf3355bac6ed",
+ "job": "agitha-20260929-210000-01",
+ "root": "/srv/music/inbox/20260929-210000/01"
+}

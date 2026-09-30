@@ -18,15 +18,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from musiclib import ascii as ascii_
-from musiclib import artists, check, composers, files, genres, images, mapping, names
+from musiclib import artists, check, composers, files, genres, images, mapping, names, strays as strays_module
 from musiclib.caa import CoverArtError
 from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzNotFound, MusicBrainzUnavailable
-from musiclib.units import DISAGREEMENT, NEEDS_A_PERSON, TrackPair, Unit, counted_media, group_media, pair
+from musiclib.strays import Stray
+from musiclib.units import DISAGREEMENT, NEEDS_A_PERSON, TrackPair, Unit, counted_media, disc_number, group_media, pair
 
 #: The one instruction every "the archive is unavailable" problem carries:
 #: a 500 or a timeout is not "this release has no images" (only a real,
@@ -86,6 +87,10 @@ class Plan:
     suggestions: dict[str, str]
     problems: list[str]
     consumed: str | None = None
+    #: Each stray and its answer, in natural order of path (`strays.settle`).
+    strays: list[Stray] = field(default_factory=list)
+    #: A kept stray's path from `root` (the form of `kept`) to the name it takes in the album folder.
+    moved: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> bytes:
         """Canonical bytes for comparing two plans, sorted keys and UTF-8 throughout.
@@ -124,6 +129,8 @@ class Plan:
             "holds": list(self.holds),
             "suggestions": dict(self.suggestions),
             "problems": list(self.problems),
+            "strays": [stray.to_json() for stray in self.strays],
+            "moved": dict(self.moved),
         }
         return json.dumps(doc, sort_keys=True, ensure_ascii=False).encode("utf-8")
 
@@ -246,6 +253,80 @@ def _loose_files(unit: Unit) -> dict[str, bytes]:
     return found
 
 
+def _disc_folders(unit: Unit) -> set[str]:
+    """The first-level folders holding a track, whatever they are called."""
+    return {parts[0] for track in unit.tracks
+            if len(parts := Path(track.path).relative_to(unit.path).parts) == 2}
+
+
+def stray_paths(unit: Unit) -> list[str]:
+    """The strays among `unit.others`, relative to the album, in natural order of path.
+
+    A file `check` keeps under a folder that is not a disc folder, an image
+    inside a disc folder, and an image at the root that no rule already names.
+    """
+    discs = _disc_folders(unit)
+    found = []
+    for rel in unit.others:
+        if check.classify_other(unit.path / rel, rel) != "keep":
+            continue
+        parts = PurePosixPath(rel).parts
+        image = strays_module.kind(rel) == "image"
+        if len(parts) == 1:
+            stray = image and strays_module.is_root_stray(rel)
+        else:
+            stray = parts[0] not in discs or image
+        if stray:
+            found.append(rel)
+    return sorted(found, key=strays_module.path_order)
+
+
+def _stray_bytes(unit: Unit, rel: str) -> bytes:
+    """The bytes of the stray `rel`; a file too large to compare gets a placeholder no other file equals."""
+    path = unit.path / rel
+    try:
+        if path.stat().st_size > _MAX_COMPARED_BYTES:
+            return f"\0unread:{rel}".encode()
+        return path.read_bytes()
+    except OSError:
+        return f"\0unreadable:{rel}".encode()
+
+
+def lay_strays(unit: Unit, settled: Sequence[Stray], deletions: list[str], kept: list[str]
+               ) -> tuple[list[str], list[str], dict[str, str]]:
+    """`(deletions, kept, moved)` once each stray of `settled` has gone where its answer sends it.
+
+    `deletions` and `kept` are `sort_others`'s, which leave every stray in
+    `kept`: a deleted one moves to `deletions`, a kept one to `moved` under
+    its new name, an undecided one stays in `kept`. A file at the root that
+    a stray won its name from is deleted too. Run by both `plan_album` and
+    `batch.memory.lay_edits` from the plan's own strays, so the two agree.
+    """
+    deletions, kept, moved = list(deletions), list(kept), {}
+    decided = {f"{unit.rel}/{stray.path}" for stray in settled if stray.answer is not None}
+    undecided = [f"{unit.rel}/{stray.path}" for stray in settled if stray.answer is None]
+    kept = [rel for rel in kept if rel not in decided]
+    # `sort_others` deletes any file named like a planned image, a stray in a subfolder included;
+    # a stray is settled here alone, or it would be moved and then unlinked, or left undecided and deleted.
+    deletions = [rel for rel in deletions if rel not in decided and rel not in undecided]
+    kept += [rel for rel in undecided if rel not in kept]
+    for stray in settled:
+        full = f"{unit.rel}/{stray.path}"
+        if stray.keeps is not None:
+            moved[full] = stray.keeps
+        elif stray.answer is not None:
+            deletions.append(full)
+    beaten = {strays_module.name_key(stray.keeps) for stray in settled if stray.why == "won"}
+    stray_rels = {stray.path for stray in settled}
+    for rel in unit.others:
+        full = f"{unit.rel}/{rel}"
+        if "/" not in rel and rel not in stray_rels and strays_module.name_key(rel) in beaten:
+            kept = [path for path in kept if path != full]
+            if full not in deletions:
+                deletions.append(full)
+    return deletions, kept, moved
+
+
 def sort_others(unit: Unit, image_names: set[str], moving: bool, consumed: str | None = None,
                 created: Sequence[str] = ()) -> tuple[list[str], list[str], list[str]]:
     """`unit.others`, paths relative to the album, sorted into (deletions, extras, kept).
@@ -366,7 +447,7 @@ def plan_album(
     pairs: list[TrackPair] | None = None, edition: str | None = None,
     local: Sequence[tuple[str, bytes]] | None = None, created: Sequence[str] = (),
     owner_cover: bytes | None = None, composer: bool = True, chosen: bool = False,
-    added: str | None = None,
+    added: str | None = None, strays: Mapping[str, str | None] | None = None,
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`.
 
@@ -387,6 +468,9 @@ def plan_album(
     lookup per release. Off, those tags are left as the file has them.
 
     `added`, an import's `YYYY-MM-DDTHH:MM`, is every track's `ADDED` (`mapping.plan_tags`).
+
+    `strays` is the owner's answer for each stray, a path relative to the
+    album to a name or `None` to delete it (`strays.settle`).
     """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
@@ -409,16 +493,45 @@ def plan_album(
     release = _told_apart(release, release_group, mb)
     album_genres =_album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
 
-    folder_files = _loose_files(unit)
+    stray_rels = stray_paths(unit)
+    stray_bytes = {rel: _stray_bytes(unit, rel) for rel in stray_rels}
+    # A root stray is not a file "already there": an archive image equal to one is saved, and the stray is the copy.
+    loose = _loose_files(unit)
+    folder_files = {name: data for name, data in loose.items() if name not in stray_bytes}
     left_behind = {PurePosixPath(path).name for path in created if PurePosixPath(path).parent.as_posix() == unit.rel}
+    redundant = set(images.redundant_archive_names(loose))
+    discs = {folder: number for folder in _disc_folders(unit) if (number := disc_number(folder)) is not None}
+    answered: list[Stray] = []
     try:
         caa_images = caa.images(release["id"])
-        image_plan = images.plan_images(
-            caa_images, caa.download,
-            group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
-            local=images.local_covers(unit.path) if local is None else local,
-            owner_cover=owner_cover,
-            existing={name: data for name, data in folder_files.items() if name not in left_behind})
+
+        def plan_images(local_covers, existing):
+            return images.plan_images(
+                caa_images, caa.download,
+                group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
+                local=local_covers, owner_cover=owner_cover, existing=existing)
+
+        folder_covers = images.local_covers(unit.path) if local is None else list(local)
+        existing = {name: data for name, data in folder_files.items() if name not in left_behind}
+        image_plan = plan_images(folder_covers, existing)
+        staying = {name: data for name, data in existing.items() if name not in redundant}
+        answered = strays_module.settle(
+            stray_bytes, discs, strays or {}, image_plan.files.get("cover.jpg"),
+            {name: data for name, data in image_plan.files.items() if name != "cover.jpg"}, staying)
+        kept_strays = {stray.keeps: stray_bytes[stray.path] for stray in answered if stray.keeps is not None}
+        # A stray kept as `front.*` is a local cover like one already in the folder, so the archive's front
+        # is judged against it: the plan is made again with it in. Only here, after the copy rule
+        # has run, so that the stray is never deleted as a copy of the cover it became.
+        fronts = [(name, data) for name, data in kept_strays.items()
+                  if Path(name).stem == "front" and Path(name).suffix in images.LOCAL_SUFFIXES]
+        if fronts:
+            # `local_covers`' order: by stem's rank, then name.
+            covers = sorted([*folder_covers, *fronts],
+                            key=lambda c: (images.LOCAL_STEMS.index(Path(c[0]).stem.casefold()), c[0].casefold()))
+            image_plan = plan_images(covers, {**existing, **kept_strays})
+        taken = {strays_module.name_key(name) for name in kept_strays}
+        for name in [n for n in image_plan.files if n != "cover.jpg" and strays_module.name_key(n) in taken]:
+            del image_plan.files[name]
     except CoverArtError as exc:
         # A 500 or a timeout is not "this release has no images" (`caa`
         # itself already turns a real 404 into an empty list, cached): taking
@@ -426,6 +539,7 @@ def plan_album(
         # with whatever the archive would have given on a working day.
         problems.append(f"{_CAA_UNAVAILABLE}: {exc}")
         image_plan = images.ImagePlan(files={}, problems=[])
+        answered = strays_module.settle(stray_bytes, discs, strays or {}, None, {}, folder_files)
     problems.extend(image_plan.problems)
     embedded = images.embedded_front(image_plan.files["cover.jpg"]) if "cover.jpg" in image_plan.files else None
 
@@ -521,6 +635,7 @@ def plan_album(
     image_names = {"cover.jpg"} | {name.casefold() for name in image_plan.files}
     consumed = image_plan.consumed if local is None else None
     deletions, extras, kept = sort_others(unit, image_names, source != destination, consumed, created)
+    deletions, kept, moved = lay_strays(unit, answered, deletions, kept)
 
     plan = Plan(
         root=root, source=source, destination=destination, release_id=release.get("id"),
@@ -528,6 +643,7 @@ def plan_album(
         files=file_plans, images=image_plan.files, embedded=embedded,
         deletions=deletions, extras=extras, kept=kept,
         holds=_dedupe(holds), suggestions=suggestions, problems=[], consumed=consumed,
+        strays=answered, moved=moved,
     )
 
     problems.extend(f"{v.rule}: {v.detail}" for v in check.check_album(state_from_plan(plan), suffix_given=edition is not None))
@@ -584,6 +700,9 @@ def changes(plan: Plan) -> list[str]:
         destination = relocated(plan, rel)
         if destination != rel:
             out.append(f"move: {rel} -> {destination}")
+
+    for rel, name in sorted(plan.moved.items()):
+        out.append(f"move: {rel} -> {plan.destination}/{name}")
 
     for rel in plan.deletions:
         out.append(f"delete: {rel}")

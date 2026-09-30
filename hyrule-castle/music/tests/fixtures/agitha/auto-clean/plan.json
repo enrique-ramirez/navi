@@ -502,12 +502,13 @@
    },
    "kept": [],
    "owner_edits": {},
-   "plan_digest": "0f9191a24aa3b17b34249e5df8b367c681c8ac19be2594bdf0cb0ffc902f135e",
+   "plan_digest": "18c9c3e5a0fd3a56513491f2184e73fc85b0c0c03a157cbdf9ed2fe7f5b2fb68",
    "release_id": "6f1a2b3c-0000-4000-8000-000100000001",
    "residue": [],
    "source": "drop/album/Clean Album",
    "state": "auto",
-   "status": "certain"
+   "status": "certain",
+   "strays": []
   }
  ],
  "job": "agitha-20260929-210000-01",

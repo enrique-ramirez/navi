@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -295,6 +296,437 @@ class Resume(_Job):
                          "asked again for what the first run already has")
         self.assertIn(first.interrupted, second.answered, "the second run did not finish album 3")
         self.assertEqual([entry["source"] for entry in self.plan_doc()["albums"]], keys)
+
+
+#: A 14-track album whose third track is the one that goes missing.
+V_TITLES = ["Sugar", "Maps", "It Was Always You", "Animals", "Unkiss Me", "Leaving California",
+            "In Your Pocket", "New Love", "Coming Back for You", "Feelings", "My Heart Is Open",
+            "Shoot Love", "Sex and Candy", "Lost Stars"]
+
+#: A few bytes under an `.mp3` name: what a drop cut off in the first frame leaves.
+TRUNCATED = b"ID3\x04\x00garbage"
+
+
+class Unreadable(_Job):
+    """`plan_entry(..., drop_unreadable=True)`: an album with a file or folder it cannot read is planned from the rest and held.
+
+    Every readable file here carries the release ID of a 14-track release, so
+    MusicBrainz is asked for that release directly. A rip one file short does
+    not match its counts, so identify goes on to search, and the search here
+    answers with every release in the catalogue, the way MusicBrainz's would
+    for the album's own title.
+    """
+
+    ARTIST, ALBUM = "Maroon 5", "V"
+    KEY = "M/Maroon 5/V"
+
+    class Searching(Services):
+        """`Services`, with a release search that lists every release it was given."""
+
+        def __call__(self, url, headers):
+            path = urlsplit(url).path.rstrip("/")
+            if urlsplit(url).netloc == "musicbrainz.org" and path == "/ws/2/release":
+                self.answered.append(url)
+                listing = [{"id": found["id"], "title": found["title"], "score": 100,
+                            "media": [{"track-count": len(m["tracks"])} for m in found["media"]]}
+                           for found in self.releases.values()]
+                return 200, json.dumps({"releases": listing, "count": len(listing)}).encode()
+            return super().__call__(url, headers)
+
+    def rip(self, titles: list[str], release_id: str | None, *, leave_out=(), unreadable=(),
+            numbers: dict[int, int] | None = None, names: dict[int, str] | None = None,
+            tag_numbers: bool = True, key: str | None = None) -> Path:
+        """The album at `key` (else `KEY`): one tagged FLAC per title, less `leave_out`, and `unreadable` as truncated MP3s.
+
+        A file is `NN Title.flac` for its 1-based position. `numbers` gives a
+        position another track number tag, `names` another filename, and
+        `tag_numbers=False` writes no track or disc number at all, so the
+        filename is all that says where a file goes.
+        """
+        base = self.root / (key or self.KEY)
+        base.mkdir(parents=True)
+        for number, title in enumerate(titles, start=1):
+            if number in leave_out:
+                continue
+            path = base / ((names or {}).get(number) or f"{number:02d} {title}.flac")
+            shutil.copyfile(builders.FIXTURES / "tone.flac", path)
+            fields = {"title": [title], "artist": [self.ARTIST], "album": [self.ALBUM], "date": ["2014"]}
+            if release_id:
+                fields["release id"] = [release_id]
+            tagged = (numbers or {}).get(number, number)
+            builders.write_tags(path, builders.picard_tags(
+                "flac", fields, track=(tagged, len(titles)) if tag_numbers else None,
+                disc=(1, 1) if tag_numbers else None))
+        for name in unreadable:
+            (base / name).write_bytes(TRUNCATED)
+        shutil.copyfile(builders.FIXTURES / "cover.jpg", base / "cover.jpg")
+        return base
+
+    def entry(self, catalogue, *, decision: dict | None = None, **flags) -> dict:
+        """The album's `plan_entry` against `catalogue`, the flags passed as given."""
+        from musiclib.batch.identify import clients, plan_entry
+        from musiclib.batch.job import Job
+        from musiclib.units import units
+
+        [unit] = units(self.root)
+        built = clients(Job(self.job), transport=self.Searching(catalogue), env={}, which=lambda _name: None)
+        entry, _plan = plan_entry(unit, self.root, built, {}, decision, False, env={},
+                                  which=lambda _name: None, **flags)
+        return entry
+
+    @staticmethod
+    def missing(entry: dict) -> list[str]:
+        return [hold["detail"] for hold in entry["holds"] if hold["kind"] == "missing"]
+
+    def v(self, number: int = 1, titles: list[str] = V_TITLES, title: str = "V") -> tuple[dict, dict]:
+        return release(number, self.ARTIST, title, titles)
+
+    def test_a_truncated_track_is_left_out_and_the_album_is_planned_from_its_other_13_files(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertNotIn("unidentified: unreadable files", [h["detail"] for h in entry["holds"]])
+        self.assertEqual([c["release_id"] for c in entry["candidates"]], [v[0]["id"]])
+        self.assertEqual(entry["release_id"], v[0]["id"])
+        # Each file on its own track: the fourth file is track 4, not the gap at 3.
+        expected = {f"{self.KEY}/{n:02d} {title}.flac": f"1-{n}"
+                    for n, title in enumerate(V_TITLES, start=1) if n != 3}
+        self.assertEqual({f["source"]: f["position"] for f in entry["files"]}, expected)
+
+    def test_a_truncated_track_whose_number_fits_the_gap_is_named_as_the_missing_track(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertEqual(entry["holds"].count(
+            {"kind": "missing",
+             "detail": 'track 3, "It Was Always You": 03 It Was Always You.mp3 could be it, but it cannot be read'}), 1)
+        self.assertEqual(len(self.missing(entry)), 1, entry["holds"])
+
+    def test_the_gap_is_found_from_track_number_tags_before_filenames(self):
+        # Files renamed 01 to 13 in order, tags still 1, 2, 4 to 14: by name
+        # the gap would be track 14. The unreadable file has no number, so
+        # nothing on disk "could be it".
+        v = self.v()
+        names = {n: f"{(n if n < 3 else n - 1):02d} {title}.flac" for n, title in enumerate(V_TITLES, start=1)}
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["It Was Always You.mp3"], names=names)
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertEqual(self.missing(entry), ['track 3, "It Was Always You"'])
+
+    def test_with_no_track_number_tags_the_gap_is_found_from_filenames(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"],
+                 tag_numbers=False)
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertEqual(self.missing(entry), [
+            'track 3, "It Was Always You": 03 It Was Always You.mp3 could be it, but it cannot be read'])
+
+    def test_the_missing_hold_stays_when_the_owner_accepts_the_top_release(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([v], decision={"action": "accept", "release_id": v[0]["id"]}, drop_unreadable=True)
+
+        self.assertEqual(entry["decision"], "accept")
+        self.assertEqual(self.missing(entry), [
+            'track 3, "It Was Always You": 03 It Was Always You.mp3 could be it, but it cannot be read'])
+
+    def test_the_missing_hold_stays_under_an_accept_of_another_release_and_names_its_track(self):
+        # The accepted release is what the album would be written as, so its
+        # third track names the gap. Release 1 sorts first, so it is the top
+        # candidate until the owner picks release 2.
+        v = self.v()
+        deluxe_titles = V_TITLES[:2] + ["Its Always You (Deluxe)"] + V_TITLES[3:]
+        deluxe = self.v(2, deluxe_titles, "V (Deluxe)")
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([v, deluxe], decision={"action": "accept", "release_id": deluxe[0]["id"]},
+                           drop_unreadable=True)
+
+        self.assertEqual(entry["decision"], "accept")
+        self.assertEqual(self.missing(entry), [
+            'track 3, "Its Always You (Deluxe)": 03 It Was Always You.mp3 could be it, but it cannot be read'])
+
+    def test_two_unreadable_files_against_a_release_one_track_longer_each_get_the_fallback_line(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3},
+                 unreadable=["03 It Was Always You.mp3", "15 Hidden Track.mp3"])
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertCountEqual(self.missing(entry), [
+            "a track is missing: 03 It Was Always You.mp3 cannot be read",
+            "a track is missing: 15 Hidden Track.mp3 cannot be read",
+        ])
+
+    def test_a_position_claimed_twice_gives_the_fallback_line_even_when_the_counts_fit(self):
+        # Track 5's file is tagged 4, so 3 and 5 are both unclaimed and the
+        # one unreadable file could be either.
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"], numbers={5: 4})
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertEqual(self.missing(entry), ["a track is missing: 03 It Was Always You.mp3 cannot be read"])
+
+    def test_with_no_release_found_each_unreadable_file_gets_the_fallback_line(self):
+        self.rip(V_TITLES, None, leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([], drop_unreadable=True)
+
+        self.assertEqual(entry["candidates"], [])
+        self.assertEqual(self.missing(entry), ["a track is missing: 03 It Was Always You.mp3 cannot be read"])
+
+    def test_an_unreadable_file_in_a_subfolder_is_named_by_its_path_in_the_album(self):
+        # Where the album holds no release to name the track from, the file
+        # still has to be found on disk: its path from the album folder.
+        base = self.rip(V_TITLES, None, leave_out={3})
+        (base / "Extras").mkdir()
+        (base / "Extras" / "03 It Was Always You.mp3").write_bytes(TRUNCATED)
+
+        entry = self.entry([], drop_unreadable=True)
+
+        self.assertEqual(self.missing(entry), ["a track is missing: Extras/03 It Was Always You.mp3 cannot be read"])
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root lists a folder whatever its mode")
+    def test_a_subfolder_that_cannot_be_listed_holds_the_album_and_the_rest_is_still_planned(self):
+        v = self.v()
+        base = self.rip(V_TITLES, v[0]["id"])
+        scans = base / "Scans"
+        scans.mkdir()
+        shutil.copyfile(builders.FIXTURES / "cover.jpg", scans / "back.jpg")
+        os.chmod(scans, 0)
+        # Registered after the temp directory's cleanup, so it runs first and
+        # the directory can be removed.
+        self.addCleanup(os.chmod, scans, 0o755)
+
+        entry = self.entry([v], drop_unreadable=True)
+
+        self.assertEqual(self.missing(entry), ["tracks may be missing: Scans cannot be read"])
+        self.assertEqual(entry["release_id"], v[0]["id"])
+        self.assertEqual(len(entry["files"]), 14)
+
+    def test_without_the_flag_an_album_with_an_unreadable_file_is_unidentified_and_planned_no_further(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        entry = self.entry([v])
+
+        self.assertEqual(entry["status"], "unidentified")
+        self.assertEqual(entry["holds"], [{"kind": "status", "detail": "unidentified: unreadable files"}])
+        self.assertEqual((entry["candidates"], entry["files"], entry["release_id"]), ([], [], None))
+
+    def test_batch_identify_without_the_flag_still_reports_unreadable_files(self):
+        v = self.v()
+        self.rip(V_TITLES, v[0]["id"], leave_out={3}, unreadable=["03 It Was Always You.mp3"])
+
+        code, _out, err = run_identify(self.root, self.job, self.memory, self.Searching([v]))
+
+        self.assertEqual(code, 0, err)
+        [entry] = self.plan_doc()["albums"]
+        self.assertEqual(entry["holds"], [{"kind": "status", "detail": "unidentified: unreadable files"}])
+
+    def test_the_cli_passes_drop_unreadable_through_to_each_album(self):
+        # Files that disagree on the album tag stop identify before any
+        # request, so the real transport the CLI builds is never called. The
+        # missing hold in plan.json is the flag arriving at the album.
+        base = self.rip(["One", "Two"], None, unreadable=["03 Three.mp3"])
+        builders.write_tags(base / "02 Two.flac", {"ALBUM": ["Something Else"]})
+
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            try:
+                code = main(["batch", "identify", str(self.root), "--job", str(self.job), "--drop-unreadable"])
+            except SystemExit as exc:
+                # argparse refusing the flag; its message is in `err`.
+                code = exc.code
+
+        self.assertEqual(code, 0, err.getvalue())
+        [entry] = self.plan_doc()["albums"]
+        self.assertEqual([h for h in entry["holds"] if h["kind"] == "missing"],
+                         [{"kind": "missing", "detail": "a track is missing: 03 Three.mp3 cannot be read"}])
+
+
+
+class StraysArchive(Services):
+    """`Services`, with a Cover Art Archive that has `art` for every release: `(types, bytes)` per image, in order."""
+
+    def __init__(self, catalogue: list[tuple[dict, dict]], art: list[tuple[list[str], bytes]]) -> None:
+        super().__init__(catalogue)
+        self.art = art
+
+    def __call__(self, url, headers):
+        parts = urlsplit(url)
+        if parts.netloc == "coverartarchive.org":
+            self.answered.append(url)
+            path = parts.path.rstrip("/")
+            for found in self.releases.values():
+                base = f"/release/{found['id']}"
+                if path == base:
+                    listing = [{"id": n, "types": types, "front": "Front" in types, "back": "Back" in types,
+                                "image": f"https://coverartarchive.org{base}/{n}.jpg", "thumbnails": {}}
+                               for n, (types, _data) in enumerate(self.art, 1)]
+                    return 200, json.dumps({"images": listing}).encode()
+                for n, (_types, data) in enumerate(self.art, 1):
+                    if path == f"{base}/{n}.jpg":
+                        return 200, data
+            return 404, b"Not Found"
+        return super().__call__(url, headers)
+
+
+class Strays(unittest.TestCase):
+    """The owner's answers for strays, planned by identify and rebuilt by apply.
+
+    The album is `tests.test_batch_apply.Library`'s, so identify, the
+    decision and apply run the way a round does. Its strays:
+
+    - `COVERS/first-back.jpg`, which agitha guesses as `back.jpg`;
+    - `COVERS/IMG_0001.jpg`, which has no guess, so it holds the album with
+      `subfolder: COVERS` until the owner names it;
+    - `Extras/info.txt`, which keeps its own name.
+
+    Every image has its own pixel size, so no two are copies of each other.
+    """
+
+    KEY = "A/Alpha/First [rip]"
+    BACK = "COVERS/first-back.jpg"
+    UNNAMED = "COVERS/IMG_0001.jpg"
+    INFO = "Extras/info.txt"
+
+    def setUp(self):
+        # Imported here: `tests.test_batch_apply` imports this module at its top.
+        from tests.test_batch_apply import Library
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        no_throttle(self)
+        self.lib = Library(Path(tmp.name))
+        self.base = self.lib.add(self.KEY, 1)
+        self.bytes = {self.BACK: builders.jpeg(700, 600), self.UNNAMED: builders.jpeg(640, 480),
+                      self.INFO: b"ripped by me"}
+
+    def strays(self, *paths: str) -> None:
+        for rel in paths:
+            (self.base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.base / rel).write_bytes(self.bytes[rel])
+
+    def accept(self, answers: dict) -> dict:
+        """Identify, then an accept of the album's own release carrying `answers`, folded in by identify again."""
+        self.lib.identify()
+        self.lib.decide({self.KEY: {**self.lib.accept(self.KEY), "strays": answers}})
+        return self.lib.entries()[self.KEY]
+
+    def destination(self) -> Path:
+        return self.lib.root / self.lib.entries()[self.KEY]["destination"]
+
+    def assertRefusedAsChanged(self) -> None:
+        before = builders.tree(self.lib.root)
+        code, _out, err = self.lib.apply()
+        self.assertEqual(code, 1, err)
+        self.assertIn(f"{self.KEY}: its plan has changed since identify; refused", err.splitlines())
+        self.assertEqual(self.lib.log(), [])
+        self.assertEqual(builders.tree(self.lib.root), before)
+
+    def test_an_accepts_strays_replace_agithas_answers_in_the_entry_and_a_path_it_leaves_out_keeps_agithas(self):
+        self.strays(self.BACK, self.UNNAMED, self.INFO)
+
+        entry = self.accept({self.UNNAMED: "booklet-01.jpg", self.BACK: None})
+
+        rows = {row["path"]: row for row in entry.get("strays") or []}
+        self.assertEqual(rows, {
+            self.BACK: {"path": self.BACK, "kind": "image", "answer": {"delete": True}, "why": "owner",
+                        "against": None, "size": [700, 600]},
+            self.UNNAMED: {"path": self.UNNAMED, "kind": "image", "answer": {"keep": "booklet-01.jpg"},
+                           "why": "owner", "against": None, "size": [640, 480]},
+            self.INFO: {"path": self.INFO, "kind": "text", "answer": {"keep": "info.txt"}, "why": "guessed",
+                        "against": None, "size": None},
+        })
+
+    def test_an_accepts_named_stray_is_a_move_into_the_album_folder_and_its_null_stray_a_deletion(self):
+        self.strays(self.BACK, self.UNNAMED)
+
+        entry = self.accept({self.UNNAMED: "booklet-01.jpg", self.BACK: None})
+
+        self.assertIn(f"move: {self.KEY}/{self.UNNAMED} -> {entry['destination']}/booklet-01.jpg", entry["changes"])
+        self.assertIn(f"delete: {self.KEY}/{self.BACK}", entry["changes"])
+        # Nothing is left in COVERS, so nothing holds the album.
+        self.assertEqual(entry["holds"], [])
+
+    def test_an_album_whose_strays_all_have_a_guess_is_planned_with_no_subfolder_hold(self):
+        self.strays(self.BACK, self.INFO)
+
+        self.lib.identify()
+
+        entry = self.lib.entries()[self.KEY]
+        # The control: both strays are in the plan, moved, so the missing hold is not for want of a subfolder.
+        self.assertIn(f"move: {self.KEY}/{self.BACK} -> {entry['destination']}/back.jpg", entry["changes"])
+        self.assertIn(f"move: {self.KEY}/{self.INFO} -> {entry['destination']}/info.txt", entry["changes"])
+        self.assertEqual(entry["holds"], [])
+        self.assertEqual(entry["state"], "auto")
+
+    def test_apply_rebuilds_an_accept_with_strays_to_the_same_digest_and_lands_them_under_the_owners_names(self):
+        self.strays(self.BACK, self.UNNAMED, self.INFO)
+        self.accept({self.UNNAMED: "booklet-01.jpg", self.BACK: None})
+
+        code, _out, err = self.lib.apply()
+
+        self.assertEqual(code, 0, err)
+        destination = self.destination()
+        self.assertEqual((destination / "booklet-01.jpg").read_bytes(), self.bytes[self.UNNAMED])
+        self.assertEqual((destination / "info.txt").read_bytes(), self.bytes[self.INFO])
+        self.assertFalse((destination / "back.jpg").exists(), "the stray the owner deleted was kept")
+        self.assertFalse((self.base / "COVERS").exists(), "COVERS is still in the rip")
+
+    def test_a_stray_that_beats_the_archives_image_is_rebuilt_from_the_warm_cache_to_the_same_digest(self):
+        # The quality test reads the archive's pixel sizes, so apply has to
+        # read the same bytes identify did. The stray has
+        # more than 10 % more pixels than the archive's back, so it wins.
+        archive_back = builders.jpeg(500, 500)
+        self.strays(self.BACK)
+        services = StraysArchive(self.lib.catalogue, [(["Back"], archive_back)])
+        run_identify(self.lib.root, self.lib.job, self.lib.memory, services)
+        entry = self.lib.entries()[self.KEY]
+        self.assertEqual(entry["state"], "auto", entry["holds"])
+        # The control: the archive's back was fetched and not saved, so the quality test ran against it.
+        self.assertTrue(any(url.endswith("/1.jpg") for url in services.answered), services.answered)
+        self.assertNotIn("back.jpg", entry["images"])
+
+        code, _out, err = self.lib.apply()
+
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.destination() / "back.jpg").read_bytes(), self.bytes[self.BACK])
+
+    def test_apply_refuses_the_album_as_changed_when_a_stray_the_owner_named_has_other_bytes(self):
+        self.strays(self.BACK, self.UNNAMED)
+        self.accept({self.UNNAMED: "booklet-01.jpg"})
+        # Bytes after the JPEG's end: the same picture at the same size, so
+        # only the bytes tell it from the file identify saw.
+        with open(self.base / self.UNNAMED, "ab") as handle:
+            handle.write(b"\0changed")
+
+        self.assertRefusedAsChanged()
+
+    def test_apply_refuses_the_album_as_changed_when_a_stray_kept_under_agithas_guess_has_other_bytes(self):
+        self.strays(self.BACK, self.INFO)
+        self.lib.identify()
+        self.assertEqual(self.lib.states(), {self.KEY: "auto"})
+        with open(self.base / self.BACK, "ab") as handle:
+            handle.write(b"\0changed")
+
+        self.assertRefusedAsChanged()
+
+    def test_apply_refuses_the_album_as_changed_when_a_kept_stray_is_gone(self):
+        self.strays(self.BACK, self.UNNAMED)
+        self.accept({self.UNNAMED: "booklet-01.jpg"})
+        (self.base / self.UNNAMED).unlink()
+
+        self.assertRefusedAsChanged()
 
 
 if __name__ == "__main__":

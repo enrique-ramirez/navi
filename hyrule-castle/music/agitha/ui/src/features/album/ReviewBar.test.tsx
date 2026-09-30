@@ -4,7 +4,7 @@ import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { albumQuery } from "@/domain/album/albumQuery";
-import type { AlbumState, AlbumView } from "@/shared/api/types";
+import type { AlbumState, AlbumView, Stray } from "@/shared/api/types";
 import { ALBUM_URL, albumView, DROP } from "@/test/albumView";
 import { type Call, fakeFetch } from "@/test/fakeFetch";
 import {
@@ -43,6 +43,49 @@ const notAccepted = (over: Partial<AlbumView> = {}) =>
 
 const accepted = (over: Partial<AlbumView> = {}) =>
 	albumView({ decision: { ...UNCHANGED, action: "accept" }, ...over });
+
+const OTHER = "6f1a2b3c-0000-4000-8000-000100000002";
+
+// Three strays with agitha's answers, so a case can tell a touched path from one left alone.
+const STRAYS: Stray[] = [
+	{
+		path: "Scans/back.jpg",
+		kind: "image",
+		answer: { keep: "back.jpg" },
+		why: "guessed",
+		against: null,
+		size: [1000, 1000],
+	},
+	{
+		path: "Artwork/obi.jpg",
+		kind: "image",
+		answer: null,
+		why: "no guess",
+		against: null,
+		size: [600, 1400],
+	},
+	{
+		path: "Booklet/notes.pdf",
+		kind: "pdf",
+		answer: { keep: "booklet.pdf" },
+		why: "guessed",
+		against: null,
+		size: null,
+	},
+];
+
+function withStrays(over: Partial<AlbumView> = {}) {
+	const view = accepted(over);
+	view.preview = { ...view.preview!, strays: STRAYS };
+	return view;
+}
+
+// What the album was accepted with, before this visit: one stray kept, one deleted.
+const ANSWERED = {
+	...UNCHANGED,
+	action: "accept",
+	strays: { "Artwork/obi.jpg": "obi.jpg", "Scans/back.jpg": null },
+} as const;
 
 // The server as the bar sees it: a sent decision queues identify, which answers
 // `queued`, then `identifying`, then `identified` with the decision recorded.
@@ -381,6 +424,180 @@ describe("ReviewBar", () => {
 			expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
 			expect(latest?.draft).toEqual(UNCHANGED);
 			expect(posts(fake.calls)).toEqual([]);
+		});
+
+		// The owner's answers for strays ride in the decision Save and a release change send.
+		describe("stray files", () => {
+			async function saved(
+				fake: { calls: Call[] },
+				user: ReturnType<typeof userEvent.setup>,
+			) {
+				await user.click(
+					screen.getByRole("button", { name: "Save & re-preview" }),
+				);
+				await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+				const [sent] = posts(fake.calls);
+				expect(pathOf(sent!)).toBe(`${ALBUM_URL}/decision`);
+				return JSON.parse(sent!.body);
+			}
+
+			it("sends the owner's answer for each stray touched, and nothing for the strays left alone", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				const user = userEvent.setup();
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				act(() => latest?.setStray("Artwork/obi.jpg", null));
+
+				expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+				// Booklet/notes.pdf was never touched, so agitha's answer for it stays agitha's.
+				expect(await saved(fake, user)).toEqual({
+					...UNCHANGED,
+					strays: {
+						"Artwork/obi.jpg": null,
+						"Scans/back.jpg": "front.jpg",
+					},
+				});
+			});
+
+			it("takes back one answer and sends the other", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				const user = userEvent.setup();
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				act(() => latest?.setStray("Artwork/obi.jpg", null));
+				act(() => latest?.setStray("Scans/back.jpg", undefined));
+
+				expect(await saved(fake, user)).toEqual({
+					...UNCHANGED,
+					strays: { "Artwork/obi.jpg": null },
+				});
+			});
+
+			it("leaves nothing unsaved once the only answer is taken back", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+				act(() => latest?.setStray("Scans/back.jpg", undefined));
+
+				expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+				expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+				expect(posts(fake.calls)).toEqual([]);
+			});
+
+			it("Delete all sends every stray it names as a deletion", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				const user = userEvent.setup();
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				act(() => latest?.deleteAllStrays(STRAYS.map((stray) => stray.path)));
+
+				expect(await saved(fake, user)).toEqual({
+					...UNCHANGED,
+					strays: {
+						"Artwork/obi.jpg": null,
+						"Booklet/notes.pdf": null,
+						"Scans/back.jpg": null,
+					},
+				});
+			});
+
+			it("Use agitha's names drops the answers the album was accepted with", async () => {
+				const fake = serve(withStrays({ decision: ANSWERED }));
+				restore = fake.restore;
+				const user = userEvent.setup();
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Booklet/notes.pdf", "liner.pdf"));
+				act(() => latest?.clearStrays());
+
+				expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+				const body = await saved(fake, user);
+				expect(body).toEqual(UNCHANGED);
+				expect(body).not.toHaveProperty("strays");
+			});
+
+			it("sends the answers sorted by path, whatever order they were given in", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				const user = userEvent.setup();
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				// Given in an order that differs from the sorted one, so an unsorted map shows.
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				act(() => latest?.setStray("Artwork/obi.jpg", "obi.jpg"));
+				act(() => latest?.setStray("Booklet/notes.pdf", "booklet.pdf"));
+
+				const body = await saved(fake, user);
+				expect(Object.keys(body.strays)).toEqual([
+					"Artwork/obi.jpg",
+					"Booklet/notes.pdf",
+					"Scans/back.jpg",
+				]);
+			});
+
+			it("leaves nothing unsaved when an accepted answer is taken back and given again", async () => {
+				const fake = serve(withStrays({ decision: ANSWERED }));
+				restore = fake.restore;
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				// Given again, the answer lands after the other path in the map, and the
+				// draft still equals what the album was accepted with.
+				act(() => latest?.setStray("Artwork/obi.jpg", undefined));
+				expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+				act(() => latest?.setStray("Artwork/obi.jpg", "obi.jpg"));
+
+				expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+				expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+				expect(posts(fake.calls)).toEqual([]);
+			});
+
+			it("sends another release with the owner's stray answers as soon as it is chosen", async () => {
+				const fake = serve(withStrays());
+				restore = fake.restore;
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setStray("Scans/back.jpg", "front.jpg"));
+				act(() => latest?.setCandidate(OTHER));
+
+				await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+				expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({
+					...UNCHANGED,
+					release_id: OTHER,
+					strays: { "Scans/back.jpg": "front.jpg" },
+				});
+			});
+
+			it("sends another release with the answers the album was accepted with", async () => {
+				const fake = serve(withStrays({ decision: ANSWERED }));
+				restore = fake.restore;
+				renderBar();
+
+				await screen.findByRole("button", { name: "Approve" });
+				act(() => latest?.setCandidate(OTHER));
+
+				await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+				expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({
+					...ANSWERED,
+					release_id: OTHER,
+				});
+			});
 		});
 	});
 

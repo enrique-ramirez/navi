@@ -77,7 +77,7 @@ def _preview(entry: dict[str, Any] | None) -> dict[str, Any]:
 
 
 #: Holds that stop Approve; the other kinds only inform.
-BLOCKING = ("decision", "error", "collision")
+BLOCKING = ("decision", "error", "collision", "missing")
 
 
 STALE = "the preview does not match the last decision; update the preview first"
@@ -105,7 +105,9 @@ def approvable(config: Config, drop: str, n: str, entry: dict[str, Any] | None) 
         return no("the preview has not been accepted yet", "not-accepted")
     if _decisions_changed(config, drop, n):
         return no(STALE, "not-accepted")
-    for hold in entry.get("holds", []):
+    # A missing track is named first: it is the one hold the owner cannot decide away.
+    holds = entry.get("holds", [])
+    for hold in sorted(holds, key=lambda h: h["kind"] != "missing"):
         if hold["kind"] in BLOCKING:
             detail = hold.get("detail")
             return no(f"held: {hold['kind']}: {detail}" if detail else f"held: {hold['kind']}", "held",

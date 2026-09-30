@@ -6,10 +6,12 @@ that lead to the same album, an unknown action, a repoint the engine's own
 (`not game music` from before reads as `soundtrack`), an `accept` with no
 `release_id`, an `accept` whose `edits` is not an object of objects of lists,
 an edit to a field the page never offers or at a position the album does
-not have, an owner `cover` that is not a relative path inside the job, or
-JSON that does not parse: any of these refuses the file entire, naming every
-offence found rather than only the first, so the owner does not re-export
-once per problem.
+not have, a `strays` answer for a path that is not a stray, a name the stray
+rules refuse or one that two strays or a kept file would share, an owner
+`cover` that is not a relative path inside the job, or JSON that does not
+parse: any of these refuses the file entire, naming every offence found
+rather than only the first, so the owner does not re-export once per
+problem.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import PurePosixPath
 
 from mutagen.id3 import Frames, PairedTextFrame, TextFrame
 
-from musiclib import files, mapping, tagwrite
+from musiclib import files, mapping, strays as strays_module, tagwrite
 from musiclib.batch import job as job_module
 from musiclib.batch.job import Job
 from musiclib.batch.memory import NOT_GAME_MUSIC
@@ -217,6 +219,8 @@ def read(job: Job) -> dict | None:
             entry = by_source.get(key) or by_source.get(follow_moves(key, applied)) or {}
             if game is not None and game not in _GAME_CHOICES:
                 offences.append(f"{key!r}: not a recognised game choice: {game!r}")
+            if decision.get("strays") is not None:
+                offences += [f"{key!r}: {offence}" for offence in strays_module.answer_offences(entry, decision["strays"])]
             edits = decision.get("edits")
             if edits is not None and not _is_edits_shape(edits):
                 offences.append(f"{key!r}: edits must be positions of fields of lists, not {edits!r}")

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from musiclib.files import AUDIO_EXTENSIONS
-from musiclib.units import DISC_FOLDER
+from musiclib.units import disc_marker_stem, disc_number
 
 from .drops import read_record
 
@@ -49,12 +49,22 @@ def _has_audio(folder: Path) -> bool:
     return any(p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS for p in folder.iterdir())
 
 
-def _is_disc_folder(folder: Path) -> bool:
-    return DISC_FOLDER.match(folder.name) is not None
+def _disc_subdirs(folder: Path) -> list[Path]:
+    """The subfolders of `folder` that are its discs.
+
+    A leading marker (`CD1`) always counts. Trailing markers (`Album [Disc 1]`)
+    count only when every one of them follows the same name, so the folders of
+    two albums under one artist folder are not read as discs of the artist.
+    """
+    subdirs = _subdirs(folder)
+    stems = {disc_marker_stem(d.name) for d in subdirs if disc_number(d.name) is not None} - {None}
+    trailing_agree = len(stems) <= 1
+    return [d for d in subdirs
+            if disc_number(d.name) is not None and (disc_marker_stem(d.name) is None or trailing_agree)]
 
 
 def _is_album(folder: Path) -> bool:
-    return _has_audio(folder) or any(_is_disc_folder(d) and _has_audio(d) for d in _subdirs(folder))
+    return _has_audio(folder) or any(_has_audio(d) for d in _disc_subdirs(folder))
 
 
 def _find(folder: Path) -> list[Path]:
@@ -62,8 +72,9 @@ def _find(folder: Path) -> list[Path]:
     if not _is_album(folder):
         return [a for d in _subdirs(folder) for a in _find(d)]
     found = [folder]
+    discs = _disc_subdirs(folder)
     for d in _subdirs(folder):
-        for inner in (_subdirs(d) if _is_disc_folder(d) else [d]):
+        for inner in (_subdirs(d) if d in discs else [d]):
             found.extend(_find(inner))
     return found
 

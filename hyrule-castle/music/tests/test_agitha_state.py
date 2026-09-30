@@ -539,5 +539,139 @@ class Server(unittest.TestCase):
         self.assertEqual(sorted(states), ["01", "02", "03", "04"])
 
 
+
+#: A hold `batch identify --drop-unreadable` writes for a track whose file cannot be read.
+#: It does not hold the word `missing`, so a refusal naming the kind is told from one quoting the detail.
+MISSING = {"kind": "missing",
+           "detail": 'track 2, "Two": 02 two.mp3 could be it, but it cannot be read'}
+
+#: Holds that inform and do not stop Approve on their own, in the words `batch identify` writes them.
+INFORMING = [{"kind": "validation", "detail": "file counts do not match"},
+             {"kind": "status", "detail": "review: 2 of 3 files"},
+             {"kind": "repointed", "detail": "6f1a2b3c-0000-4000-8000-000100000009"},
+             {"kind": "reopened", "detail": ""}]
+
+#: Holds that stop Approve on their own.
+STOPPING = [{"kind": "error", "detail": "owner/cover.png: not an image"},
+            {"kind": "decision", "detail": "accepted with problems"},
+            {"kind": "collision", "detail": "C/Clean Band/(2010) Clean Album is already in the library"}]
+
+#: The album `identified_with_a_truncated_track` stages: three tracks, the second cut off.
+TRUNCATED_NAME = "Short Album"
+TRUNCATED_TITLES = ["One", "Two", "Three"]
+TRUNCATED_FILE = "02 two.mp3"
+
+
+def identified_with_a_truncated_track(disk: Disk, n: str = "01", accept: bool = False) -> dict:
+    """Album `n` of `DROP` staged with its second MP3 cut off and identified as agitha asks, with `--drop-unreadable`.
+
+    The engine runs in the process over the fake MusicBrainz of
+    `tests.test_batch_identify`, whose search lists every release it holds:
+    a rip one file short does not match its own release ID's counts, so
+    identify searches. `accept` writes the owner's accept of that release
+    first, so the plan is made from it. Returns the release.
+    """
+    import io
+
+    from musiclib import mb
+    from musiclib.batch.identify import run
+    from musiclib.batch.job import Job
+    from tests import builders
+    from tests.test_batch_identify import TRUNCATED, Unreadable, release
+
+    found, group = release(81, "Short Band", TRUNCATED_NAME, TRUNCATED_TITLES)
+    if not (disk.inbox / DROP).exists():
+        disk.drop(items=[{"name": TRUNCATED_NAME, "kind": "folder", "files": []}])
+    album = disk.inbox / DROP / n / "drop" / "album" / TRUNCATED_NAME
+    album.mkdir(parents=True)
+    for number, title in enumerate(TRUNCATED_TITLES, start=1):
+        path = album / f"{number:02d} {title.lower()}.mp3"
+        if path.name == TRUNCATED_FILE:
+            path.write_bytes(TRUNCATED)
+            continue
+        shutil.copyfile(builders.FIXTURES / "tone.mp3", path)
+        fields = {"title": [title.lower()], "artist": ["Short Band"], "album": [TRUNCATED_NAME], "date": ["1989"],
+                  "release id": [found["id"]]}
+        builders.write_tags(path, builders.picard_tags("mp3", fields, track=(number, len(TRUNCATED_TITLES)),
+                                                       disc=(1, 1)), v2_version=4)
+    shutil.copyfile(builders.FIXTURES / "cover.jpg", album / "cover.jpg")
+
+    job = disk.jobs / f"agitha-{DROP}-{n}"
+
+    def identify() -> None:
+        err = io.StringIO()
+        with mock.patch.object(mb, "_MIN_INTERVAL", 0.0):
+            code = run(disk.inbox / DROP / n, Job(job), disk.jobs / "agitha-memory.json",
+                       transport=Unreadable.Searching([(found, group)]), env={}, which=lambda _name: None,
+                       out=io.StringIO(), err=err, drop_unreadable=True)
+        if code:
+            raise AssertionError(f"identify exited {code}: {err.getvalue()}")
+
+    identify()
+    if accept:
+        # A decision names an album the job has already planned, so it comes second, as the page's Accept does.
+        decisions = {"job": job.name, "albums": {f"drop/album/{TRUNCATED_NAME}": {
+            "action": "accept", "release_id": found["id"], "edits": {}}}}
+        (job / "decisions.json").write_text(json.dumps(decisions), encoding="utf-8")
+        identify()
+    return found
+
+
+class MissingBlocksApprove(unittest.TestCase):
+    """An album with a `missing` hold is never approvable, whatever else it holds."""
+
+    def setUp(self) -> None:
+        self.config = Disk(self).config()
+
+    def approvable(self, *holds: dict) -> dict:
+        # Accepted, with a destination and a plan made from that decision:
+        # nothing but the holds stands between it and Approve.
+        entry = {"decision": "accept", "release_id": "6f1a2b3c-0000-4000-8000-000100000001",
+                 "destination": DESTINATION, "holds": list(holds)}
+        return state.approvable(self.config, DROP, "01", entry)
+
+    def assertRefusedFor(self, offered: dict, hold: dict) -> None:
+        self.assertIs(offered["ok"], False, offered)
+        self.assertEqual(offered["code"], "held", offered)
+        self.assertEqual(offered["hold"], hold, offered)
+        # The review bar shows this sentence: it names the hold and says which track.
+        self.assertIn(hold["kind"], offered["reason"])
+        self.assertIn(hold["detail"], offered["reason"])
+
+    def test_a_missing_hold_alone_refuses_approve_and_the_refusal_names_it(self) -> None:
+        self.assertRefusedFor(self.approvable(MISSING), MISSING)
+
+    def test_a_missing_hold_refuses_approve_after_holds_that_only_inform(self) -> None:
+        # Listed first, each of these would be skipped by a refusal that only
+        # looks at the first hold, or at a fixed list of kinds it knew of before.
+        for informing in INFORMING:
+            with self.subTest(before=informing["kind"]):
+                self.assertRefusedFor(self.approvable(informing, MISSING), MISSING)
+        self.assertRefusedFor(self.approvable(*INFORMING, MISSING), MISSING)
+
+    def test_the_refusal_names_the_missing_hold_over_another_blocking_hold_listed_before_it(self) -> None:
+        # "Refused with that hold, whatever else the album holds": the page puts
+        # `missing` above every other hold, and the refusal agrees with it.
+        # `batch identify` writes an `error` hold before the `missing` ones.
+        for stopping in STOPPING:
+            with self.subTest(before=stopping["kind"]):
+                self.assertRefusedFor(self.approvable(stopping, MISSING), MISSING)
+
+    def test_an_accepted_album_identified_with_a_truncated_track_is_refused_on_its_missing_hold(self) -> None:
+        # The plan `batch identify --drop-unreadable` writes, not one made by
+        # hand: the album is accepted and planned, and only the hold stops it.
+        disk = Disk(self)
+        found = identified_with_a_truncated_track(disk, accept=True)
+        entry = state.plan_entry(disk.config(), DROP, "01")
+        self.assertEqual((entry["decision"], entry["release_id"]), ("accept", found["id"]))
+        self.assertTrue(entry["destination"], entry)
+        held = [hold for hold in entry["holds"] if hold["kind"] == "missing"]
+        self.assertEqual(len(held), 1, entry["holds"])
+
+        self.assertRefusedFor(state.approvable(disk.config(), DROP, "01", entry), held[0])
+        listed = album(disk.read(), "01")
+        self.assertNotIn("approve", listed["actions"])
+
+
 if __name__ == "__main__":
     unittest.main()

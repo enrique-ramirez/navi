@@ -33,13 +33,13 @@ def _is_skipped(image: dict) -> bool:
     return any(t in _SKIP_TYPES for t in image.get("types", []))
 
 
-def _type_base(type_name: str) -> str:
+def type_base(type_name: str) -> str:
     return type_name.lower().replace("/", "-")
 
 
 def _base_name(image: dict) -> str:
     types = image.get("types", [])
-    return _type_base(types[0]) if types else "other"
+    return type_base(types[0]) if types else "other"
 
 
 def _is_jpeg(data: bytes) -> bool:
@@ -62,8 +62,8 @@ def as_jpeg(data: bytes) -> bytes:
         return out.getvalue()
 
 
-_LOCAL_STEMS = ("cover", "front", "folder", "album", "art")
-_LOCAL_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+LOCAL_STEMS = ("cover", "front", "folder", "album", "art")
+LOCAL_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def local_covers(folder: Path) -> list[tuple[str, bytes]]:
@@ -71,8 +71,8 @@ def local_covers(folder: Path) -> list[tuple[str, bytes]]:
     found = []
     for path in folder.iterdir():
         stem = path.stem.casefold()
-        if path.is_file() and stem in _LOCAL_STEMS and path.suffix.casefold() in _LOCAL_SUFFIXES:
-            found.append((_LOCAL_STEMS.index(stem), path.name.casefold(), path.name, path))
+        if path.is_file() and stem in LOCAL_STEMS and path.suffix.casefold() in LOCAL_SUFFIXES:
+            found.append((LOCAL_STEMS.index(stem), path.name.casefold(), path.name, path))
     return [(name, path.read_bytes()) for _rank, _key, name, path in sorted(found, key=lambda f: f[:3])]
 
 
@@ -94,7 +94,7 @@ def passes(width: int, height: int, types: Sequence[str] | None = None) -> bool:
     return _failures(width, height, types) == 0
 
 
-def _size(data: bytes) -> tuple[int, int]:
+def pixel_size(data: bytes) -> tuple[int, int]:
     with Image.open(io.BytesIO(data)) as image:
         return image.size
 
@@ -112,13 +112,27 @@ def cover_check(data: bytes) -> tuple[int, int, bool, str | None]:
 
     Raises `OSError` where `data` is not an image.
     """
-    width, height = _size(data)
+    width, height = pixel_size(data)
     problems = []
     if not (10 * width >= 9 * height and 10 * width <= 11 * height):
         problems.append("its width and height differ by more than 10 %")
     if min(width, height) < 500:
         problems.append("its shorter side is under 500 px")
     return width, height, not problems, ("The cover is " + " and ".join(problems) + ".") if problems else None
+
+
+def thumbnail_jpeg(data: bytes, longest: int = 320) -> bytes | None:
+    """`data` as a JPEG of at most `longest` px on its long side, or None where Pillow cannot read it."""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            # Lets a JPEG decode at a reduced size; other formats ignore it.
+            image.draft("RGB", (longest, longest))
+            image.thumbnail((longest, longest))
+            out = io.BytesIO()
+            image.convert("RGB").save(out, "JPEG")
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+        return None
+    return out.getvalue()
 
 
 def average_hash(data: bytes) -> int:
@@ -137,9 +151,9 @@ def hash_distance(a: int, b: int) -> int:
 #: The archive types whose images the *Images* rule names by type, apart from
 #: `Front`, which a rip's own scan may carry and which is never a copy to delete.
 #: `other` is `_base_name`'s fallback for an image with no type.
-_ARCHIVE_TYPES = ("Back", "Booklet", "Medium", "Obi", "Spine", "Track", "Tray", "Sticker", "Poster", "Liner",
-                  "Matrix/Runout", "Top", "Bottom", "Other")
-_ARCHIVE_BASES = "|".join(re.escape(_type_base(t)) for t in _ARCHIVE_TYPES)
+ARCHIVE_TYPES = ("Back", "Booklet", "Medium", "Obi", "Spine", "Track", "Tray", "Sticker", "Poster", "Liner",
+                 "Matrix/Runout", "Top", "Bottom", "Other")
+_ARCHIVE_BASES = "|".join(re.escape(type_base(t)) for t in ARCHIVE_TYPES)
 _ARCHIVE_NAME = re.compile(rf"(?:(?:{_ARCHIVE_BASES})(?:-\d+)?\.jpg|booklet(?:-\d+)?\.pdf)", re.IGNORECASE)
 
 
@@ -175,14 +189,14 @@ def _local_over_archive(
     passes or keeps the cover.
     """
     types = front.get("types", [])
-    archive_size = _size(archive_cover)
+    archive_size = pixel_size(archive_cover)
     if passes(*archive_size, types):
         return None, []
-    passing = next((c for c in candidates if passes(*_size(c[1]))), None)
+    passing = next((c for c in candidates if passes(*pixel_size(c[1]))), None)
     if passing is not None:
         return passing, []
     mine = candidates[0]
-    mine_size = _size(mine[1])
+    mine_size = pixel_size(mine[1])
     mine_key = (_failures(*mine_size, None), -min(mine_size))
     archive_key = (_failures(*archive_size, types), -min(archive_size))
     hold = (f"cover: neither passes: {front['image']} ({archive_size[0]} by {archive_size[1]}), "
@@ -297,7 +311,7 @@ def plan_images(
         if cover is not None and candidates:
             chosen, holds = _local_over_archive(front, cover, candidates)
     elif candidates:
-        chosen = next((c for c in candidates if passes(*_size(c[1]))), candidates[0])
+        chosen = next((c for c in candidates if passes(*pixel_size(c[1]))), candidates[0])
     elif owner_cover is None:
         problems.append(
             "no front cover: not in the Cover Art Archive for the release or its release group, "

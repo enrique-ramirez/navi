@@ -186,8 +186,8 @@ def _disc(tags: dict[str, list[str]], family: str, rel: PurePosixPath) -> int | 
         return tagged
     if len(rel.parts) < 2:
         return 1
-    folder = units.DISC_FOLDER.match(rel.parts[0])
-    return int(folder.group(1)) if folder else rel.parts[0]
+    folder = units.disc_number(rel.parts[0])
+    return folder if folder is not None else rel.parts[0]
 
 
 def _read(path: Path, folder: Path) -> _Track | None:

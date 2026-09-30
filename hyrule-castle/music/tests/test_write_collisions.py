@@ -81,6 +81,46 @@ class Collisions(_Album):
         self.assert_refused_naming(plan, f"{DESTINATION}/notes.txt", f"{DESTINATION}/NOTES.txt")
 
 
+class MovedStrayCollisions(_Album):
+    """A stray's new name is a destination like any other."""
+
+    def setUp(self):
+        super().setUp()
+        self.base = self.root.parent
+
+    def arrange(self, case: str) -> None:
+        """A fresh library for `case`, so a write one case lets through cannot spoil the next."""
+        self.root = self.base / case / "library"
+        self.extras = self.base / case / "extras"
+        self.album = builders.library_album(self.root, discs=(TITLES,))
+        for path in ("COVERS/tracklist.txt", "COVERS/Notes.txt", "COVERS/back side.jpg", "Scans/Back.jpg"):
+            (self.album / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.album / path).write_bytes(f"the bytes of {path}".encode())
+
+    def tracks(self, folder: str) -> list:
+        return [self.track(n, f"{n:02d}. {t}.flac", t, folder=folder) for n, t in enumerate(TITLES, start=1)]
+
+    def test_a_stray_named_like_a_track_or_a_kept_file_leaves_the_album_untouched_and_names_both(self):
+        cases = {
+            "a track, the album moving": (DESTINATION, [], {"COVERS/tracklist.txt": "01. SOMEWHAT DAMAGED.flac"},
+                                         "01. SOMEWHAT DAMAGED.flac", "01. Somewhat Damaged.flac"),
+            "a kept file, the album moving": (DESTINATION, ["notes.txt"], {"COVERS/Notes.txt": "NOTES.txt"},
+                                              "NOTES.txt", "notes.txt"),
+            "a kept file, the album staying": (ALBUM, ["notes.txt"], {"COVERS/Notes.txt": "NOTES.txt"},
+                                               "NOTES.txt", "notes.txt"),
+            "another stray": (DESTINATION, [], {"COVERS/back side.jpg": "back.jpg", "Scans/Back.jpg": "Back.jpg"},
+                              "Back.jpg", "back.jpg"),
+        }
+        for case, (folder, kept, moved, first, second) in cases.items():
+            with self.subTest(case):
+                self.arrange(case)
+                plan = builders.album_plan(
+                    self.root, ALBUM, folder, self.tracks(folder),
+                    kept=[f"{ALBUM}/{name}" for name in kept],
+                    moved={f"{ALBUM}/{path}": name for path, name in moved.items()})
+                self.assert_refused_naming(plan, f"{folder}/{first}", f"{folder}/{second}")
+
+
 class NotCollisions(_Album):
     def test_a_case_only_rename_in_place_is_written(self):
         # The file's old name matches its new one without regard to case, but

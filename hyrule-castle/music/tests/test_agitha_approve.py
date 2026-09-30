@@ -271,6 +271,11 @@ class NotApprovable(ApproveCase):
         self.assertEqual((offered["ok"], offered["code"]), (False, "held"))
         # The fixture's validation holds come first; the one that blocks is named.
         self.assertEqual(offered["hold"]["kind"], "decision")
+        # The blocking hold names the validation problem itself, not just that there is one.
+        problems = [hold["detail"] for hold in entry["holds"] if hold["kind"] == "validation"]
+        self.assertTrue(problems)
+        for problem in problems:
+            self.assertIn(problem, offered["hold"]["detail"])
 
         status, body = self.approve("01")
         self.assertEqual(status, 409, body)

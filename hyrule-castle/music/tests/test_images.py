@@ -19,7 +19,7 @@ import struct
 import tempfile
 import unittest
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 from mutagen.flac import FLAC, Picture
@@ -620,7 +620,10 @@ class TheFrontFallsBack(_FrontPlanning):
                 self.assertEqual(list(plan.problems), [])
 
     def test_a_name_or_extension_off_the_list_or_a_file_in_a_subfolder_is_not_a_cover(self) -> None:
-        for name in ("cover.gif", "cover.bmp", "covers.jpg", "front cover.jpg", "back.jpg", "scans/cover.jpg"):
+        # A name with a front word in it becomes `front.*` and then a cover
+        # (the case below), so the extra-word and subfolder cases here carry no
+        # front word: `Cover 1` is one of several covers, `covers` is plural.
+        for name in ("cover.gif", "cover.bmp", "covers.jpg", "cover 1.jpg", "back.jpg", "scans/covers.jpg"):
             with self.subTest(name):
                 plan = self.plan_rip({name: builders.jpeg(90, 90)})
                 # A plan refused before tagging (a unit `units` blocks) holds
@@ -628,6 +631,18 @@ class TheFrontFallsBack(_FrontPlanning):
                 self.assertTrue(plan.files, plan.problems)
                 self.assertNotIn("cover.jpg", plan.images)
                 self.assertIn(NO_FRONT, plan.problems)
+
+    def test_a_stray_whose_name_guesses_the_front_is_the_cover_and_stays_as_front_jpg(self) -> None:
+        # The one at the root and the one in a subfolder both land as
+        # `front.jpg`, copied to `cover.jpg`, never moved.
+        for name in ("front cover.jpg", "scans/cover.jpg"):
+            with self.subTest(name):
+                data = builders.jpeg(90, 90)
+                plan = self.plan_rip({name: data})
+                self.assertEqual(plan.images.get("cover.jpg"), data, plan.problems)
+                self.assertNotIn(NO_FRONT, plan.problems)
+                self.assertEqual(list(plan.moved.values()), ["front.jpg"])
+                self.assertNotIn(PurePosixPath(name).name, _names(plan.deletions))
 
 
 class ADownloadThatIsNotAnImage(_FrontPlanning):
@@ -1207,12 +1222,32 @@ class ImagesTheFolderAlreadyHas(_FrontPlanning):
         spine = png(64, 32, (0, 128, 0, 255))
         archives = dict(release_images=[RELEASE_FRONT, ("Spine", f"{ARCHIVE_BASE}/5.png", spine)])
         written = self.plan_rip({}, **archives).images["spine.jpg"]
-        for case, local, saved in (("the JPEG it becomes", {"spine scan.jpg": written}, False),
-                                   ("the PNG as downloaded", {"spine scan.png": spine}, True)):
+        # `art.*` is a name the folder already has for good: a root image
+        # with another name is a stray, and a stray is the copy
+        # where the folder's file is the original.
+        for case, local, saved in (("the JPEG it becomes", {"art.jpg": written}, False),
+                                   ("the PNG as downloaded", {"art.png": spine}, True)):
             with self.subTest(case):
                 plan = self.plan_rip(local, **archives)
                 self.assertEqual(list(plan.problems), [])
                 self.assertIs("spine.jpg" in plan.images, saved)
+
+    def test_a_stray_is_a_copy_of_an_archive_image_by_the_bytes_that_would_be_written(self) -> None:
+        # Over the same spine: the archive's image is saved and a stray equal
+        # to it as written is deleted as its copy. One equal to the PNG as
+        # downloaded is no copy, and loses the name on quality instead
+        # (equal pixels).
+        spine = png(64, 32, (0, 128, 0, 255))
+        archives = dict(release_images=[RELEASE_FRONT, ("Spine", f"{ARCHIVE_BASE}/5.png", spine)])
+        written = self.plan_rip({}, **archives).images["spine.jpg"]
+        for case, name, data, why in (("the JPEG it becomes", "spine scan.jpg", written, "copy"),
+                                      ("the PNG as downloaded", "spine scan.png", spine, "lost")):
+            with self.subTest(case):
+                plan = self.plan_rip({name: data}, **archives)
+                self.assertEqual(list(plan.problems), [])
+                self.assertEqual(plan.images.get("spine.jpg"), written)
+                self.assertIn(name, _names(plan.deletions))
+                self.assertEqual([(s.path, s.why, s.against) for s in plan.strays], [(name, why, "spine.jpg")])
 
     def test_a_pdf_equal_to_a_file_in_the_folder_or_to_one_saved_before_it_is_not_saved(self) -> None:
         cases = {
@@ -1268,16 +1303,26 @@ class AFileTooLargeToCompare(_FrontPlanning):
                                                                             shade(420, 600, 90))])
 
 
+def _landed(plan, local: list[str]) -> list[str]:
+    """The names the files of `local`, at the album folder's root, have once the plan is written."""
+    deleted, kept = _names(plan.deletions), _names(plan.kept)
+    moved = {PurePosixPath(source).name: name for source, name in plan.moved.items()}
+    return sorted(moved.get(name, name) for name in local
+                  if name not in deleted and (name in kept or name in moved))
+
+
 class CopiesAnEarlierJobSaved(_FrontPlanning):
     """A file with an archive image's name, equal to a file of the owner's, is deleted."""
 
     def test_an_archive_named_copy_of_an_owners_file_is_deleted_and_the_owners_file_kept(self) -> None:
         # What job `t1` left in Piano Collections KINGDOM HEARTS. The plan
         # writes none of these names itself: the archive has only a front.
-        # The PDFs are covered too.
-        for copy, owners, data in (("booklet-01.jpg", "inside1.jpg", shade(420, 600, 70)),
-                                   ("back.jpg", "tray card.jpg", shade(420, 600, 70)),
-                                   ("medium-2.jpg", "cd.jpg", shade(420, 600, 70)),
+        # The PDFs are covered too. The owner's images there were `inside1.jpg`
+        # and the like, which are strays (the case below), so the owner's
+        # files here take names that stay as they are.
+        for copy, owners, data in (("booklet-01.jpg", "folder.jpg", shade(420, 600, 70)),
+                                   ("back.jpg", "album.jpg", shade(420, 600, 70)),
+                                   ("medium-2.jpg", "art.jpg", shade(420, 600, 70)),
                                    ("booklet.pdf", "liner notes.pdf", PDF_1),
                                    ("booklet-2.pdf", "scan.pdf", PDF_2)):
             with self.subTest(copy):
@@ -1286,12 +1331,31 @@ class CopiesAnEarlierJobSaved(_FrontPlanning):
                 self.assertIn(owners, _names(plan.kept))
                 self.assertNotIn(owners, _names(plan.deletions))
 
+    def test_an_archive_named_copy_of_a_stray_leaves_the_image_in_the_folder_once_under_a_library_name(
+            self) -> None:
+        # The same leftovers with the owner's scans under their real names,
+        # which are strays. Whether the stray is the copy of the archive-named
+        # file or the other way round is not settled, so either name may be
+        # the one that stays. What must hold is that the image is neither lost
+        # nor kept twice.
+        for copy, owners, guess in (("booklet-01.jpg", "inside1.jpg", "booklet-01.jpg"),
+                                    ("back.jpg", "tray card.jpg", "tray.jpg"),
+                                    ("medium-2.jpg", "cd.jpg", "medium.jpg")):
+            with self.subTest(copy):
+                data = shade(420, 600, 70)
+                plan = self.plan_rip({copy: data, owners: data}, release_images=[RELEASE_FRONT])
+                self.assertEqual(list(plan.problems), [])
+                landed = _landed(plan, [copy, owners])
+                self.assertEqual(len(landed), 1, landed)
+                self.assertIn(landed[0], {copy, guess})
+
     def test_equal_files_are_left_alone_unless_one_has_an_archive_name_and_the_other_does_not(self) -> None:
         # `cover.jpg` is a name the Images rule gives, so a `back.jpg` equal to
-        # it has no owner's file to be a copy of.
+        # it has no owner's file to be a copy of. Two equal strays are not
+        # left alone: the later is a copy (`tests.test_strays`).
         data = shade(420, 600, 70)
         for local in ({"back.jpg": data, "booklet-01.jpg": data},
-                      {"inside1.jpg": data, "inside2.jpg": data},
+                      {"album.jpg": data, "art.jpg": data},
                       {"cover.jpg": data, "back.jpg": data}):
             with self.subTest(sorted(local)):
                 plan = self.plan_rip(local, release_images=[RELEASE_FRONT])
@@ -1321,7 +1385,8 @@ class CopiesInAnAlbumAnEditMoves(_FrontPlanning):
         # The archive has only a front, so no plan writes `booklet-01.jpg`
         # itself. A plan that did would delete the rip's one for moving,
         # copy or not, and the case would pass without the rule.
-        self.plan_rip({"booklet-01.jpg": data, "inside1.jpg": data}, release_images=[RELEASE_FRONT])
+        # `album.jpg` is the owner's under a name that is not a stray.
+        self.plan_rip({"booklet-01.jpg": data, "album.jpg": data}, release_images=[RELEASE_FRONT])
         root, unit, release = self.root, self.unit_, self.release
         clients = Clients(mb=self.client, caa=self.art, acoustid=None)
         memory = {"edits": {release["id"]: {position_key(p): {"album": ["Moved Record"]}
@@ -1335,8 +1400,8 @@ class CopiesInAnAlbumAnEditMoves(_FrontPlanning):
             with self.subTest(where):
                 self.assertEqual(destination, "C/Cure, The/(2010) Moved Record", "the edit did not move the album")
                 self.assertIn("booklet-01.jpg", _names(deletions))
-                self.assertIn("inside1.jpg", _names(kept))
-                self.assertNotIn("inside1.jpg", _names(deletions))
+                self.assertIn("album.jpg", _names(kept))
+                self.assertNotIn("album.jpg", _names(deletions))
 
 
 if __name__ == "__main__":

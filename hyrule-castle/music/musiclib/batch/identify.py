@@ -30,12 +30,13 @@ from musiclib.cache import Cache
 from musiclib.caa import CoverArt
 from musiclib.mb import MusicBrainz
 from musiclib.plan import Plan, changes as plan_changes, edition_fields, folder_artist_name, plan_album
-from musiclib.units import TrackPair, Unit, pair, position_key, units as list_units
+from musiclib.units import (TrackPair, Unit, counted_media, disc_number, filename_number,
+                            missing_positions, pair, pair_around, position_key, units as list_units)
 from musiclib.write import Collision, check_collisions
 
 #: The decision hold on an accept that left the soundtrack choice unmade.
 SOUNDTRACK_CHOICE_HOLD = "choose video game music, soundtrack or neither"
-ACCEPTED_WITH_PROBLEMS_HOLD = "accepted, but the validation problems listed stop it being written"
+ACCEPTED_WITH_PROBLEMS_HOLD = "accepted, but this stops it being written: {problems}"
 ACCEPTED_WITH_COLLISION_HOLD = "accepted, but another album in the drop would land in the same folder"
 
 #: The identification statuses `plan_entry` may build a plan for, at all: any
@@ -226,17 +227,65 @@ def _blank_entry(source: str, status: str) -> dict:
     }
 
 
-def _entry_pairs(unit: Unit, root: Path, release: dict, plan: Plan) -> tuple[list[TrackPair], dict[str, str]]:
-    """The pairs `plan_album` planned `plan.files` from, in the same order, and each file's tag family."""
+def _entry_pairs(unit: Unit, root: Path, release: dict, plan: Plan,
+                 gap: tuple[int, list[int]] | None = None) -> tuple[list[TrackPair], dict[str, str]]:
+    """The pairs `plan_album` planned `plan.files` from, in the same order, and each file's tag family.
+
+    `gap` is the missing tracks of an album planned without its unreadable files.
+    """
     family_by_source = {Path(t.path).relative_to(root).as_posix(): t.family for t in unit.tracks}
-    return (pair(unit, release) or [])[:len(plan.files)], family_by_source
+    pairs = pair_around(unit, release, gap) if gap is not None else pair(unit, release)
+    return (pairs or [])[:len(plan.files)], family_by_source
+
+
+#: `walk.album_contents` words an unlistable folder's reason this way; a file's reason never starts so.
+_FOLDER_REASON = "folder is unreadable"
+
+
+def _split_unreadable(unreadable: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    """`(unlistable folders, unreadable files)` as album-relative paths."""
+    folders = [rel for rel, reason in unreadable if reason.startswith(_FOLDER_REASON)]
+    file_rels = [rel for rel, reason in unreadable if not reason.startswith(_FOLDER_REASON)]
+    return folders, file_rels
+
+
+def _could_be_track(rel: str, number: int, disc: int) -> bool:
+    """Whether the unreadable file at `rel` may be track `number` of disc `disc`, by its name and disc folder."""
+    path = PurePosixPath(rel)
+    folder_disc = disc_number(path.parts[0]) if len(path.parts) == 2 else None
+    return filename_number(path.name) == number and folder_disc in (None, disc)
+
+
+def _missing_holds(unreadable: list[tuple[str, str]], release: dict | None,
+                   gap: tuple[int, list[int]] | None) -> list[dict]:
+    """The `missing` holds for what `--drop-unreadable` left out: one per missing track, one per unlistable folder.
+
+    Where `gap` tells which tracks are missing, each is named by its number
+    and title on `release`, with the unreadable file whose leading number
+    (and disc folder, if it has one) fits it. Otherwise each unreadable file
+    gets a line of its own.
+    """
+    folders, file_rels = _split_unreadable(unreadable)
+    details = []
+    if gap is not None and release is not None:
+        gap_medium, numbers = gap
+        medium = counted_media(release)[gap_medium]
+        for number in numbers:
+            detail = f'track {number}, "{medium.tracks[number - 1][1].get("title", "")}"'
+            fit = next((rel for rel in file_rels if _could_be_track(rel, number, gap_medium + 1)), None)
+            details.append(f"{detail}: {fit} could be it, but it cannot be read" if fit else detail)
+    else:
+        details = [f"a track is missing: {rel} cannot be read" for rel in file_rels]
+    details += [f"tracks may be missing: {rel} cannot be read" for rel in folders]
+    return [{"kind": "missing", "detail": detail} for detail in details]
 
 
 def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision: dict | None,
                reopened: bool, *, edition: str | None = None, env: Mapping[str, str] = os.environ,
                which: Callable[[str], str | None] = shutil.which,
                rejudge: Rejudge | None = None, job_path: Path | None = None,
-               composer: bool = True, added: str | None = None) -> tuple[dict, Plan | None]:
+               composer: bool = True, added: str | None = None,
+               drop_unreadable: bool = False) -> tuple[dict, Plan | None]:
     """One album's entry, and its `Plan` if it has one. Collision holds and `state` are not this function's to add.
 
     `decision` folds the owner's `decisions.json` answer for this album in:
@@ -245,7 +294,14 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     `owner_input` by release before the engine decides anything, and every
     edit - the memory's and the decision's - is laid over the plan before this entry is built from it.
     `added` is written as every file's `ADDED` and kept in `inputs` for apply.
+
+    `drop_unreadable` identifies and plans the album from the files that can
+    be read, and holds it with a `missing` hold for each track or folder left
+    out. Without it an unreadable file leaves the album `unidentified`.
     """
+    dropped = unit.unreadable if drop_unreadable else []
+    if dropped:
+        unit = dataclasses.replace(unit, unreadable=[])
     action = decision.get("action") if decision else None
     owner_input = {"soundtracks": dict(memory.get("soundtracks") or {}), "edits": dict(memory.get("edits") or {})}
     if action == "accept":
@@ -277,6 +333,8 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     local: list[tuple[str, bytes]] | None = _covers_of(original_folder) if found_original else None
     rejudge_cover = local[0][1] if local else None
     cover = _first_local_cover(unit) if local is None else rejudge_cover
+
+    owner_strays = dict(decision.get("strays") or {}) if action == "accept" else {}
 
     forced_choice = False
     rejudged = None
@@ -313,17 +371,26 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     top = identification.candidates[0] if identification.candidates else None
     entry["candidates"] = [_candidate_dict(c, owner_input) for c in identification.candidates]
 
+    gap = None
+    if dropped:
+        release = top.release if top is not None else None
+        if release is not None:
+            gap = missing_positions(unit, release, len(_split_unreadable(dropped)[1]))
+        entry["holds"] += _missing_holds(dropped, release, gap)
+
     plan: Plan | None = None
-    if identification.status in _PLANNABLE and top is not None and top.release is not None:
+    # A gap that can be told is planned whatever the status: the `missing` hold already keeps the album from being written.
+    if (identification.status in _PLANNABLE or gap is not None) and top is not None and top.release is not None:
         release = top.release
         created = rejudge.history.created(unit.rel) if rejudged is not None else []
         plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=owner_input,
                           incoming=None, status=identification.status,
-                          pairs=None if rejudged is not None else top.pairs, edition=edition,
+                          pairs=(pair_around(unit, release, gap) if gap is not None
+                                 else None if rejudged is not None else top.pairs), edition=edition,
                           local=local, created=created, owner_cover=owner_cover, composer=composer,
-                          chosen=forced_choice, added=added)
+                          chosen=forced_choice, added=added, strays=owner_strays)
 
-        pairs, family_by_source = _entry_pairs(unit, root, release, plan)
+        pairs, family_by_source = _entry_pairs(unit, root, release, plan, gap)
         positions = [position_key(p) for p in pairs]
         release_group = clients.mb.release_group(release["release-group"]["id"])
         memory_edits = memory_module.remembered_edits(
@@ -344,7 +411,8 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         if action == "accept" and plan.problems:
             # Kept so the page still shows why, even though the owner
             # already said yes.
-            entry["holds"].append({"kind": "decision", "detail": ACCEPTED_WITH_PROBLEMS_HOLD})
+            entry["holds"].append({"kind": "decision",
+                                   "detail": ACCEPTED_WITH_PROBLEMS_HOLD.format(problems="; ".join(plan.problems))})
 
         choice = owner_input["soundtracks"].get(top.release_id)
         entry["release_id"] = top.release_id
@@ -363,6 +431,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         entry["deletions"] = list(plan.deletions)
         entry["extras"] = list(plan.extras)
         entry["kept"] = list(plan.kept)
+        entry["strays"] = [stray.to_json() for stray in plan.strays]
         entry["changes"] = plan_changes(plan)
         entry["owner_edits"] = edits
         entry["inputs"] = {
@@ -381,6 +450,10 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         if owner_cover is not None:
             entry["inputs"]["owner_cover"] = {
                 "path": decision["cover"], "sha256": hashlib.sha256(owner_cover).hexdigest()}
+        kept_strays = {stray.path: digest for stray in plan.strays if stray.keeps is not None
+                       and (digest := _file_sha256(unit.path / stray.path)) is not None}
+        if owner_strays or kept_strays:
+            entry["inputs"]["strays"] = {"answers": owner_strays, "sha256": kept_strays}
         entry["plan_digest"] = hashlib.sha256(plan.to_json()).hexdigest()
 
         if action == "repoint":
@@ -406,6 +479,10 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Pa
     earlier job created are planned the same way too; `inputs` carries the
     folder and the list so no log is read again.
 
+    The owner's strays are planned from their recorded answers, and a kept
+    stray that is gone or has other bytes than identify hashed adds a
+    problem, so the plan differs and apply refuses the album as changed.
+
     The owner's cover is read again from `job_path`. A file that is gone or
     no longer the bytes identify hashed is left out, so the plan differs and
     apply refuses the album as changed.
@@ -421,11 +498,12 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Pa
         owner_cover = _read_owner_cover(job_path, recorded["path"])
         if owner_cover is not None and hashlib.sha256(owner_cover).hexdigest() != recorded["sha256"]:
             owner_cover = None
+    owner_strays = inputs.get("strays") or {}
     plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=inputs["owner_input"],
                       status=inputs["status"], edition=inputs.get("edition"),
                       local=local, created=inputs.get("created", []), owner_cover=owner_cover,
                       composer=inputs.get("composer", True), chosen=inputs.get("chosen", False),
-                      added=inputs.get("added"))
+                      added=inputs.get("added"), strays=owner_strays.get("answers"))
     edits = inputs.get("edits") or {}
     if edits:
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
@@ -433,7 +511,19 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Pa
         artist_name = folder_artist_name(release.get("artist-credit") or [], clients.mb)
         plan = memory_module.lay_edits(plan, edits, release, release_group, pairs, family_by_source, unit,
                                        inputs.get("edition"), artist_name, inputs.get("created", []))
+    for path, stray_digest in sorted((owner_strays.get("sha256") or {}).items()):
+        if _file_sha256(unit.path / path) != stray_digest:
+            plan.problems = [*plan.problems, f"kept stray {path} changed since identify"]
     return plan
+
+
+def _file_sha256(path: Path) -> str | None:
+    """The sha256 hex of the file at `path`, or `None` where it cannot be read."""
+    try:
+        with path.open("rb") as handle:
+            return hashlib.file_digest(handle, "sha256").hexdigest()
+    except OSError:
+        return None
 
 
 # --- every album together: collisions and state ------------------------------
@@ -605,7 +695,7 @@ def _print_counts(entries: list[dict], out) -> None:
 def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, transport=None,
         env: Mapping[str, str] = os.environ, which: Callable[[str], str | None] = shutil.which,
         out=None, err=None, rejudge: Path | None = None, composer: bool = True,
-        added: str | None = None) -> int:
+        added: str | None = None, drop_unreadable: bool = False) -> int:
     # `sys.stdout`/`sys.stderr` resolved here, not as the default value: a
     # default is bound once at import time, before a caller's redirect (a
     # test capturing output, or a later reassignment of `sys.stdout`) exists.
@@ -666,7 +756,7 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
         try:
             entry, plan = plan_entry(unit, root, built_clients, memory, decision,
                                      unit.rel in reopened_keys, env=env, which=which, rejudge=judging,
-                                     job_path=job.path, composer=composer, added=added)
+                                     job_path=job.path, composer=composer, added=added, drop_unreadable=drop_unreadable)
         except Exception as exc:
             entry, plan = _error_entry(unit, exc, decision), None
         entries.append(entry)
@@ -688,7 +778,7 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
     def replan(key: str, edition: str) -> tuple[dict, Plan]:
         return plan_entry(units_by_rel[key], root, built_clients, memory, resolved_decisions.get(key, (None, None))[1],
                           key in reopened_keys, edition=edition, env=env, which=which, rejudge=judging,
-                          job_path=job.path, composer=composer, added=added)
+                          job_path=job.path, composer=composer, added=added, drop_unreadable=drop_unreadable)
 
     _separate_editions(entries, plans, lambda e: edition_fields(built_clients.mb.release(e["release_id"])),
                        replan, err)

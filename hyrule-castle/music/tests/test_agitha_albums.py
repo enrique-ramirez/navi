@@ -2,10 +2,11 @@
 
 A drop arrives as `raw/<item>/...`: each item is a dropped folder, or the
 folder an archive was extracted into, named after the item. A folder is an
-album when it holds an audio file of its own or a `CD`/`Disc`/`Disk`
-subfolder holding audio; any other folder is searched in turn. Each album is
-moved to `<n>/drop/album/<name>/`, numbered from `01` in the order the items
-were dropped and then in path order, and `raw/` goes away.
+album when it holds an audio file of its own or a disc folder holding audio:
+one named for a `CD`/`Disc`/`Disk` and its number, at the start of the name
+or at its end in brackets or after ` - `. Any other folder is searched in
+turn. Each album is moved to `<n>/drop/album/<name>/`, numbered from `01` in
+the order the items were dropped and then in path order, and `raw/` goes away.
 
 Finding is by extension and folder shape, so every file here is a few bytes
 of text. Each file holds its own path, so a file staged under the wrong name
@@ -31,13 +32,16 @@ OUTSIDE = "outside every album"
 
 #: Disc folder names the engine reads as media, from `tests/test_units.py`
 #: (`CD1`, `CD2 - Live at Budokan`, `CD3`, `Disc 1`) and `tests/test_identify.py`
-#: (`disk 3`, `CD 1`, `Disc 2`, `CD 2`, `CD1 - Live`).
+#: (`disk 3`, `CD 1`, `Disc 2`, `CD 2`, `CD1 - Live`). The rest end in the disc
+#: word and number, in brackets or after ` - `, as a rip that names each disc
+#: folder after its album does.
 DISC_FOLDERS = ("CD1", "CD2", "CD3", "CD2 - Live at Budokan", "Disc 1", "disk 3", "CD 1", "Disc 2", "CD 2",
-                "CD1 - Live")
+                "CD1 - Live", "Album [Disc 1]", "Album (CD 2)", "Album [CD2]", "Album - Disc 3", "Album - CD 1")
 
 #: Names the engine does not read as a disc folder, from `tests/test_identify.py`.
-#: `Bonus CD 2` holds the words of a disc folder without starting with them.
-NOT_DISC_FOLDERS = ("Bonus", "Scans", "Bonus CD 2")
+#: `Bonus CD 2` ends in the words of a disc folder with no bracket or dash before
+#: them, and `Disc Two` spells its number.
+NOT_DISC_FOLDERS = ("Bonus", "Scans", "Bonus CD 2", "Disc Two")
 
 
 def albums():
@@ -180,6 +184,38 @@ class FindingAlbums(_Staging):
         self.assertEqual(found(staging), [("01", "The Fragile", "Nine Inch Nails")])
         self.assertEqual(ignored(staging), [])
         self.assertStagedExactly(drop, {("01", "The Fragile"): as_placed("Nine Inch Nails", "The Fragile/", *rels)})
+
+    def test_disc_folders_named_after_their_album_make_it_one_album_with_the_scans_beside_them(self) -> None:
+        # The Bowie drop of 2026-09-30. Each disc folder begins with a year,
+        # so reading the first number in the name gives both discs 2004.
+        item = "2004.Black Tie White Noise"
+        rels = (*(f"{item} [Disc 1]/{n:02d}. Track {n}.flac" for n in range(1, 13)),
+                *(f"{item} [Disc 2]/{n:02d}. Track {n}.flac" for n in range(1, 12)),
+                *(f"Scans/{n:02d}.jpg" for n in range(1, 14)))
+        drop = self.drop()
+        drop.item(item, *rels)
+        staging = drop.stage()
+        self.assertEqual(found(staging), [("01", item, item)])
+        self.assertEqual(ignored(staging), [])
+        self.assertStagedExactly(drop, {("01", item): as_placed(item, "", *rels)})
+
+    def test_disc_folders_of_two_albums_under_one_folder_stay_five_albums_as_before(self) -> None:
+        # An artist folder holding two double albums. Read as discs of `Queen`,
+        # they would merge Live Killers and Greatest Hits into one album
+        # named after the artist. The names before ` - CD n` differ, so none
+        # of them is a disc of the folder above.
+        drop = self.drop()
+        folders = ("A Night at the Opera", "Greatest Hits - CD 1", "Greatest Hits - CD 2",
+                   "Live Killers - CD 1", "Live Killers - CD 2")
+        # Created against path order, so the numbers come from the path.
+        drop.item("Queen", *(f"{folder}/01. One.flac" for folder in reversed(folders)))
+        staging = drop.stage()
+        self.assertEqual(found(staging), [(f"{n:02d}", folder, "Queen") for n, folder in enumerate(folders, start=1)])
+        self.assertEqual(ignored(staging), [])
+        self.assertStagedExactly(drop, {
+            (f"{n:02d}", folder): as_placed("Queen", f"{folder}/", "01. One.flac")
+            for n, folder in enumerate(folders, start=1)
+        })
 
     def test_a_folder_beside_disc_folders_holding_audio_of_its_own_is_its_own_album(self) -> None:
         drop = self.drop()
@@ -337,6 +373,35 @@ class NoAudio(_Staging):
         self.assertEqual(found(staging), [])
         self.assertEqual(ignored(staging), [("Empty", "", NO_AUDIO)])
         self.assertStagedExactly(drop, {})
+
+
+
+class UnreadableFileInTheView(unittest.TestCase):
+    """What the album page lists for a staged album, once identify has run on it.
+
+    Staging moves a file by its extension alone, so a truncated MP3 arrives
+    in the album; the page must still not offer it as a track or as a file.
+    """
+
+    def test_a_truncated_mp3_in_a_staged_album_is_neither_a_track_row_nor_an_uploaded_file(self) -> None:
+        from agitha import review
+        from tests.test_agitha_state import (DROP, TRUNCATED_FILE, TRUNCATED_NAME, Disk,
+                                             identified_with_a_truncated_track)
+
+        disk = Disk(self)
+        identified_with_a_truncated_track(disk)
+        view = review.album(disk.config(), DROP, "01")
+
+        readable = {"01 one.mp3", "03 three.mp3"}
+        # The readable files are there, so an empty list cannot pass for one that left the right file out.
+        self.assertEqual({row["path_now"] for row in view["files"]}, readable)
+        self.assertEqual({row["path"] for row in view["uploaded"]}, readable)
+        self.assertEqual({row["source"] for row in view["preview"]["files"]},
+                         {f"drop/album/{TRUNCATED_NAME}/{name}" for name in readable})
+        self.assertTrue((disk.inbox / DROP / "01" / "drop" / "album" / TRUNCATED_NAME / TRUNCATED_FILE).is_file(),
+                        "the truncated file was never staged, so its absence proves nothing")
+        self.assertEqual([hold["kind"] for hold in view["preview"]["holds"]].count("missing"), 1,
+                         view["preview"]["holds"])
 
 
 if __name__ == "__main__":

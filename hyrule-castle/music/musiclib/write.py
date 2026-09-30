@@ -106,6 +106,7 @@ def _final_destinations(plan: Plan) -> list[tuple[str, bool]]:
     """
     finals = [(file_plan.destination, False) for file_plan in plan.files]
     finals += [(relocated(plan, kept), False) for kept in plan.kept]
+    finals += [(f"{plan.destination}/{name}", False) for name in plan.moved.values()]
     finals += [(f"{plan.destination}/{name}", True) for name in plan.images]
     return finals
 
@@ -118,7 +119,7 @@ def check_collisions(plan: Plan, root: Path) -> None:
     case-only difference there is the same slot, not a collision.
     """
     leaving = ({file_plan.source for file_plan in plan.files}
-               | set(plan.kept) | set(plan.extras) | set(plan.deletions))
+               | set(plan.kept) | set(plan.moved) | set(plan.extras) | set(plan.deletions))
     staying = _existing_files(root, plan) - leaving
 
     finals = _final_destinations(plan)
@@ -315,7 +316,17 @@ def write_album(
 
     track_moves = [(file_plan.source, file_plan.destination) for file_plan in plan.files]
     kept_moves = [(kept, relocated(plan, kept)) for kept in plan.kept]
-    library_moves = track_moves + kept_moves
+    stray_moves = [(source, f"{plan.destination}/{name}") for source, name in plan.moved.items()]
+    library_moves = track_moves + kept_moves + stray_moves
+
+    # A stray that won its name from a file in the album folder replaces it:
+    # the plan lists that file under `deletions`, but the final deletion loop
+    # runs after the moves and would unlink the stray just moved onto the
+    # name. So those files go first, and the loop skips them.
+    landing = {destination.casefold() for _source, destination in stray_moves}
+    cleared = [deletion for deletion in plan.deletions if deletion.casefold() in landing]
+    for deletion in cleared:
+        (root / deletion).unlink()
     try:
         _move_all([(root / source, root / destination) for source, destination in library_moves])
     except OSError as exc:
@@ -370,7 +381,8 @@ def write_album(
     _move_all([(root / source, extras_root / destination) for source, destination in extra_moves])
 
     for deletion in plan.deletions:
-        (root / deletion).unlink()
+        if deletion not in cleared:
+            (root / deletion).unlink()
 
     prune_empty(root / plan.source, root)
 

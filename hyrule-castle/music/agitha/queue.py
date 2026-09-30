@@ -110,7 +110,7 @@ class Queue:
         if command == "identify":
             added = added_stamp(drops.read_record(config.inbox / drop))
             return [config.musiclib, "batch", "identify", str(config.inbox / drop / n), "--job", job,
-                    *(["--added", added] if added else [])]
+                    "--drop-unreadable", *(["--added", added] if added else [])]
         return [config.musiclib, "batch", "apply", "--job", job,
                 "--extras", str(config.extras), "--live-root", str(config.library)]
 

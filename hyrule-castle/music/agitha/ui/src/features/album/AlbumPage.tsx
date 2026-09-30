@@ -11,11 +11,13 @@ import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./AlbumPage.module.css";
 import { AlbumSide } from "./AlbumSide";
+import { missingWords } from "./approveReason";
 import { Duplicate } from "./Duplicate";
 import { Landed } from "./Landed";
 import { MatchPicker } from "./MatchPicker";
 import { type Pending, usePending } from "./pending";
 import { ReviewBar } from "./ReviewBar";
+import { Strays } from "./Strays";
 import { TagDiff } from "./TagDiff";
 import { TrackDetail } from "./TrackDetail";
 import { TrackList } from "./TrackList";
@@ -67,9 +69,31 @@ function Soundtrack({ pending }: { pending: Pending }) {
 // The problem a hold names before its first colon, `no genre` of `no genre: 01. x.mp3 carries...`.
 const topicOf = (detail: string) => detail.split(":")[0]?.trim() ?? "";
 
+const isMissing = (hold: Hold) => hold.kind === "missing";
+
+function Missing({ view }: { view: AlbumView }) {
+	const { t } = useTranslate();
+	const missing = (view.preview?.holds ?? []).filter(isMissing);
+	if (missing.length === 0) return null;
+	return (
+		<div role="alert" className={styles.missing}>
+			{missing.map((hold) => {
+				const { sentence, extra } = missingWords(hold.detail, t);
+				return (
+					<p key={hold.detail}>
+						<strong>{sentence}</strong>
+						{extra && <span>{extra}</span>}
+					</p>
+				);
+			})}
+			<p>{t("missing.discard")}</p>
+		</div>
+	);
+}
+
 function Holds({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
-	const holds = view.preview?.holds ?? [];
+	const holds = (view.preview?.holds ?? []).filter((hold) => !isMissing(hold));
 	if (holds.length === 0) return null;
 	const groups = new Map<string, Hold[]>();
 	for (const hold of holds) {
@@ -137,7 +161,9 @@ function Review({ view }: { view: AlbumView }) {
 	return (
 		<>
 			<ReviewBar view={view} pending={pending} />
+			<Missing view={view} />
 			<Holds view={view} />
+			<Strays view={view} pending={pending} />
 			{view.duplicate && view.state === "ready" && (
 				<Duplicate view={view} pending={pending} />
 			)}

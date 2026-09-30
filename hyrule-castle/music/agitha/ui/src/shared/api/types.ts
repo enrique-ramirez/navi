@@ -29,6 +29,7 @@ export type HoldKind =
 	| "collision"
 	| "validation"
 	| "status"
+	| "missing"
 	| "repointed"
 	| "reopened";
 
@@ -56,8 +57,8 @@ export interface Candidate {
 	track_counts: (number | null)[];
 	/** Whether the release's track counts equal the folder's. */
 	matches_counts: boolean;
-	/** Seconds by which the release's length differs from the folder's. */
-	duration_diff: number;
+	/** Seconds by which the release's length differs from the folder's; `null` where the track counts do not match. */
+	duration_diff: number | null;
 	/** Whether musiclib fetched the release; `false` where the search listed too few tracks, and the rest is the search's. */
 	checked: boolean;
 	artist_agrees: boolean;
@@ -109,6 +110,40 @@ export interface PlanInputs {
 	owner_cover?: { path: string; sha256: string };
 	/** False when identify ran with `--no-composer`; absent in a plan written before the key existed. */
 	composer?: boolean;
+	/** The owner's stray answers (path -> name, `null` deletes) and each kept stray's SHA-256; absent with neither. */
+	strays?: {
+		answers: Record<string, string | null>;
+		sha256: Record<string, string>;
+	};
+	/** When agitha started the job, `YYYY-MM-DDTHH:MM`; absent where it passed no `--added`. */
+	added?: string;
+}
+
+export type StrayKind = "image" | "pdf" | "text";
+
+/** `copy`, `lost` and `won` name the other file in `against`. */
+export type StrayWhy =
+	| "guessed"
+	| "copy"
+	| "lost"
+	| "won"
+	| "owner"
+	| "no guess";
+
+/** What becomes of a stray: kept under a name, deleted, or `null` for undecided. */
+export type StrayAnswer = { keep: string } | { delete: true } | null;
+
+/** A file outside the tracks and the cover that identify found in the album folder. */
+export interface Stray {
+	/** Relative to the album folder. */
+	path: string;
+	kind: StrayKind;
+	answer: StrayAnswer;
+	why: StrayWhy;
+	/** The other file where `why` is `copy`, `lost` or `won`, else `null`. */
+	against: string | null;
+	/** `[width, height]`; `null` where it is not an image or cannot be read. */
+	size: [number, number] | null;
 }
 
 /** One album of a `plan.json`, the preview. */
@@ -140,6 +175,8 @@ export interface PlanEntry {
 	extras: string[];
 	/** Paths that stay in the album folder as they are. */
 	kept: string[];
+	/** Files the engine settled or left undecided; absent from a plan written before strays were planned. */
+	strays?: Stray[];
 	/** One line per change apply will make. */
 	changes: string[];
 	/** Position -> neutral or raw key -> values (`null` removes the tag). */
@@ -172,6 +209,8 @@ export interface AcceptDecision {
 	game: GameChoice | null;
 	/** The owner cover, relative to the job (`owner/cover.<ext>`), or `null`; the key may be absent. */
 	cover?: string | null;
+	/** Stray path -> the name to keep it under, or `null` to delete it; a path left out keeps agitha's answer, and the key may be absent. */
+	strays?: Record<string, string | null>;
 }
 
 export interface RepointDecision {

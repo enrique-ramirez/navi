@@ -697,6 +697,22 @@ class Telling(unittest.TestCase):
         got = self.compare(by_tag, by_folder)
         self.assertEqual((got["new"]["discs"], got["library"]["discs"]), (3, 2))
 
+    def test_a_disc_folder_named_after_its_album_gives_its_files_that_disc(self) -> None:
+        # The library's files carry no disc tag. Read as disc 2, `Album [Disc 2]`
+        # pairs the new copy's 5.5 s disc 2 track with the library's 5.5 s file.
+        # Read as the folder's name, nothing pairs. Read as one disc for both,
+        # the copies pair in path order, and a.flac, the disc 2 track, sorts first.
+        new, library = self.tmp / "new", self.tmp / "library copy"
+        tagged(new / "a.flac", 1, 1, disc=2, discs=2, seconds=5.5)
+        tagged(new / "b.flac", 1, 1, disc=1, discs=2)
+        for disc, seconds in ((1, None), (2, 5.5)):
+            path = tagged(library / f"Album [Disc {disc}]" / "01.flac", 1, 1, seconds=seconds)
+            builders.delete_tags(path, ["discnumber", "disctotal"])
+        got = self.compare(new, library)
+        self.assertEqual({k: v for k, v in got["tracks"].items() if k != "max_length_diff"},
+                         {"paired": 2, "length_differs": 0, "only_new": 0, "only_library": 0})
+        self.assertEqual(got["library"]["discs"], 2)
+
     def test_the_encoder_is_what_the_file_says(self) -> None:
         from agitha.audio import encoder
 

@@ -509,5 +509,261 @@
       "tags": [],
       "title": "Edited Album"
     }
+  ],
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000005",
+            "name": "Missing Band",
+            "sort-name": "Missing Band"
+          },
+          "joinphrase": "",
+          "name": "Missing Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000005",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000005",
+                    "name": "Missing Band",
+                    "sort-name": "Missing Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Missing Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000005",
+                    "name": "Missing Band",
+                    "sort-name": "Missing Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Missing Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000005",
+                    "name": "Missing Band",
+                    "sort-name": "Missing Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Missing Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000005",
+        "primary-type": "Album",
+        "secondary-types": [],
+        "title": "Missing Album"
+      },
+      "status": "Official",
+      "title": "Missing Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [
+        {
+          "count": 1,
+          "name": "rock"
+        }
+      ],
+      "id": "6f1a2b3c-0000-4000-8000-000200000005",
+      "primary-type": "Album",
+      "secondary-types": [],
+      "tags": [],
+      "title": "Missing Album"
+    }
+  ],
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000006",
+            "name": "Stray Band",
+            "sort-name": "Stray Band"
+          },
+          "joinphrase": "",
+          "name": "Stray Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000006",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000006",
+                    "name": "Stray Band",
+                    "sort-name": "Stray Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Stray Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000006",
+                    "name": "Stray Band",
+                    "sort-name": "Stray Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Stray Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000006",
+                    "name": "Stray Band",
+                    "sort-name": "Stray Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Stray Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000006",
+        "primary-type": "Album",
+        "secondary-types": [],
+        "title": "Stray Album"
+      },
+      "status": "Official",
+      "title": "Stray Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [
+        {
+          "count": 1,
+          "name": "rock"
+        }
+      ],
+      "id": "6f1a2b3c-0000-4000-8000-000200000006",
+      "primary-type": "Album",
+      "secondary-types": [],
+      "tags": [],
+      "title": "Stray Album"
+    }
   ]
 ]

@@ -2,6 +2,9 @@
 
 Only a file under `inbox/<drop>/<n>/drop/album/<name>/` is served. Once the
 album has moved into the library that folder is gone, and the url is 404.
+
+`GET .../strays/<path>` serves a stray of the album's plan entry as a
+thumbnail, or as the file itself with `?full`.
 """
 
 from __future__ import annotations
@@ -10,6 +13,9 @@ import mimetypes
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlsplit
+
+from musiclib import images
 
 from . import drops, state
 
@@ -102,3 +108,29 @@ def audio(request: Handler, match: re.Match[str], config: Config) -> None:
                 left -= len(chunk)
     except (BrokenPipeError, ConnectionResetError):
         request.close_connection = True
+
+
+def stray(request: Handler, match: re.Match[str], config: Config) -> None:
+    drop, n, rel = match.group(1), match.group(2), match.group(3)
+    folder = album_folder(config, drop, n)
+    entry = state.plan_entry(config, drop, n) if folder is not None else None
+    target = None
+    if folder is not None and entry is not None and rel in {row["path"] for row in entry.get("strays") or []}:
+        root = folder.resolve()
+        target = (root / rel).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            target = None
+    if target is None:
+        request.fail(404, "No such stray.")
+        return
+    if "full" in parse_qs(urlsplit(request.path).query, keep_blank_values=True):
+        request.send_file(target)
+        return
+    try:
+        data = images.thumbnail_jpeg(target.read_bytes())
+    except OSError:
+        data = None
+    if data is None:
+        request.fail(404, "That stray is not an image Pillow reads.")
+        return
+    request.send_bytes(200, "image/jpeg", data)

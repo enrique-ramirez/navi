@@ -278,7 +278,10 @@ def _build(base: Path) -> dict[str, str]:
     base.joinpath("bin").mkdir()
 
     rip(original, IV, cover=RIP_COVER, albumartist=UEMATSU)
-    rip(original, V, cover=RIP_COVER, albumartist=UEMATSU, others={"inside.jpg": solid((90, 90, 90))})
+    # The owner's own image. `folder.jpg` is a name that stays as it is: one
+    # like `inside.jpg` is a stray, and t1 would already have
+    # deleted it, losing to the archive's booklet of the name it guessed.
+    rip(original, V, cover=RIP_COVER, albumartist=UEMATSU, others={"folder.jpg": solid((90, 90, 90))})
     rip(original, VI, cover=RIP_COVER, albumartist="Toshiyuki Mori")
     rip(original, PCKH, cover=RIP_COVER, albumartist=SHIMOMURA)
     rip(original, DQ, cover=RIP_COVER, albumartist="Koichi Sugiyama")
@@ -473,7 +476,7 @@ class TheOldReleasesImages(_Rejudge):
                          [f"{folder}/booklet-01.jpg", f"{folder}/booklet-02.jpg"])
         self.assertEqual(sorted(entry["images"]), ["back.jpg", "cover.jpg"])
         # The owner's own scan was never the job's to delete.
-        self.assertIn(f"{folder}/inside.jpg", entry["kept"])
+        self.assertIn(f"{folder}/folder.jpg", entry["kept"])
 
 
 class Applying(_Rejudge):

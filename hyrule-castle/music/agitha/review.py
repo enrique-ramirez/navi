@@ -242,11 +242,19 @@ def _uploaded(config: Config, drop: str, n: str) -> list[dict[str, Any]]:
 
 
 def _landing(entry: dict[str, Any]) -> list[str]:
-    """The album folder as it will land: kept files that follow it, the tracks, and the images the plan writes."""
+    """The album folder as it will land.
+
+    The kept files that follow it, the tracks, the strays the owner keeps under their new names,
+    and the images the plan writes.
+    """
     destination = entry["destination"]
     kept = (_tail(path, entry["source"]) for path in entry.get("kept", []))
     tracks = (_tail(planned["destination"], destination) for planned in entry.get("files", []))
-    return sorted({*tracks, *kept, *entry.get("images", {})})
+    # A kept stray has left `kept` and lands at the album root under the owner's name; an entry planned
+    # before strays existed has no rows.
+    named = (row["answer"]["keep"] for row in entry.get("strays") or []
+             if isinstance(row.get("answer"), dict) and "keep" in row["answer"])
+    return sorted({*tracks, *kept, *named, *entry.get("images", {})})
 
 
 def _landed(config: Config, drop: str, n: str) -> dict[str, Any] | None:

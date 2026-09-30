@@ -33,8 +33,23 @@ DISC_NUMBER_KEY = {"id3": "TPOS", "vorbis": "discnumber", "mp4": "disk", "asf": 
 TRACK_TOTAL_KEY = {"vorbis": "tracktotal"}
 DISC_TOTAL_KEY = {"vorbis": "disctotal"}
 
-DISC_FOLDER = re.compile(r"^(?:cd|disc|disk)\s*(\d+)(?:[\s_.:-].*)?$", re.IGNORECASE)
+_DISC_FOLDER_LEADING = re.compile(r"^(?:cd|disc|disk)\s*(\d+)(?:[\s_.:-].*)?$", re.IGNORECASE)
+# A disc marker at the end of a folder name counts only inside brackets or after
+# ` - `; a bare trailing `Bonus CD 2` names a folder of its own.
+_DISC_FOLDER_TRAILING = re.compile(
+    r"(?:[\[(]\s*(?:cd|disc|disk)\s*(\d+)\s*[\])]|\s-\s+(?:cd|disc|disk)\s*(\d+))$", re.IGNORECASE)
 _LEADING_NUMBER = re.compile(r"\d+")
+
+
+def disc_number(folder_name: str) -> int | None:
+    """The disc a folder name marks (`CD2`, `Album [Disc 2]`), or `None` for a folder that is not a disc folder."""
+    match = _DISC_FOLDER_LEADING.match(folder_name)
+    if match:
+        return int(match.group(1))
+    match = _DISC_FOLDER_TRAILING.search(folder_name)
+    if match:
+        return int(match.group(1) or match.group(2))
+    return None
 
 
 @dataclass(frozen=True)
@@ -85,13 +100,22 @@ def _leading_number(track: files.Track, key_map: dict[str, str]) -> int | None:
     return int(found.group()) if found else None
 
 
+def disc_marker_stem(folder_name: str) -> str | None:
+    """The name before a trailing disc marker, or None where the name has no such marker."""
+    match = _DISC_FOLDER_TRAILING.search(folder_name)
+    return folder_name[:match.start()].strip().casefold() if match else None
+
+
 def _folder_medium(track: files.Track, album_path: Path) -> int | None:
     rel = Path(track.path).relative_to(album_path)
     if len(rel.parts) == 2:
-        match = DISC_FOLDER.match(rel.parts[0])
-        if match:
-            return int(match.group(1))
+        return disc_number(rel.parts[0])
     return None
+
+
+def filename_number(filename: str) -> int | None:
+    leading = _LEADING_NUMBER.match(filename)
+    return int(leading.group()) if leading else None
 
 
 def _sort_key(track: files.Track):
@@ -101,8 +125,8 @@ def _sort_key(track: files.Track):
     # out of order still pairs with the right recording.
     if number is not None:
         return (0, number, filename)
-    leading = re.match(r"\d+", filename)
-    return (1, int(leading.group()), filename) if leading else (2, 0, filename)
+    leading = filename_number(filename)
+    return (1, leading, filename) if leading is not None else (2, 0, filename)
 
 
 def group_media(unit: Unit) -> list[list[files.Track]]:
@@ -178,6 +202,55 @@ def pair(unit: Unit, release: dict) -> list[TrackPair] | None:
         first = 0 if mb_tracks[0][0] == 0 else 1
         for number, (track, (position, mb_track)) in enumerate(zip(tracks, mb_tracks), start=first):
             pairs.append(TrackPair(medium.index, position, track, mb_track, number, len(medium.tracks), disc, len(counted)))
+    return pairs
+
+
+def _claimed_number(track: files.Track) -> int | None:
+    """The position a file says it holds: its track number tag, else its filename's leading number."""
+    number = _leading_number(track, TRACK_NUMBER_KEY)
+    return number if number is not None else filename_number(Path(track.path).name)
+
+
+def missing_positions(unit: Unit, release: dict, unreadable: int) -> tuple[int, list[int]] | None:
+    """`(medium position in counted_media, missing track numbers)` where the gap can be told, else `None`.
+
+    `unit` holds the readable files only and `unreadable` is how many files
+    were left out. The gap is told when exactly one medium of `release` has
+    `unreadable` more tracks than files, every other medium has as many, and
+    no file's claimed position is out of range or claimed twice. The missing
+    numbers are the ones no file claims.
+    """
+    counted = counted_media(release)
+    media = group_media(unit)
+    if not unreadable or len(media) != len(counted):
+        return None
+    short = [(index, medium) for index, (medium, tracks) in enumerate(zip(counted, media))
+             if len(medium.tracks) != len(tracks)]
+    if len(short) != 1:
+        return None
+    index, medium = short[0]
+    if len(medium.tracks) - len(media[index]) != unreadable:
+        return None
+    claimed = [_claimed_number(t) for t in media[index]]
+    if None in claimed or len(set(claimed)) != len(claimed) or not all(1 <= c <= len(medium.tracks) for c in claimed):
+        return None
+    return index, [k for k in range(1, len(medium.tracks) + 1) if k not in claimed]
+
+
+def pair_around(unit: Unit, release: dict, gap: tuple[int, list[int]]) -> list[TrackPair]:
+    """Every file of `unit` paired with its recording on `release`, the numbers `gap` names left unpaired.
+
+    `gap` is what `missing_positions` returned. A file takes the recording
+    at its place in track order among the numbers that are not missing, so
+    the file after the gap is the track after it, not the gap's.
+    """
+    counted = counted_media(release)
+    gap_medium, missing = gap
+    pairs = []
+    for n, (tracks, medium) in enumerate(zip(group_media(unit), counted)):
+        numbered = [(k, entry) for k, entry in enumerate(medium.tracks, start=1) if n != gap_medium or k not in missing]
+        for track, (number, (position, mb_track)) in zip(tracks, numbered):
+            pairs.append(TrackPair(medium.index, position, track, mb_track, number, len(medium.tracks), n + 1, len(counted)))
     return pairs
 
 

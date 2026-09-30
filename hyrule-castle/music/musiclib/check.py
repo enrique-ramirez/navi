@@ -68,7 +68,7 @@ _EXTRA_EXTS = {
 #: Every image type the doc's *What an album folder may contain* allows,
 #: cover.jpg's own type plus the other formats the Cover Art Archive and rip
 #: scans turn up in (decision).
-_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 _OTHER_KEPT_EXTS = {".pdf", ".log", ".txt"}
 
 
@@ -557,7 +557,7 @@ def classify_other(path: Path | None, rel: str) -> str:
         return "extra" if path is not None and files.is_mp4_video(path) else "unexpected"
     if ext in _EXTRA_EXTS:
         return "extra"
-    if ext in _IMAGE_EXTS or ext in _OTHER_KEPT_EXTS:
+    if ext in IMAGE_EXTS or ext in _OTHER_KEPT_EXTS:
         return "keep"
     return "unexpected"
 
@@ -578,7 +578,7 @@ def _folder_content_violations(state: AlbumState) -> list[tuple[str, str]]:
             out.append(("unexpected file", rel))
         else:
             path = PurePosixPath(rel)
-            if len(path.parts) > 1 and _DISC_DIR_RE.match(path.parts[0]) and path.suffix.lower() in _IMAGE_EXTS:
+            if len(path.parts) > 1 and _DISC_DIR_RE.match(path.parts[0]) and path.suffix.lower() in IMAGE_EXTS:
                 out.append(("image in disc folder", rel))
     return out
 

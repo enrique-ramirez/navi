@@ -67,6 +67,17 @@ function normalize(decision: Decision): Decision {
 		edits,
 		game: decision.game ?? null,
 		cover: decision.cover ?? null,
+		...withStrays(decision.strays),
+	};
+}
+
+function withStrays(strays: Record<string, string | null> | undefined) {
+	const paths = Object.keys(strays ?? {}).sort();
+	if (!strays || paths.length === 0) return {};
+	return {
+		strays: Object.fromEntries(
+			paths.map((path) => [path, strays[path] ?? null]),
+		),
 	};
 }
 
@@ -84,7 +95,16 @@ export type Draft =
 			edits?: undefined;
 			game?: undefined;
 			cover?: undefined;
+			strays?: undefined;
 	  });
+
+function answeringStrays(
+	decision: AcceptDecision,
+	strays: Record<string, string | null>,
+): AcceptDecision {
+	const { strays: _replaced, ...without } = decision;
+	return { ...without, ...withStrays(strays) };
+}
 
 export interface Pending {
 	draft: Draft;
@@ -99,6 +119,10 @@ export interface Pending {
 	setCandidate: (releaseId: string) => void;
 	setRepoint: (release: string | null) => void;
 	setCover: (path: string | null) => void;
+	// A name keeps the stray under it, `null` deletes it, `undefined` takes back the owner's answer.
+	setStray: (path: string, name: string | null | undefined) => void;
+	deleteAllStrays: (paths: string[]) => void;
+	clearStrays: () => void;
 	reset: () => void;
 }
 
@@ -170,6 +194,22 @@ export function usePending(view: AlbumView): Pending {
 						: startOf(view),
 			),
 		setCover: (path) => onAccept((current) => ({ ...current, cover: path })),
+		setStray: (path, name) =>
+			onAccept((current) => {
+				const { [path]: _gone, ...rest } = current.strays ?? {};
+				return answeringStrays(
+					current,
+					name === undefined ? rest : { ...rest, [path]: name },
+				);
+			}),
+		deleteAllStrays: (paths) =>
+			onAccept((current) =>
+				answeringStrays(current, {
+					...current.strays,
+					...Object.fromEntries(paths.map((path) => [path, null])),
+				}),
+			),
+		clearStrays: () => onAccept((current) => answeringStrays(current, {})),
 		reset: () => {
 			store.draft = null;
 			notify(store);

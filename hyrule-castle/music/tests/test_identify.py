@@ -882,11 +882,35 @@ class Media(IdentifyTestCase):
         media = self.folders(self.in_folders({"CD 2": 2, "CD1 - Live": 1}))
         self.assertEqual(media, [["CD1 - Live"], ["CD 2", "CD 2"]])
 
+    def test_a_disc_word_and_number_ending_a_name_in_brackets_or_after_a_dash_is_the_medium_by_number(self) -> None:
+        # Each set sorts against its numbers by name, so sorting the folder
+        # names gets it wrong where reading the number does not. The last
+        # mixes a leading disc folder with a trailing one.
+        cases = {
+            "each form": {"Album (CD 2)": 2, "Album - Disc 3": 3, "Album [CD1]": 1},
+            "the other forms": {"Album - CD 2": 2, "Album [Disc 1]": 1},
+            "a name either end": {"Album [CD2]": 2, "Disc 1": 1},
+        }
+        for label, counts in cases.items():
+            with self.subTest(label):
+                media = self.folders(self.in_folders(counts))
+                self.assertEqual([set(m) for m in media],
+                                 [{name} for name, _ in sorted(counts.items(), key=lambda item: item[1])])
+                self.assertEqual([len(m) for m in media], sorted(counts.values()))
+
+    def test_black_tie_white_noise_is_two_media_by_folder_disc_1_first_with_no_disc_tags(self) -> None:
+        # Both folders begin with the year, so reading the first number in
+        # the name puts every file on one medium, numbered 2004.
+        album = "2004.Black Tie White Noise"
+        media = self.folders(self.in_folders({f"{album} [Disc 2]": 11, f"{album} [Disc 1]": 12}))
+        self.assertEqual(media, [[f"{album} [Disc 1]"] * 12, [f"{album} [Disc 2]"] * 11])
+
     def test_a_folder_named_anything_else_is_not_a_disc(self) -> None:
         # Beside a real disc folder, so every file would have a disc if the
         # other folder counted. Not counting, all the files are one medium.
-        # `Bonus CD 2` holds the words of a disc folder without starting with them.
-        for other in ("Bonus", "Scans", "Bonus CD 2"):
+        # `Bonus CD 2` ends in the words of a disc folder with no bracket or
+        # dash before them, and `Disc Two` spells its number.
+        for other in ("Bonus", "Scans", "Bonus CD 2", "Disc Two"):
             with self.subTest(other):
                 media = self.folders(self.in_folders({"CD1": 2, other: 1}))
                 self.assertEqual(len(media), 1)

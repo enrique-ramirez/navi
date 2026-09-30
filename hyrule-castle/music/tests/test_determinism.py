@@ -276,18 +276,22 @@ class AReplanOfAWrittenAlbum(_Determinism):
 
 class APlanOfARipWithSubfolders(_Determinism):
     def test_planning_it_under_two_hash_seeds_gives_byte_identical_plans(self):
-        # Each subfolder that is not CDn is a problem in the plan, and the
-        # plan gathered the subfolders in a set, so the problems came out in
-        # hash order. Four names, so two seeds that happen to agree on two
-        # still show it.
+        # Each subfolder that is not CDn and holds a stray nobody has decided
+        # is a problem in the plan, and the plan gathered the subfolders in a
+        # set, so the problems came out in hash order. Four names, so two
+        # seeds that happen to agree on two still show it.
+        #
+        # The image in each has no type word in its name or its folder's, so
+        # it stays undecided. Each has its own bytes: equal ones would be
+        # copies of the first and deleted.
         folders = ("Extras", "Lyrics", "Scans", "Artwork")
         roots = {}
         for name in ("first", "second copy"):
             roots[name] = self.work / name / "flac"
             album = self.rip(roots[name], "flac")
-            for folder in folders:
+            for n, folder in enumerate(folders):
                 (album / folder).mkdir()
-                (album / folder / "notes.txt").write_text("Bought at Rough Trade.\n")
+                (album / folder / "photo.jpg").write_bytes(builders.jpeg(60 + n, 40))
 
         first = self.run_child(SEEDS[0], {"flac": roots["first"]}, None)["flac"]
         second = self.run_child(SEEDS[1], {"flac": roots["second copy"]}, None)["flac"]
