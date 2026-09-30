@@ -1,10 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LoaderCircle, Trash2, Undo2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { albumKey, isRunning } from "@/domain/album/albumQuery";
+import { LoaderCircle, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { useState } from "react";
+import { isRunning } from "@/domain/album/albumQuery";
 import { albumTags } from "@/domain/album/albumTags";
-import { albumUrl, post } from "@/shared/api/album";
 import type { AlbumView } from "@/shared/api/types";
 import { albumStatePhrase } from "@/shared/i18n/albumState";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -14,6 +12,7 @@ import { approveReason } from "./approveReason";
 import { Outcome } from "./Outcome";
 import type { Pending } from "./pending";
 import styles from "./ReviewBar.module.css";
+import { useDecision } from "./useDecision";
 
 // What the primary button does. `confirm` sends the unchanged draft so the server accepts the
 // preview, then approves once identify has run again; `save` sends the owner's changes and stops,
@@ -28,71 +27,19 @@ export function ReviewBar({
 	pending: Pending;
 }) {
 	const { t } = useTranslate();
-	const client = useQueryClient();
 	const navigate = useNavigate();
-	const [refusal, setRefusal] = useState<string | null>(null);
-	const [sending, setSending] = useState(false);
 	const [asking, setAsking] = useState(false);
-	// Set from sending a decision until identify has answered it; `approve` approves then.
-	// `seen` records that the view has shown identify running, since the view arrives from the
-	// parent's query a render later than this state changes.
-	const [awaiting, setAwaiting] = useState<{
-		then: "preview" | "approve";
-		seen: boolean;
-	} | null>(null);
+	const { refusal, changed, awaiting, busy, submit, send, approve, move } =
+		useDecision(view, pending);
 
 	const running = isRunning(view.state);
-	const refresh = () => client.invalidateQueries({ queryKey: albumKey(view) });
 	const tags = albumTags(view);
 	const title = tags.title || view.name;
 
-	async function submit(path: string, body: unknown) {
-		setRefusal(null);
-		setSending(true);
-		const answer = await post(`${albumUrl(view)}/${path}`, body);
-		setSending(false);
-		if (!answer.ok) setRefusal(answer.error);
-		return answer.ok;
-	}
-
-	async function send(then: "preview" | "approve") {
-		if (!(await submit("decision", pending.draft))) return;
-		setAwaiting({ then, seen: false });
-		await refresh();
-	}
-
-	async function act(path: "approve" | "move") {
-		if (await submit(path, {})) await refresh();
-	}
-
-	// Identify has answered the sent decision: a message keeps the draft, none settles it.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when identify finishes, not when the view's other fields change
-	useEffect(() => {
-		if (awaiting === null) return;
-		if (running) {
-			if (!awaiting.seen) setAwaiting({ ...awaiting, seen: true });
-			return;
-		}
-		// Identify can finish before a poll sees it run: the view then already holds the sent
-		// decision and a preview planned under it.
-		const answered =
-			awaiting.seen ||
-			(view.decision !== null &&
-				!pending.dirty &&
-				(view.approvable.code !== "not-accepted" || view.error !== null));
-		if (!answered) return;
-		setAwaiting(null);
-		if (view.error) return;
-		pending.reset();
-		if (awaiting.then === "approve" && view.approvable.ok && !view.duplicate)
-			void act("approve");
-	}, [awaiting, running, view]);
-
-	const busy = running || sending || awaiting !== null;
 	const duplicateChoice = view.duplicate !== null && view.state === "ready";
 	const primary: Primary =
 		awaiting !== null
-			? awaiting.then === "approve"
+			? awaiting.then.kind === "approve"
 				? "confirm"
 				: "save"
 			: view.state === "written, not moved"
@@ -110,7 +57,7 @@ export function ReviewBar({
 			: null;
 
 	const progress =
-		awaiting?.then === "approve"
+		awaiting?.then.kind === "approve"
 			? t("review.approving")
 			: awaiting !== null || running
 				? t(albumStatePhrase[view.state])
@@ -124,10 +71,10 @@ export function ReviewBar({
 	};
 
 	function press() {
-		if (primary === "save") void send("preview");
-		else if (primary === "confirm") void send("approve");
-		else if (primary === "approve") void act("approve");
-		else if (primary === "move") void act("move");
+		if (primary === "save") void send({ kind: "preview" });
+		else if (primary === "confirm") void send({ kind: "approve" });
+		else if (primary === "approve") void approve();
+		else if (primary === "move") void move();
 	}
 
 	// The server keeps identify's refusal in `error`; it shows once no answer is awaited.
@@ -184,6 +131,20 @@ export function ReviewBar({
 								{t("action.discard")}
 							</button>
 						)}
+						{/* A preview not yet accepted can be planned again without approving, to look first. */}
+						{!busy &&
+							view.state === "ready" &&
+							!pending.dirty &&
+							view.approvable.code === "not-accepted" && (
+								<button
+									type="button"
+									className={styles.ghost}
+									onClick={() => void send({ kind: "preview" })}
+								>
+									<RefreshCw size={14} aria-hidden="true" />
+									{t("review.repreview")}
+								</button>
+							)}
 						{primary !== null && (
 							<button
 								type="button"
@@ -217,6 +178,7 @@ export function ReviewBar({
 			<div className={styles.messages}>
 				<Outcome view={view} />
 				{message && <Alert>{message}</Alert>}
+				{changed && <Alert>{t("review.changed")}</Alert>}
 			</div>
 
 			{asking && (

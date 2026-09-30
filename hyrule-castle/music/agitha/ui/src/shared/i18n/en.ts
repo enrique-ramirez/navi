@@ -269,6 +269,9 @@ export const en = {
 	"uploaded.list": "Uploaded files",
 	"uploaded.tags": "Tags now",
 	"uploaded.tagsOf": "Tags of {file}",
+	"review.repreview": "Re-preview",
+	"review.changed":
+		"Identify planned something different from what was on screen, so nothing was approved. Look it over and approve again.",
 } as const;
 
 export type Phrase = keyof typeof en;

@@ -2,12 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type {
-	AlbumView,
-	Approvable,
-	Comparison,
-	Copy,
-} from "@/shared/api/types";
+import type { AlbumView, Comparison, Copy } from "@/shared/api/types";
 import { type Call, fakeFetch } from "@/test/fakeFetch";
 import {
 	renderWithProviders,
@@ -515,20 +510,9 @@ describe("Duplicate", () => {
 		});
 
 		// The server's `reason` is SERVER TEXT; the name is built from `code` and `hold`.
-		it.each([
-			[
-				"not accepted",
-				{
-					ok: false,
-					reason: SERVER_TEXT,
-					code: "not-accepted",
-					hold: null,
-				},
-				"the preview has not been accepted yet",
-			],
-			[
-				"held by a collision",
-				{
+		it("stops only Keep the new one while a collision holds the album, naming it from its code", async () => {
+			const v = view({
+				approvable: {
 					ok: false,
 					reason: SERVER_TEXT,
 					code: "held",
@@ -538,36 +522,50 @@ describe("Duplicate", () => {
 							"C/Chrono Cross/(1999) Chrono Cross is planned by album 02 too",
 					},
 				},
-				"held: collision: C/Chrono Cross/(1999) Chrono Cross is planned by album 02 too",
-			],
-		] satisfies [string, Approvable, string][])(
-			"disables both buttons when the album is %s, naming the reason from its code",
-			async (_, approvable, why) => {
-				const v = view({ approvable });
-				const fake = fakeFetch({ [`GET ${ALBUM_URL}`]: () => json(v) });
-				restore = fake.restore;
-				const user = userEvent.setup();
-				renderDuplicate(v);
+			});
+			const fake = fakeFetch({ [`GET ${ALBUM_URL}`]: () => json(v) });
+			restore = fake.restore;
+			renderDuplicate(v);
 
-				const keepNew = await screen.findByRole("button", {
-					name: `Keep the new one: ${why}`,
-				});
-				const keepLibrary = screen.getByRole("button", {
-					name: `Keep the one in the library: ${why}`,
-				});
-				expect(keepNew).toBeDisabled();
-				expect(keepLibrary).toBeDisabled();
-				expect(
-					screen.queryByText(new RegExp(SERVER_TEXT)),
-				).not.toBeInTheDocument();
-				for (const button of screen.getAllByRole("button")) {
-					expect(button).not.toHaveAccessibleName(new RegExp(SERVER_TEXT));
-				}
-				await user.click(keepNew);
-				await user.click(keepLibrary);
-				expect(posts(fake.calls)).toEqual([]);
-			},
-		);
+			expect(
+				await screen.findByRole("button", {
+					name: "Keep the new one: held: collision: C/Chrono Cross/(1999) Chrono Cross is planned by album 02 too",
+				}),
+			).toBeDisabled();
+			expect(
+				screen.getByRole("button", { name: "Keep the one in the library" }),
+			).toBeEnabled();
+			for (const button of screen.getAllByRole("button")) {
+				expect(button).not.toHaveAccessibleName(new RegExp(SERVER_TEXT));
+			}
+		});
+
+		it("accepts a preview not accepted yet before keeping the new one", async () => {
+			const v = view({
+				approvable: {
+					ok: false,
+					reason: SERVER_TEXT,
+					code: "not-accepted",
+					hold: null,
+				},
+			});
+			const fake = fakeFetch({
+				[`GET ${ALBUM_URL}`]: () => json(v),
+				[`POST ${ALBUM_URL}/decision`]: () => json({ state: "queued" }),
+			});
+			restore = fake.restore;
+			const user = userEvent.setup();
+			renderDuplicate(v);
+
+			await user.click(
+				await screen.findByRole("button", { name: "Keep the new one" }),
+			);
+
+			await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+			const [post] = posts(fake.calls);
+			expect(pathOf(post!)).toBe(`${ALBUM_URL}/decision`);
+			expect(JSON.parse(post!.body)).toMatchObject({ action: "accept" });
+		});
 
 		it("can be reached and pressed from the keyboard", async () => {
 			const fake = serveApproval(

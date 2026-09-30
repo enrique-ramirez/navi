@@ -68,3 +68,10 @@
 	color: var(--faint);
 	cursor: not-allowed;
 }
+
+.button[data-recommended]:not(:disabled) {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--on-accent);
+	font-weight: 600;
+}

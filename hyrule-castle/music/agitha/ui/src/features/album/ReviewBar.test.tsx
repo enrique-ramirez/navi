@@ -200,6 +200,28 @@ describe("ReviewBar", () => {
 			);
 		});
 
+		it("approves nothing when identify plans something other than what was on screen", async () => {
+			vi.useFakeTimers({ shouldAdvanceTime: true });
+			const replanned = accepted();
+			replanned.preview = {
+				...replanned.preview!,
+				plan_digest: "a-different-plan",
+			};
+			const fake = serve(notAccepted(), { identified: replanned });
+			restore = fake.restore;
+			const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+			renderBar();
+
+			await user.click(await screen.findByRole("button", { name: "Approve" }));
+
+			await throughPolls(() =>
+				expect(screen.getByRole("alert")).toHaveTextContent(
+					"Identify planned something different",
+				),
+			);
+			expect(posts(fake.calls).map(pathOf)).toEqual([`${ALBUM_URL}/decision`]);
+		});
+
 		it("stops after accepting when identify finds the album is already in the library", async () => {
 			vi.useFakeTimers({ shouldAdvanceTime: true });
 			const fake = serve(notAccepted(), {

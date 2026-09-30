@@ -261,5 +261,7 @@
 	"uploaded.note": "Aún no hay nada previsto para ellos. Sus etiquetas se muestran tal como están.",
 	"uploaded.list": "Archivos subidos",
 	"uploaded.tags": "Etiquetas actuales",
-	"uploaded.tagsOf": "Etiquetas de {file}"
+	"uploaded.tagsOf": "Etiquetas de {file}",
+	"review.repreview": "Volver a previsualizar",
+	"review.changed": "La identificación planeó algo distinto de lo que se mostraba, así que no se aprobó nada. Revísalo y vuelve a aprobar."
 }
