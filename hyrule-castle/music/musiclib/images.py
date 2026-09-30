@@ -47,10 +47,10 @@ def _is_jpeg(data: bytes) -> bool:
 
 
 #: What Pillow raises for bytes that are not a readable image, however the file is broken.
-_NOT_AN_IMAGE = (OSError, ValueError, SyntaxError, Image.DecompressionBombError)
+NOT_AN_IMAGE = (OSError, ValueError, SyntaxError, Image.DecompressionBombError)
 
 
-def _as_jpeg(data: bytes) -> bytes:
+def as_jpeg(data: bytes) -> bytes:
     """`data`, unchanged if it is already a JPEG, else converted to one."""
     if _is_jpeg(data):
         with Image.open(io.BytesIO(data)) as image:
@@ -97,6 +97,15 @@ def passes(width: int, height: int, types: Sequence[str] | None = None) -> bool:
 def _size(data: bytes) -> tuple[int, int]:
     with Image.open(io.BytesIO(data)) as image:
         return image.size
+
+
+def mime(data: bytes) -> str | None:
+    """The MIME type of the image `data` is, or None where it is not one Pillow reads."""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            return Image.MIME.get(image.format or "")
+    except NOT_AN_IMAGE:
+        return None
 
 
 def cover_check(data: bytes) -> tuple[int, int, bool, str | None]:
@@ -209,7 +218,7 @@ def average_hash_or_none(data: bytes) -> int | None:
     """`average_hash(data)`, or None where `data` is not an image."""
     try:
         return average_hash(data)
-    except _NOT_AN_IMAGE:
+    except NOT_AN_IMAGE:
         return None
 
 
@@ -269,16 +278,16 @@ def plan_images(
 
     def fetch(image: dict) -> bytes | None:
         try:
-            return _as_jpeg(get(image))
-        except _NOT_AN_IMAGE:
+            return as_jpeg(get(image))
+        except NOT_AN_IMAGE:
             problems.append(f"cover art archive: {image['image']} is not an image")
             return None
 
     candidates: list[tuple[str, bytes]] = []
     for name, data in local:
         try:
-            candidates.append((name, _as_jpeg(data)))
-        except _NOT_AN_IMAGE:
+            candidates.append((name, as_jpeg(data)))
+        except NOT_AN_IMAGE:
             continue
 
     cover: bytes | None = None
@@ -301,7 +310,7 @@ def plan_images(
         if chosen[0].casefold() != "cover.jpg" and Path(chosen[0]).stem.casefold() != "front":
             consumed = chosen[0]
     if owner_cover is not None:
-        cover = _as_jpeg(owner_cover)
+        cover = as_jpeg(owner_cover)
         holds = []
     if cover is not None:
         files["cover.jpg"] = cover

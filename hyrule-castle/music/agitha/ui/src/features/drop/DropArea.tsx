@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, useRef, useState } from "react";
+import { ChevronDown, Upload } from "lucide-react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 
 import {
 	type Gathered,
@@ -29,6 +30,94 @@ const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 
 const encoded = (path: string) =>
 	path.split("/").map(encodeURIComponent).join("/");
+
+// One button for both pickers: a browser opens its file dialog for files or
+// for folders, never both, so the button asks which.
+function Picker({
+	onPick,
+}: {
+	onPick: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+	const { t } = useTranslate();
+	const [open, setOpen] = useState(false);
+	const root = useRef<HTMLDivElement>(null);
+	const folder = useRef<HTMLInputElement>(null);
+	const files = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		const onPointer = (event: PointerEvent) => {
+			if (!root.current?.contains(event.target as Node)) setOpen(false);
+		};
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setOpen(false);
+		};
+		document.addEventListener("pointerdown", onPointer);
+		document.addEventListener("keydown", onKey);
+		return () => {
+			document.removeEventListener("pointerdown", onPointer);
+			document.removeEventListener("keydown", onKey);
+		};
+	}, [open]);
+
+	function choose(input: HTMLInputElement | null) {
+		setOpen(false);
+		input?.click();
+	}
+
+	return (
+		<div ref={root} className={styles.picker}>
+			<button
+				type="button"
+				className={styles.pick}
+				aria-haspopup="menu"
+				aria-expanded={open}
+				onClick={() => setOpen((was) => !was)}
+			>
+				{t("drop.pick")}
+				<ChevronDown className={styles.chevron} aria-hidden="true" />
+			</button>
+			{open && (
+				<div role="menu" className={styles.menu}>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.item}
+						onClick={() => choose(folder.current)}
+					>
+						{t("drop.pickFolder")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.item}
+						onClick={() => choose(files.current)}
+					>
+						{t("drop.pickFiles")}
+					</button>
+				</div>
+			)}
+			<input
+				ref={folder}
+				type="file"
+				className="visually-hidden"
+				tabIndex={-1}
+				aria-label={t("drop.pickFolder")}
+				{...{ webkitdirectory: "" }}
+				onChange={onPick}
+			/>
+			<input
+				ref={files}
+				type="file"
+				multiple
+				className="visually-hidden"
+				tabIndex={-1}
+				aria-label={t("drop.pickFiles")}
+				onChange={onPick}
+			/>
+		</div>
+	);
+}
 
 export function DropArea() {
 	const { t } = useTranslate();
@@ -127,27 +216,9 @@ export function DropArea() {
 				void gatherEntries(entries, files).then(send);
 			}}
 		>
+			<Upload className={styles.icon} aria-hidden="true" />
 			<p className={styles.hint}>{t("drop.here")}</p>
-			<div className={styles.pickers}>
-				<label className={styles.pick}>
-					{t("drop.pickFiles")}
-					<input
-						type="file"
-						multiple
-						className="visually-hidden"
-						onChange={pick}
-					/>
-				</label>
-				<label className={styles.pick}>
-					{t("drop.pickFolder")}
-					<input
-						type="file"
-						className="visually-hidden"
-						{...{ webkitdirectory: "" }}
-						onChange={pick}
-					/>
-				</label>
-			</div>
+			<Picker onPick={pick} />
 			{progress && (
 				<div className={styles.progress}>
 					<div

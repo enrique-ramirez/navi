@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { isRunning } from "@/domain/album/albumQuery";
 import { post } from "@/shared/api/album";
 import type {
 	AlbumAction,
+	AlbumState,
 	AlbumSummary,
 	Drop,
 	DropList,
@@ -13,6 +14,7 @@ import type {
 import { albumStatePhrase } from "@/shared/i18n/albumState";
 import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
+import { Confirm } from "@/shared/ui/Confirm";
 import styles from "./Drops.module.css";
 
 const DROP_STATE: Record<Drop["state"], Phrase | null> = {
@@ -21,6 +23,35 @@ const DROP_STATE: Record<Drop["state"], Phrase | null> = {
 	extracting: "state.extracting",
 	ready: null,
 };
+
+type Tone = "positive" | "danger" | "caution" | "working";
+
+// Green is done or ready to go on, red failed, yellow stopped halfway and
+// waiting on the owner, gray still running.
+const ALBUM_TONE: Record<AlbumState, Tone> = {
+	queued: "working",
+	identifying: "working",
+	ready: "positive",
+	"identify failed": "danger",
+	"identify interrupted": "caution",
+	applying: "working",
+	"written, not moved": "caution",
+	"in the library": "positive",
+	"apply failed": "danger",
+	incomplete: "caution",
+	discarded: "working",
+};
+
+const DROP_TONE: Record<Drop["state"], Tone> = {
+	uploading: "working",
+	incomplete: "caution",
+	extracting: "working",
+	ready: "positive",
+};
+
+function State({ tone, children }: { tone: Tone; children: string }) {
+	return <span className={`${styles.state} ${styles[tone]}`}>{children}</span>;
+}
 
 // The buttons an album row can offer, each named by the server's action and posted to its own path.
 const ROW_ACTIONS: { action: AlbumAction; label: Phrase }[] = [
@@ -54,7 +85,7 @@ function AlbumRow({
 }: {
 	drop: Drop;
 	album: AlbumSummary;
-	onPost: (path: string) => void;
+	onPost: (path: string, action: AlbumAction, title: string) => void;
 }) {
 	const { t } = useTranslate();
 	const base = `${encodeURIComponent(drop.id)}/albums/${album.n}`;
@@ -62,14 +93,22 @@ function AlbumRow({
 	return (
 		<li className={styles.album}>
 			<div className={styles.head}>
-				<span className={styles.name}>{album.name}</span>
+				<Link
+					to={`/drops/${drop.id}/albums/${album.n}`}
+					className={styles.open}
+					aria-label={`${t("action.open")} ${title}`}
+				>
+					{album.name}
+				</Link>
 				{album.title && (
 					<span>
 						{album.title}
 						{album.artist ? ` — ${album.artist}` : ""}
 					</span>
 				)}
-				<span className={styles.state}>{t(albumStatePhrase[album.state])}</span>
+				<State tone={ALBUM_TONE[album.state]}>
+					{t(albumStatePhrase[album.state])}
+				</State>
 			</div>
 			{album.duplicate_of && (
 				<p className={styles.note}>
@@ -81,13 +120,6 @@ function AlbumRow({
 				<pre className={styles.stderr}>{album.stderr}</pre>
 			)}
 			<div className={styles.buttons}>
-				<Link
-					to={`/drops/${drop.id}/albums/${album.n}`}
-					className={styles.link}
-					aria-label={`${t("action.open")} ${title}`}
-				>
-					{t("action.open")}
-				</Link>
 				{ROW_ACTIONS.filter(({ action }) => album.actions.includes(action)).map(
 					({ action, label }) => (
 						<button
@@ -95,7 +127,7 @@ function AlbumRow({
 							type="button"
 							className={styles.button}
 							aria-label={`${t(label)} ${title}`}
-							onClick={() => onPost(`${base}/${action}`)}
+							onClick={() => onPost(`${base}/${action}`, action, title)}
 						>
 							{t(label)}
 						</button>
@@ -110,6 +142,10 @@ export function Drops() {
 	const { t } = useTranslate();
 	const client = useQueryClient();
 	const [error, setError] = useState<string | null>(null);
+	const [asking, setAsking] = useState<{
+		path: string;
+		message: string;
+	} | null>(null);
 	const { data: drops = [] } = useQuery({
 		queryKey: ["drops"],
 		queryFn: fetchDrops,
@@ -124,6 +160,8 @@ export function Drops() {
 		await client.invalidateQueries({ queryKey: ["drops"] });
 	}
 
+	const cancel = useCallback(() => setAsking(null), []);
+
 	return (
 		<section className={styles.drops}>
 			{error && <p role="alert">{error}</p>}
@@ -134,7 +172,7 @@ export function Drops() {
 						<div className={styles.dropHead}>
 							<h2>{drop.id}</h2>
 							{stateName && (
-								<span className={styles.state}>{t(stateName)}</span>
+								<State tone={DROP_TONE[drop.state]}>{t(stateName)}</State>
 							)}
 							{drop.actions.includes("discard") && (
 								<button
@@ -142,7 +180,16 @@ export function Drops() {
 									className={styles.button}
 									aria-label={`${t("action.discard")} ${drop.id}`}
 									onClick={() =>
-										void act(`${encodeURIComponent(drop.id)}/discard`)
+										setAsking({
+											path: `${encodeURIComponent(drop.id)}/discard`,
+											message:
+												drop.albums.length === 1
+													? t("confirm.discardDropOne", { drop: drop.id })
+													: t("confirm.discardDrop", {
+															drop: drop.id,
+															count: drop.albums.length,
+														}),
+										})
 									}
 								>
 									{t("action.discard")}
@@ -183,7 +230,14 @@ export function Drops() {
 										key={album.n}
 										drop={drop}
 										album={album}
-										onPost={(path) => void act(path)}
+										onPost={(path, action, title) =>
+											action === "discard"
+												? setAsking({
+														path,
+														message: t("confirm.discardAlbum", { title }),
+													})
+												: void act(path)
+										}
 									/>
 								))}
 							</ul>
@@ -191,6 +245,17 @@ export function Drops() {
 					</section>
 				);
 			})}
+			{asking && (
+				<Confirm
+					message={asking.message}
+					confirmLabel={t("action.discard")}
+					onCancel={cancel}
+					onConfirm={() => {
+						setAsking(null);
+						void act(asking.path);
+					}}
+				/>
+			)}
 		</section>
 	);
 }

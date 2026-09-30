@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import unittest
 
 from PIL import Image
 
+from musiclib.cache import Cache
 from tests import builders
-from tests.test_agitha_decision import CLEAN_ID, DROP, AlbumCase, accept, sha256
+from tests.test_agitha_decision import ALBUM, CLEAN_ID, DROP, PYTHON, STUB, AlbumCase, accept, sha256
 
 URL = f"/api/drops/{DROP}/albums/01/cover"
 
@@ -233,6 +235,77 @@ class TheOwnersCoverWins(CoverCase):
         self.assertEqual(preview["images"]["cover.jpg"]["sha256"], sha256(data))
         self.assertEqual(preview["inputs"]["owner_cover"]["path"], body["path"])
         self.assertEqual((view["cover"]["width"], view["cover"]["height"], view["cover"]["passes"]), (400, 300, False))
+
+
+class ThePlannedCover(CoverCase):
+    """The plan's `cover.jpg` is shown however the engine came by it, byte for byte what it writes."""
+
+    def identify_again(self) -> dict:
+        found = subprocess.run([PYTHON, str(STUB), *self.identify_argv()], capture_output=True, text=True)
+        self.assertEqual(found.returncode, 0, found.stderr)
+        return self.view()
+
+    def assertServesThePlan(self, view: dict, size: tuple[int, int]) -> None:
+        planned = view["preview"]["images"]["cover.jpg"]
+        self.assertEqual((view["cover"]["url"], view["cover"]["width"], view["cover"]["height"]), (URL, *size))
+        status, content_type, body = self.served()
+        self.assertEqual((status, content_type), (200, "image/jpeg"))
+        self.assertEqual((sha256(body), len(body)), (planned["sha256"], planned["length"]))
+
+    def test_a_folder_png_the_engine_converts_is_shown_as_the_jpeg_it_becomes(self) -> None:
+        folder = self.inbox / DROP / "01" / "drop" / "album" / ALBUM
+        (folder / "cover.jpg").unlink()
+        (folder / "cover.png").write_bytes(image(600, 600))
+        self.assertServesThePlan(self.identify_again(), (600, 600))
+
+    def test_a_cover_archive_download_in_the_jobs_cache_is_shown_before_it_is_written(self) -> None:
+        # Where the engine keeps an archive front it fetched; nothing in the folder is that image.
+        data = image(700, 700, "image/jpeg")
+        Cache(self.job / "cache").fetch(f"https://coverartarchive.org/release/{CLEAN_ID}/1.jpg", lambda: data)
+        doc = json.loads(self.plan_bytes)
+        doc["albums"][0]["images"]["cover.jpg"] = {"length": len(data), "sha256": sha256(data)}
+        (self.job / "plan.json").write_text(json.dumps(doc), encoding="utf-8")
+        self.assertServesThePlan(self.view(), (700, 700))
+
+    def test_no_cover_in_the_plan_is_null_and_404(self) -> None:
+        doc = json.loads(self.plan_bytes)
+        doc["albums"][0]["images"] = {}
+        (self.job / "plan.json").write_text(json.dumps(doc), encoding="utf-8")
+        self.assertIsNone(self.view()["cover"])
+        self.assertEqual(self.served()[0], 404)
+
+
+NOW = f"{URL}/now"
+
+
+class TheCurrentCover(CoverCase):
+    """`cover_now` is the album as dropped: the first track's picture, else the folder's image."""
+
+    def folder(self):
+        return self.inbox / DROP / "01" / "drop" / "album" / ALBUM
+
+    def served_now(self) -> tuple[int, str, bytes]:
+        status, content_type, body = self.request("GET", NOW)
+        return status, content_type.split(";")[0].strip(), body
+
+    def test_the_first_tracks_embedded_picture_comes_before_the_folders_image(self) -> None:
+        data = image(640, 480, "image/jpeg")
+        builders.embed_picture(self.folder() / "01 one.mp3", data)
+        cover = self.view()["cover_now"]
+        self.assertEqual(cover["url"], NOW)
+        self.assertEqual((cover["width"], cover["height"], cover["passes"]), (640, 480, False))
+        self.assertIsInstance(cover["problem"], str)
+        self.assertEqual(self.served_now(), (200, "image/jpeg", data))
+
+    def test_with_nothing_embedded_it_is_the_folders_cover(self) -> None:
+        cover = self.view()["cover_now"]
+        self.assertEqual((cover["url"], cover["width"], cover["height"]), (NOW, 1600, 900))
+        self.assertEqual(self.served_now(), (200, "image/jpeg", PLANNED.read_bytes()))
+
+    def test_with_no_picture_anywhere_it_is_null_and_404(self) -> None:
+        (self.folder() / "cover.jpg").unlink()
+        self.assertIsNone(self.view()["cover_now"])
+        self.assertEqual(self.served_now()[0], 404)
 
 
 if __name__ == "__main__":

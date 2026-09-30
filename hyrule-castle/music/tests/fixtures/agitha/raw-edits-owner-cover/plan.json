@@ -4,12 +4,16 @@
    "candidates": [
     {
      "artist": "Edited Band",
+     "artist_agrees": false,
+     "checked": true,
      "country": "GB",
      "date": "2010-05-24",
      "duration_diff": 0.45599999999999974,
+     "failing_tracks": 0,
      "format": "CD",
      "matches_counts": true,
      "release_id": "6f1a2b3c-0000-4000-8000-000100000004",
+     "status": "Official",
      "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000004/front-250",
      "title": "Edited Album",
      "track_counts": [

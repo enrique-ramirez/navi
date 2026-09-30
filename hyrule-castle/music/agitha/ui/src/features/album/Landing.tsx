@@ -1,3 +1,5 @@
+import { ChevronRight, File, Folder as FolderIcon } from "lucide-react";
+
 import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./Landing.module.css";
@@ -32,6 +34,11 @@ function Tree({ nodes, label }: { nodes: Folder[]; label: string }) {
 		<ul className={styles.tree} aria-label={label}>
 			{nodes.map((node) => (
 				<li key={node.name}>
+					{node.children ? (
+						<FolderIcon size={14} aria-hidden="true" />
+					) : (
+						<File size={14} aria-hidden="true" />
+					)}
 					<span>{node.name}</span>
 					{node.children && <Tree nodes={node.children} label={node.name} />}
 				</li>
@@ -40,75 +47,75 @@ function Tree({ nodes, label }: { nodes: Folder[]; label: string }) {
 	);
 }
 
+// Where the album will be in the library, and what happens to the files that are not its audio.
 export function Landing({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const preview = view.preview;
+	if (preview === null) return null;
 
 	return (
 		<section className={styles.landing} aria-labelledby="landing-title">
-			<h2 id="landing-title">{t("landing.title")}</h2>
-			{preview === null ? (
-				<p>{t("landing.noPreview")}</p>
+			<h3 id="landing-title" className={styles.label}>
+				{t("landing.title")}
+			</h3>
+			{preview.destination ? (
+				<p className={styles.path} title={view.library_path ?? undefined}>
+					{preview.destination}
+				</p>
 			) : (
-				<>
-					<h3>{t("landing.library")}</h3>
-					{view.library_path ? (
-						<p className={styles.path}>{view.library_path}</p>
-					) : (
-						<p>{t("landing.noDestination")}</p>
-					)}
+				<p className={styles.muted}>{t("landing.noDestination")}</p>
+			)}
 
-					<h3>{t("landing.folder")}</h3>
-					<Tree nodes={nest(view.tree)} label={t("landing.folder")} />
+			<details className={styles.details}>
+				<summary>
+					<ChevronRight
+						size={14}
+						aria-hidden="true"
+						className={styles.chevron}
+					/>
+					{t("landing.folderCount", { n: view.tree.length })}
+				</summary>
+				<Tree nodes={nest(view.tree)} label={t("landing.folder")} />
+			</details>
 
-					<h3>{t("landing.deleted")}</h3>
-					{preview.deletions.length === 0 ? (
-						<p>{t("landing.none")}</p>
-					) : (
-						<ul className={styles.plain} aria-label={t("landing.deleted")}>
-							{preview.deletions.map((path) => (
-								<li key={path}>{path}</li>
-							))}
-						</ul>
-					)}
+			{preview.deletions.length > 0 && (
+				<details className={styles.details}>
+					<summary>
+						<ChevronRight
+							size={14}
+							aria-hidden="true"
+							className={styles.chevron}
+						/>
+						{t("landing.deletedCount", { n: preview.deletions.length })}
+					</summary>
+					<ul className={styles.plain} aria-label={t("landing.deleted")}>
+						{preview.deletions.map((path) => (
+							<li key={path}>{path.split("/").pop()}</li>
+						))}
+					</ul>
+				</details>
+			)}
 
-					<h3>{t("landing.extras")}</h3>
-					{view.extras_to.length === 0 ? (
-						<p>{t("landing.none")}</p>
-					) : (
-						<ul className={styles.plain} aria-label={t("landing.extras")}>
-							{view.extras_to.map((extra) => (
-								<li key={extra.source}>
-									<span>{extra.source}</span>{" "}
-									<span className={styles.muted}>{t("landing.goesTo")}</span>{" "}
-									<span className={styles.path}>{extra.path}</span>
-								</li>
-							))}
-						</ul>
-					)}
-
-					<dl className={styles.facts}>
-						<dt>{t("landing.status")}</dt>
-						<dd>{t(`status.${preview.status}`)}</dd>
-						<dt>{t("landing.state")}</dt>
-						<dd>{t(`planState.${preview.state}`)}</dd>
-					</dl>
-
-					<h3>{t("landing.holds")}</h3>
-					{preview.holds.length === 0 ? (
-						<p>{t("landing.noHolds")}</p>
-					) : (
-						<ul className={styles.plain} aria-label={t("landing.holds")}>
-							{preview.holds.map((hold) => (
-								<li key={`${hold.kind}: ${hold.detail}`}>
-									{hold.detail
-										? `${t(`hold.${hold.kind}`)}: ${hold.detail}`
-										: t(`hold.${hold.kind}`)}
-								</li>
-							))}
-						</ul>
-					)}
-				</>
+			{view.extras_to.length > 0 && (
+				<details className={styles.details}>
+					<summary>
+						<ChevronRight
+							size={14}
+							aria-hidden="true"
+							className={styles.chevron}
+						/>
+						{t("landing.extrasCount", { n: view.extras_to.length })}
+					</summary>
+					<ul className={styles.plain} aria-label={t("landing.extras")}>
+						{view.extras_to.map((extra) => (
+							<li key={extra.source}>
+								<span>{extra.source}</span>{" "}
+								<span className={styles.muted}>{t("landing.goesTo")}</span>{" "}
+								<span className={styles.path}>{extra.path}</span>
+							</li>
+						))}
+					</ul>
+				</details>
 			)}
 		</section>
 	);

@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from musiclib.batch.identify import _candidate_dict
 from musiclib.identify import chosen, identify
 from musiclib import files, mb, units
 from musiclib.cache import Cache
@@ -476,6 +477,25 @@ class Search(IdentifyTestCase):
         # A count mismatch is known from the search answer, so its release
         # is never fetched: that would cost a second against the rate limit.
         self.assertNotIn(mbid("0f"), server.fetched())
+
+    def test_the_plans_candidates_keep_what_the_search_listed_for_a_release_never_fetched(self) -> None:
+        a2 = release_json(mbid("a2"), [[201.5, 180, 240]])
+        f0 = release_json(mbid("0f"), [[200, 180]], date="2001")
+        search = search_json(f0, a2)
+        search["releases"][0].update({"country": "JP", "artist-credit": a2["artist-credit"]})
+        server = Server(search=search, releases=(a2,))
+        result = self.identify(self.search_unit(), server)
+        entries = [_candidate_dict(c, {}) for c in result.candidates]
+        ranked = {k: entries[0][k] for k in ("release_id", "checked", "artist_agrees", "failing_tracks", "status")}
+        self.assertEqual(ranked, {"release_id": mbid("a2"), "checked": True, "artist_agrees": True,
+                                  "failing_tracks": 0, "status": "Official"})
+        unchecked = {k: v for k, v in entries[1].items() if k != "thumbnail"}
+        self.assertEqual(unchecked, {
+            "release_id": mbid("0f"), "title": "The Downward Spiral", "artist": "Nine Inch Nails",
+            "date": "2001", "country": "JP", "format": "CD", "track_counts": [2], "matches_counts": False,
+            "duration_diff": None, "checked": False, "artist_agrees": False, "failing_tracks": None,
+            "status": "Official",
+        })
 
     def test_the_same_total_split_differently_does_not_match_counts(self) -> None:
         tracks = [

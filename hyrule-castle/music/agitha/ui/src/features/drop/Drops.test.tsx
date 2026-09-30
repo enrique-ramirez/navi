@@ -157,6 +157,14 @@ function literally(text: string) {
 
 const DISCARD = /^Discard/;
 
+// A discard only posts once the dialog it opens is confirmed.
+async function confirmDiscard() {
+	const dialog = await screen.findByRole("alertdialog");
+	await userEvent.click(
+		within(dialog).getByRole("button", { name: "Discard" }),
+	);
+}
+
 // A drop's own Discard: one outside every album row, under that drop's heading
 // and no other drop's.
 function dropDiscards(id: string): HTMLElement[] {
@@ -308,6 +316,7 @@ describe("Drops", () => {
 		expect(screen.queryAllByRole("link")).toEqual([]);
 
 		await userEvent.click(buttons[0]!);
+		await confirmDiscard();
 		await waitFor(() =>
 			expect(posted(calls)).toEqual([`/api/drops/${INCOMPLETE}/discard`]),
 		);
@@ -348,6 +357,11 @@ describe("Drops", () => {
 		const row = await shown("Ecliptica rip");
 		const before = gets(calls);
 		await userEvent.click(within(row).getByRole("button", { name: DISCARD }));
+		expect(posted(calls)).toEqual([]);
+		expect(screen.getByRole("alertdialog")).toHaveTextContent(
+			"Discard Ecliptica rip?",
+		);
+		await confirmDiscard();
 
 		// The list only loses the album by asking the server again after the POST.
 		await waitFor(() => expect(screen.queryByText(/Ecliptica rip/)).toBeNull());
@@ -368,10 +382,66 @@ describe("Drops", () => {
 		const [button, ...more] = dropDiscards(INCOMPLETE);
 		expect(more).toEqual([]);
 		await userEvent.click(button!);
+		expect(posted(calls)).toEqual([]);
+		expect(screen.getByRole("alertdialog")).toHaveTextContent(
+			`Discard drop ${INCOMPLETE} and its album?`,
+		);
+		await confirmDiscard();
 
 		await waitFor(() =>
 			expect(posted(calls)).toEqual([`/api/drops/${INCOMPLETE}/discard`]),
 		);
+	});
+
+	it("names how many albums a drop's discard takes with it", async () => {
+		serve(() => [
+			drop(INCOMPLETE, {
+				albums: [album("01", "Silence rip"), album("02", "Ecliptica rip")],
+			}),
+		]);
+		renderWithProviders(<Drops />);
+
+		await shown("Silence rip");
+		await userEvent.click(dropDiscards(INCOMPLETE)[0]!);
+		expect(screen.getByRole("alertdialog")).toHaveTextContent(
+			`Discard drop ${INCOMPLETE} and all 2 of its albums?`,
+		);
+	});
+
+	it("posts nothing when a discard is cancelled, by its button or by Escape", async () => {
+		const { calls } = serve(() => [
+			drop(INCOMPLETE, { albums: [album("01", "Silence rip")] }),
+		]);
+		renderWithProviders(<Drops />);
+
+		const row = await shown("Silence rip");
+		const discard = within(row).getByRole("button", { name: DISCARD });
+
+		await userEvent.click(discard);
+		expect(
+			within(screen.getByRole("alertdialog")).getByRole("button", {
+				name: "Cancel",
+			}),
+		).toHaveFocus();
+		await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(discard).toHaveFocus();
+
+		await userEvent.click(discard);
+		await userEvent.keyboard("{Escape}");
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(posted(calls)).toEqual([]);
+	});
+
+	it("has no Open button: the album's name is the row's link", async () => {
+		serve(() => [busyDrop]);
+		renderWithProviders(<Drops />);
+
+		const row = await shown("Pariahs Child rip");
+		expect(within(row).getByRole("link")).toHaveTextContent(
+			"Pariahs Child rip",
+		);
+		expect(within(row).queryByRole("button", { name: /^Open/ })).toBeNull();
 	});
 
 	describe("polling, on fake timers that also run with the clock so findBy still waits", () => {

@@ -1,0 +1,230 @@
+.wrapper {
+	display: grid;
+	font-size: 0.875rem;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.table {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: separate;
+	border-spacing: 0;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font-size: 0.875rem;
+}
+
+.nameCol {
+	width: 11rem;
+}
+
+.actionCol {
+	width: 2.75rem;
+}
+
+.table thead th {
+	padding: var(--space-2) var(--space-3);
+	color: var(--muted);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-align: left;
+	text-transform: uppercase;
+	border-bottom: 1px solid var(--border);
+}
+
+.table tbody th,
+.table tbody td {
+	padding: var(--space-1) var(--space-3);
+	vertical-align: middle;
+	overflow-wrap: anywhere;
+	text-align: left;
+}
+
+.table tbody tr + tr > * {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.table tbody th {
+	color: var(--muted);
+	font-weight: 400;
+}
+
+.now {
+	color: var(--muted);
+}
+
+.now[data-differs],
+.next [data-differs] {
+	color: var(--faint);
+	font-style: italic;
+}
+
+.absent {
+	color: var(--faint);
+}
+
+/* A change shows in the New column: amber changed, green added, red removed. */
+tr[data-change="changed"] .next,
+tr[data-change="changed"] .next .input {
+	color: var(--caution);
+}
+
+tr[data-change="added"] .next,
+tr[data-change="added"] .next .input {
+	color: var(--positive);
+}
+
+tr[data-change="removed"] .next {
+	color: var(--danger);
+}
+
+tr[data-edited] th {
+	color: var(--text);
+}
+
+.editedDot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-left: var(--space-2);
+	vertical-align: middle;
+	background: var(--accent);
+	border-radius: 50%;
+}
+
+tr[data-locked] th,
+tr[data-locked] td {
+	color: var(--faint);
+}
+
+.locked {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
+	font-family: var(--font-numeric);
+	font-size: 0.75rem;
+}
+
+.removed {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: baseline;
+	text-decoration: line-through;
+}
+
+.reason {
+	color: var(--faint);
+	font-size: 0.75rem;
+	text-decoration: none;
+	display: inline-block;
+}
+
+.input {
+	width: 100%;
+	padding: var(--space-1) var(--space-2);
+	margin-left: calc(-1 * var(--space-2));
+	color: inherit;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	font: inherit;
+}
+
+.input:hover {
+	border-color: var(--border);
+}
+
+.input:focus {
+	background: var(--bg);
+	border-color: var(--accent);
+	outline: none;
+	color: var(--text);
+}
+
+.action {
+	text-align: right;
+}
+
+.icon {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	color: var(--faint);
+}
+
+.icon:hover {
+	background: var(--accent-quiet);
+	color: var(--text);
+}
+
+tr:not(:hover):not(:focus-within) .icon:not(:focus-visible) {
+	opacity: 0;
+}
+
+tr[data-edited] .icon {
+	opacity: 1;
+}
+
+.empty {
+	color: var(--faint);
+	font-style: italic;
+}
+
+.add {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.add .input {
+	flex: 1;
+	margin: 0;
+	background: var(--surface);
+	border-color: var(--border);
+}
+
+.button {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	white-space: nowrap;
+}
+
+.button:hover {
+	background: var(--accent-quiet);
+}
+
+.error {
+	margin: 0;
+	color: var(--danger);
+	font-size: 0.8125rem;
+}
+
+@media (hover: none) {
+	tr:not(:hover):not(:focus-within) .icon:not(:focus-visible) {
+		opacity: 1;
+	}
+}
+
+@media (max-width: 640px) {
+	.nameCol {
+		width: 7rem;
+	}
+
+	.table thead th:nth-child(2),
+	.table tbody td.now {
+		display: none;
+	}
+}

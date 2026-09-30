@@ -4,7 +4,7 @@ import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppRouter } from "@/app/router";
-import type { Drop } from "@/shared/api/types";
+import type { AlbumView, Drop } from "@/shared/api/types";
 import { fakeFetch } from "@/test/fakeFetch";
 import { screen, userEvent, waitFor } from "@/test/render";
 
@@ -38,6 +38,30 @@ const listed: Drop = {
 	error: null,
 };
 
+// Album 07 as its page loads it, before identify has written a preview.
+const album: AlbumView = {
+	drop: DROP,
+	n: "07",
+	name: "Pariahs Child rip",
+	state: "queued",
+	stderr: "",
+	error: null,
+	step: null,
+	file: null,
+	busy: true,
+	preview: null,
+	files: [],
+	names: { id3: {}, vorbis: {}, mp4: {}, asf: {} },
+	library_path: null,
+	tree: [],
+	extras_to: [],
+	decision: null,
+	cover: null,
+	cover_now: null,
+	duplicate: null,
+	approvable: { ok: false, reason: null, code: "busy", hold: null },
+};
+
 let server: ReturnType<typeof fakeFetch> | undefined;
 
 afterEach(() => {
@@ -48,7 +72,10 @@ afterEach(() => {
 // The app's own routes, so this renders the router itself; the test helper
 // brings a router of its own and cannot take these.
 function openAt(address: string) {
-	server = fakeFetch({ "GET /api/drops": () => Response.json([listed]) });
+	server = fakeFetch({
+		"GET /api/drops": () => Response.json([listed]),
+		[`GET /api/drops/${DROP}/albums/07`]: () => Response.json(album),
+	});
 	// jsdom has no matchMedia, and the shell's theme asks it for the system's choice.
 	vi.stubGlobal("matchMedia", (query: string) => ({
 		matches: false,

@@ -4,12 +4,16 @@
    "candidates": [
     {
      "artist": "Score Band",
+     "artist_agrees": false,
+     "checked": true,
      "country": "GB",
      "date": "2010-05-24",
      "duration_diff": 0.45599999999999974,
+     "failing_tracks": 0,
      "format": "CD",
      "matches_counts": true,
      "release_id": "6f1a2b3c-0000-4000-8000-000100000003",
+     "status": "Official",
      "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000003/front-250",
      "title": "Score Album",
      "track_counts": [

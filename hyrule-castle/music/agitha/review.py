@@ -1,4 +1,4 @@
-"""The album view: `GET /api/drops/<drop>/albums/<n>` and the cover it shows.
+"""The album view: `GET /api/drops/<drop>/albums/<n>` and the two covers it shows, planned and current.
 
 The plan is read again on every request, so an identify that finished a
 second ago shows. Files are found under `inbox/<drop>/<n>/`, not under the
@@ -11,9 +11,11 @@ import base64
 import binascii
 import copy
 import dataclasses
+import hashlib
+import mimetypes
 import re
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import parse_qs, quote, urlsplit
 
 import mutagen
@@ -43,38 +45,101 @@ def _tail(path: str, base: str) -> str:
     return PurePosixPath(path).relative_to(base).as_posix()
 
 
-def cover_file(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> Path | None:
-    """The image shown as the album's cover: the owner's where the plan's inputs name it, else the album folder's file the plan's `cover.jpg` is.
+def _cached(job: Path) -> list[Path]:
+    try:
+        return sorted(path for path in (job / "cache").iterdir() if path.is_file())
+    except OSError:
+        return []
 
-    A cover the plan will fetch from the Cover Art Archive has no file yet, so it gives None.
+
+def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
+    """The bytes shown as the album's cover and their content type, or None where the plan writes no cover.
+
+    The owner's image where the plan's inputs name it, as uploaded. Otherwise
+    the exact bytes of the plan's `cover.jpg`, from wherever the engine took
+    them: an image in the album folder or a Cover Art Archive download in the
+    job's cache, as it is or converted to JPEG as `images.as_jpeg` converts it.
+    None also where none of those gives those bytes any more, since showing
+    another image would claim it is what the plan writes.
     """
     job = config.jobs / f"agitha-{drop}-{n}"
     named = ((entry or {}).get("inputs") or {}).get("owner_cover")
     path = job / named["path"] if isinstance(named, dict) and isinstance(named.get("path"), str) else None
     # Only the file the plan names counts; the folder may hold covers sent since or before.
     if path is not None and path.parent == job / "owner" and path.is_file():
-        return path
+        return path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     planned = (entry or {}).get("images", {}).get("cover.jpg")
-    folder = ranges.album_folder(config, drop, n)
-    if not planned or folder is None:
+    if not planned:
         return None
-    for path in sorted(folder.rglob("*")):
-        if path.suffix.lower() in IMAGE_SUFFIXES and path.is_file() and not path.is_symlink() \
-                and path.stat().st_size == planned["length"] and drops.file_sha256(path) == planned["sha256"]:
-            return path
+    folder = ranges.album_folder(config, drop, n)
+    local = [path for path in sorted(folder.rglob("*")) if path.suffix.lower() in IMAGE_SUFFIXES
+             and path.is_file() and not path.is_symlink()] if folder is not None else []
+    sources = [*local, *_cached(job)]
+    for path in sources:
+        if path.stat().st_size == planned["length"] and drops.file_sha256(path) == planned["sha256"]:
+            return path.read_bytes(), "image/jpeg"
+    # An image the engine converted; the cache is mostly JSON, which is no image at all.
+    for path in sources:
+        data = path.read_bytes()
+        if images.mime(data) in (None, "image/jpeg"):
+            continue
+        try:
+            converted = images.as_jpeg(data)
+        except images.NOT_AN_IMAGE:
+            continue
+        if hashlib.sha256(converted).hexdigest() == planned["sha256"]:
+            return converted, "image/jpeg"
     return None
 
 
-def _cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> dict[str, Any] | None:
-    path = cover_file(config, drop, n, entry)
-    if path is None:
+def _first_track(config: Config, drop: str, n: str, entry: dict[str, Any] | None, folder: Path) -> Path | None:
+    """The plan's first track, else the folder's first audio file by path."""
+    if entry and entry.get("files"):
+        return config.inbox / drop / n / entry["source"] / _tail(entry["files"][0]["source"], entry["source"])
+    return next((path for path in sorted(folder.rglob("*")) if audio.facts(path) is not None), None)
+
+
+def current_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
+    """The cover as the album is now, before musiclib writes anything, and its content type; None where it has none.
+
+    The front picture embedded in the first track (else its first picture),
+    else the folder's image `images.local_covers` puts first, else the first
+    image in the folder by name.
+    """
+    folder = ranges.album_folder(config, drop, n)
+    if folder is None:
         return None
+    track = _first_track(config, drop, n, entry, folder)
     try:
-        width, height, passes, problem = images.cover_check(path.read_bytes())
+        pictures = images.embedded_pictures(track) if track is not None else []
+    except (OSError, ValueError, mutagen.MutagenError):
+        pictures = []
+    if pictures:
+        data = next((data for kind, data in pictures if kind == 3), pictures[0][1])
+        return data, images.mime(data) or "application/octet-stream"
+    try:
+        covers = images.local_covers(folder)
+        loose = sorted(path for path in folder.iterdir() if path.suffix.lower() in IMAGE_SUFFIXES and path.is_file())
     except OSError:
         return None
-    return {"url": f"/api/drops/{drop}/albums/{n}/cover", "width": width, "height": height,
-            "passes": passes, "problem": problem}
+    if covers:
+        name, data = covers[0]
+    elif loose:
+        name, data = loose[0].name, loose[0].read_bytes()
+    else:
+        return None
+    return data, mimetypes.guess_type(name)[0] or "application/octet-stream"
+
+
+def _checked(found: tuple[bytes, str] | None, url: str) -> dict[str, Any] | None:
+    """The `AlbumCover` of `found`, or None where there is none or it is not an image."""
+    if found is None:
+        return None
+    try:
+        width, height, passes, problem = images.cover_check(found[0])
+    except images.NOT_AN_IMAGE:
+        return None
+    return {"url": url, "width": width, "height": height, "passes": passes, "problem": problem}
 
 
 def _decision(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -181,7 +246,7 @@ def _landed(config: Config, drop: str, n: str) -> dict[str, Any] | None:
         "drop": drop, "n": n, "name": PurePosixPath(destination).name if destination else n,
         "state": "in the library", "stderr": "", "error": None, "step": None, "file": None, "busy": False,
         "preview": entry, "files": [], "names": _names(), "library_path": landed.get("path"),
-        "tree": [], "extras_to": [], "decision": None, "cover": None, "duplicate": None,
+        "tree": [], "extras_to": [], "decision": None, "cover": None, "cover_now": None, "duplicate": None,
         "approvable": {"ok": False, "reason": "in the library", "code": "in-library", "hold": None},
     }
 
@@ -235,7 +300,8 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "extras_to": [{"source": path, "path": str(config.extras / destination / _tail(path, entry["source"]))}
                       for path in entry.get("extras", [])] if destination else [],
         "decision": _decision(config, drop, n, entry),
-        "cover": _cover(config, drop, n, entry),
+        "cover": _checked(planned_cover(config, drop, n, entry), f"/api/drops/{drop}/albums/{n}/cover"),
+        "cover_now": _checked(current_cover(config, drop, n, entry), f"/api/drops/{drop}/albums/{n}/cover/now"),
         "duplicate": _duplicate(config, drop, n, entry, summary["busy"]),
         "approvable": offered,
     }
@@ -266,11 +332,19 @@ def duplicate_cover(request: Handler, match: re.Match[str], config: Config) -> N
     request.send_file(path)
 
 
-def cover(request: Handler, match: re.Match[str], config: Config) -> None:
+def _serve(request: Handler, match: re.Match[str], config: Config, find: Callable[..., tuple[bytes, str] | None]) -> None:
     drop, n = match.group(1), match.group(2)
     folder = drops.drop_dir(config, drop)
-    path = cover_file(config, drop, n, state.plan_entry(config, drop, n)) \
+    found = find(config, drop, n, state.plan_entry(config, drop, n)) \
         if folder is not None and (folder / n).is_dir() else None
-    if path is None:
+    if found is None:
         raise Refusal(404, "No cover.")
-    request.send_file(path)
+    request.send_bytes(200, found[1], found[0])
+
+
+def cover(request: Handler, match: re.Match[str], config: Config) -> None:
+    _serve(request, match, config, planned_cover)
+
+
+def cover_now(request: Handler, match: re.Match[str], config: Config) -> None:
+    _serve(request, match, config, current_cover)

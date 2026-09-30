@@ -1,0 +1,250 @@
+.picker {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.label {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.anchor {
+	position: relative;
+}
+
+.current {
+	display: flex;
+	gap: var(--space-2);
+	align-items: stretch;
+}
+
+.trigger,
+.choose {
+	display: flex;
+	flex: 1;
+	gap: var(--space-3);
+	align-items: center;
+	min-width: 0;
+	padding: var(--space-2) var(--space-3);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	text-align: left;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+	border-color: var(--accent);
+}
+
+.thumb {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	background: var(--surface-raised);
+	border-radius: 6px;
+	color: var(--faint);
+	object-fit: cover;
+}
+
+.text {
+	display: grid;
+	flex: 1;
+	gap: 2px;
+	min-width: 0;
+}
+
+.name {
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.artist {
+	color: var(--muted);
+	font-weight: 400;
+}
+
+.facts {
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.reasons {
+	color: var(--faint);
+	font-size: 0.75rem;
+}
+
+.badge {
+	flex: none;
+	padding: 2px var(--space-2);
+	border-radius: var(--radius-pill);
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.badge[data-level="strong"] {
+	background: color-mix(in oklch, var(--positive) 18%, transparent);
+	color: var(--positive);
+}
+
+.badge[data-level="possible"] {
+	background: color-mix(in oklch, var(--caution) 18%, transparent);
+	color: var(--caution);
+}
+
+.badge[data-level="weak"] {
+	background: color-mix(in oklch, var(--danger) 16%, transparent);
+	color: var(--danger);
+}
+
+.badge[data-level="unchecked"] {
+	background: var(--surface-raised);
+	color: var(--faint);
+}
+
+.more {
+	display: inline-flex;
+	flex: none;
+	gap: var(--space-1);
+	align-items: center;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.external {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 36px;
+	color: var(--muted);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+.external:hover {
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+.panel {
+	position: absolute;
+	top: calc(100% + var(--space-1));
+	right: 0;
+	left: 0;
+	z-index: 4;
+	display: grid;
+	gap: var(--space-2);
+	max-height: min(32rem, 70vh);
+	padding: var(--space-2);
+	overflow-y: auto;
+	background: var(--surface-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	box-shadow: var(--shadow);
+}
+
+.list {
+	display: grid;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.option {
+	display: flex;
+	gap: var(--space-1);
+}
+
+.option .choose {
+	background: transparent;
+	border-color: transparent;
+}
+
+.option .choose:hover {
+	background: var(--accent-quiet);
+}
+
+.option[aria-current="true"] .choose {
+	background: var(--accent-quiet);
+	border-color: color-mix(in oklch, var(--accent) 50%, transparent);
+}
+
+.option .external {
+	border-color: transparent;
+}
+
+.check {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 16px;
+	color: var(--accent);
+}
+
+.unchecked summary {
+	padding: var(--space-2) var(--space-3);
+	color: var(--muted);
+	font-size: 0.8125rem;
+	cursor: pointer;
+}
+
+.paste {
+	display: grid;
+	gap: var(--space-1);
+	padding: var(--space-3);
+	border-top: 1px solid var(--border);
+	font-size: 0.8125rem;
+}
+
+.paste label {
+	color: var(--muted);
+}
+
+.paste p {
+	margin: 0;
+	color: var(--danger);
+}
+
+.pasteRow {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.pasteRow input {
+	flex: 1;
+	min-width: 0;
+	padding: var(--space-1) var(--space-2);
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font: inherit;
+}
+
+.button {
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	white-space: nowrap;
+}
+
+.button:hover {
+	background: var(--accent-quiet);
+}
+
+@media (max-width: 640px) {
+	.more span,
+	.reasons {
+		display: none;
+	}
+}

@@ -3,11 +3,17 @@ import { File as NodeFile } from "node:buffer";
 // user-event cannot build a DataTransfer whose items hand out folder entries,
 // so the drop itself is the one event dispatched with fireEvent.
 import { fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CreateDropRequest, Drop, DropItem } from "@/shared/api/types";
 import { type Call, fakeFetch } from "@/test/fakeFetch";
-import { renderWithProviders, screen, waitFor } from "@/test/render";
+import {
+	renderWithProviders,
+	screen,
+	userEvent,
+	waitFor,
+	within,
+} from "@/test/render";
 
 import { DropArea } from "./DropArea";
 import { Drops } from "./Drops";
@@ -664,5 +670,38 @@ describe("DropArea", () => {
 		expect(
 			pickers.filter((picker) => picker.hasAttribute("webkitdirectory")),
 		).toHaveLength(1);
+	});
+
+	it("offers both pickers from one button, and each item opens its own", async () => {
+		serve();
+		renderWithProviders(<DropArea />);
+		await region();
+		const opened = vi
+			.spyOn(HTMLInputElement.prototype, "click")
+			.mockImplementation(function (this: HTMLInputElement) {});
+
+		const button = screen.getByRole("button", { name: /Choose music/ });
+		expect(screen.queryByRole("menu")).toBeNull();
+
+		await userEvent.click(button);
+		await userEvent.click(
+			within(screen.getByRole("menu")).getByRole("menuitem", {
+				name: "A folder",
+			}),
+		);
+		expect(opened.mock.contexts.at(-1)).toHaveAttribute("webkitdirectory");
+		expect(screen.queryByRole("menu")).toBeNull();
+
+		await userEvent.click(button);
+		await userEvent.click(
+			screen.getByRole("menuitem", { name: "Files or archives" }),
+		);
+		expect(opened.mock.contexts.at(-1)).toHaveAttribute("multiple");
+		expect(opened.mock.contexts.at(-1)).not.toHaveAttribute("webkitdirectory");
+
+		await userEvent.click(button);
+		await userEvent.keyboard("{Escape}");
+		expect(screen.queryByRole("menu")).toBeNull();
+		opened.mockRestore();
 	});
 });

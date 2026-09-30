@@ -1,48 +1,96 @@
 .table {
 	width: 100%;
 	border-collapse: collapse;
+	font-size: 0.875rem;
 }
 
 .table th {
-	padding: var(--space-2) var(--space-3);
+	padding: var(--space-2) var(--space-2);
 	color: var(--muted);
-	font-size: 0.8125rem;
-	font-weight: 500;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
 	text-align: left;
+	text-transform: uppercase;
+	border-bottom: 1px solid var(--border);
 }
 
 .table td {
-	padding: var(--space-1) var(--space-3);
-	border-top: 1px solid var(--border);
+	padding: var(--space-1) var(--space-2);
 }
 
 .table tbody tr {
 	cursor: pointer;
 }
 
-.table tbody tr:hover,
-.selected {
+.table tbody tr + tr td {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.table tbody tr:hover {
 	background: var(--accent-quiet);
 }
 
+.selected td {
+	background: var(--accent-quiet);
+}
+
+.selected td:first-child {
+	box-shadow: inset 3px 0 var(--accent);
+}
+
 .number {
+	width: 1%;
 	font-family: var(--font-numeric);
+	font-size: 0.8125rem;
 	color: var(--muted);
 	white-space: nowrap;
 }
 
+.right {
+	text-align: right;
+}
+
+.table th.right {
+	text-align: right;
+}
+
 .name {
-	padding: var(--space-2) 0;
+	display: grid;
+	width: 100%;
+	padding: var(--space-1) 0;
 	background: transparent;
 	border: 0;
 	text-align: left;
 }
 
+.title {
+	overflow-wrap: anywhere;
+}
+
+.file {
+	overflow: hidden;
+	color: var(--faint);
+	font-size: 0.75rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.changes {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-right: var(--space-2);
+	vertical-align: middle;
+	background: var(--caution);
+	border-radius: 50%;
+}
+
 .play {
 	display: inline-grid;
 	place-items: center;
-	width: 32px;
-	height: 32px;
+	width: 28px;
+	height: 28px;
 	background: transparent;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-pill);

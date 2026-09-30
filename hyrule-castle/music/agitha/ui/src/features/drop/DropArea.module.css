@@ -15,27 +15,75 @@
 	background: var(--accent-quiet);
 }
 
+.icon {
+	width: 56px;
+	height: 56px;
+	color: var(--faint);
+	stroke-width: 1.5;
+}
+
+.over .icon {
+	color: var(--accent);
+}
+
 .hint {
 	margin: 0;
 	color: var(--muted);
 }
 
-.pickers {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-2);
-	justify-content: center;
+.picker {
+	position: relative;
 }
 
 .pick {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
 	padding: var(--space-2) var(--space-4);
+	background: transparent;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-pill);
+	color: inherit;
 	cursor: pointer;
 }
 
 .pick:hover,
-.pick:focus-within {
+.pick[aria-expanded="true"] {
+	background: var(--accent-quiet);
+}
+
+.chevron {
+	width: 16px;
+	height: 16px;
+}
+
+.menu {
+	position: absolute;
+	top: calc(100% + var(--space-1));
+	left: 50%;
+	z-index: 5;
+	display: grid;
+	min-width: 12rem;
+	padding: var(--space-1);
+	background: var(--surface-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	box-shadow: var(--shadow);
+	transform: translateX(-50%);
+}
+
+.item {
+	padding: var(--space-2) var(--space-3);
+	background: transparent;
+	border: 0;
+	border-radius: var(--radius-sm);
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
 	background: var(--accent-quiet);
 }
 

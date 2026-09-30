@@ -16,13 +16,6 @@ export function Outcome({ view }: { view: AlbumView }) {
 			</div>
 		);
 	}
-	if (state === "queued" || state === "identifying" || state === "applying") {
-		return (
-			<p role="status" className={styles.status}>
-				{t(`state.${state}`)}
-			</p>
-		);
-	}
 	const failed =
 		state === "apply failed" ||
 		state === "identify failed" ||

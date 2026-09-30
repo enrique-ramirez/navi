@@ -11,6 +11,8 @@ interface Props {
 	view: AlbumView;
 	selected: string | null;
 	onSelect: (position: string) => void;
+	/** Per position, how many of its own tags change. */
+	changes: Record<string, number>;
 }
 
 function numberOf(position: string, multiDisc: boolean) {
@@ -74,7 +76,7 @@ function PlayButton({
 	);
 }
 
-export function TrackList({ view, selected, onSelect }: Props) {
+export function TrackList({ view, selected, onSelect, changes }: Props) {
 	const { t } = useTranslate();
 	const player = usePlayer();
 	const files = view.preview?.files ?? [];
@@ -89,7 +91,9 @@ export function TrackList({ view, selected, onSelect }: Props) {
 					</th>
 					<th scope="col">{t("tracks.number")}</th>
 					<th scope="col">{t("tracks.name")}</th>
-					<th scope="col">{t("tracks.length")}</th>
+					<th scope="col" className={styles.right}>
+						{t("tracks.length")}
+					</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -104,7 +108,7 @@ export function TrackList({ view, selected, onSelect }: Props) {
 							className={selected === file.position ? styles.selected : ""}
 							onClick={() => onSelect(file.position)}
 						>
-							<td>
+							<td className={styles.number}>
 								<PlayButton
 									facts={facts}
 									title={title}
@@ -117,10 +121,25 @@ export function TrackList({ view, selected, onSelect }: Props) {
 							</td>
 							<td>
 								<button type="button" className={styles.name}>
-									{title}
+									<span className={styles.title}>{title}</span>
+									{facts && (
+										<span className={styles.file}>{facts.path_now}</span>
+									)}
 								</button>
 							</td>
-							<td className={styles.number}>
+							<td className={`${styles.number} ${styles.right}`}>
+								{(changes[file.position] ?? 0) > 0 && (
+									<span
+										className={styles.changes}
+										title={t("tracks.changes", {
+											n: changes[file.position] ?? 0,
+										})}
+									>
+										<span className="visually-hidden">
+											{t("tracks.changes", { n: changes[file.position] ?? 0 })}
+										</span>
+									</span>
+								)}
 								{facts ? formatLength(facts.length) : ""}
 							</td>
 						</tr>

@@ -32,10 +32,39 @@
 }
 
 .album {
+	position: relative;
 	padding: var(--space-3);
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-sm);
+}
+
+.album:hover {
+	background: var(--surface-raised);
+}
+
+.album:has(.open:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* The name's link covers the whole row, so a click anywhere opens the album;
+   the buttons and the stderr sit above it and keep their own clicks. */
+.open {
+	color: inherit;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.open::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+
+.open:focus-visible {
+	outline: none;
 }
 
 .head {
@@ -45,12 +74,56 @@
 	align-items: baseline;
 }
 
-.name {
+.state {
+	display: inline-flex;
+	gap: var(--space-2);
+	align-items: center;
+	padding: 2px var(--space-2);
+	border-radius: var(--radius-pill);
+	font-size: 0.875rem;
 	font-weight: 600;
+	color: var(--tone);
+	background: color-mix(in oklch, var(--tone) 16%, transparent);
 }
 
-.state {
-	color: var(--accent);
+.state::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--tone);
+}
+
+.positive {
+	--tone: var(--positive);
+}
+
+.danger {
+	--tone: var(--danger);
+}
+
+.caution {
+	--tone: var(--caution);
+}
+
+.working {
+	--tone: var(--muted);
+}
+
+.working::before {
+	animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	50% {
+		opacity: 0.3;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.working::before {
+		animation: none;
+	}
 }
 
 .note {
@@ -59,6 +132,7 @@
 }
 
 .stderr {
+	position: relative;
 	margin: var(--space-2) 0 0;
 	padding: var(--space-2);
 	overflow-x: auto;
@@ -69,14 +143,15 @@
 }
 
 .buttons {
+	position: relative;
 	display: flex;
+	width: fit-content;
 	flex-wrap: wrap;
 	gap: var(--space-2);
 	margin-top: var(--space-2);
 }
 
-.button,
-.link {
+.button {
 	padding: var(--space-1) var(--space-3);
 	background: transparent;
 	border: 1px solid var(--border);
@@ -85,7 +160,6 @@
 	text-decoration: none;
 }
 
-.button:hover,
-.link:hover {
+.button:hover {
 	background: var(--accent-quiet);
 }

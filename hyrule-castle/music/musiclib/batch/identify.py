@@ -75,10 +75,14 @@ def _status_detail(status: str, reason: str | None) -> str:
     return status if reason is None else f"{status}: {reason}"
 
 
-def _candidate_dict(candidate) -> dict:
-    release = candidate.release
+def _candidate_dict(candidate, owner_input: dict) -> dict:
+    """One `candidates` entry of the plan: the release's facts and the ones it was ranked on.
+
+    A release never fetched shows what its search result listed, and is not `checked`.
+    """
+    release = candidate.release if candidate.release is not None else candidate.listing
     if release is None:
-        title = artist = date = country = fmt = None
+        title = artist = date = country = fmt = status = None
         track_counts: list = []
     else:
         credit = release.get("artist-credit") or []
@@ -89,10 +93,13 @@ def _candidate_dict(candidate) -> dict:
         media = release.get("media", [])
         fmt = media[0].get("format") if media else None
         track_counts = [medium.get("track-count") for medium in media]
+        status = release.get("status")
     return {
         "release_id": candidate.release_id, "title": title, "artist": artist, "date": date,
         "country": country, "format": fmt, "track_counts": track_counts,
         "matches_counts": candidate.matches_counts, "duration_diff": candidate.duration_diff,
+        "checked": candidate.release is not None, "artist_agrees": candidate.artist_agrees,
+        "failing_tracks": identify_engine.failing_tracks(candidate, owner_input), "status": status,
         "thumbnail": f"https://coverartarchive.org/release/{candidate.release_id}/front-250",
     }
 
@@ -305,7 +312,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
             identification.status, identification.reason)})
 
     top = identification.candidates[0] if identification.candidates else None
-    entry["candidates"] = [_candidate_dict(c) for c in identification.candidates]
+    entry["candidates"] = [_candidate_dict(c, owner_input) for c in identification.candidates]
 
     plan: Plan | None = None
     if identification.status in _PLANNABLE and top is not None and top.release is not None:

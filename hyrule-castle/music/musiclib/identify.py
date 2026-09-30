@@ -35,7 +35,11 @@ _MIN_TRACK_SHARE = 0.6
 
 @dataclass
 class Candidate:
-    """One release under consideration: what it fetched to, and how well it fits."""
+    """One release under consideration: what it fetched to, and how well it fits.
+
+    `listing` is the search result's entry for a release never fetched
+    (`release` None) because its listed track counts are too short.
+    """
 
     release_id: str
     release: dict | None
@@ -45,6 +49,7 @@ class Candidate:
     pairs: list[TrackPair] | None = None
     artist_agrees: bool = False
     latin: list[dict] | None = None
+    listing: dict | None = None
 
 
 @dataclass
@@ -129,6 +134,11 @@ def _pair_fits(p: TrackPair, edited: dict, latin: list[dict] | None = None) -> b
 def _failing_pairs(candidate: Candidate, owner_input: dict | None) -> int:
     edited = ((owner_input or {}).get("edits") or {}).get(candidate.release_id, {})
     return sum(not _pair_fits(p, edited, candidate.latin) for p in candidate.pairs or [])
+
+
+def failing_tracks(candidate: Candidate, owner_input: dict | None) -> int | None:
+    """How many of `candidate`'s pairs fail, as ranking counts them; None where it paired with nothing to count."""
+    return None if candidate.pairs is None else _failing_pairs(candidate, owner_input)
 
 
 def _fits(candidate: Candidate, owner_input: dict | None = None) -> bool:
@@ -343,7 +353,7 @@ def _search(
     candidates = []
     for entry in found.get("releases", []):
         if _listed_too_short(entry, len(unit.tracks)):
-            candidates.append(Candidate(entry["id"], None, False, None, None))
+            candidates.append(Candidate(entry["id"], None, False, None, None, listing=entry))
             continue
         try:
             release = client.release(entry["id"])

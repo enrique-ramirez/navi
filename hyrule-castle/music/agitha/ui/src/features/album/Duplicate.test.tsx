@@ -121,6 +121,7 @@ function view(over: Partial<AlbumView> = {}): AlbumView {
 		extras_to: [],
 		decision: null,
 		cover: null,
+		cover_now: null,
 		duplicate: chronoCross(),
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		...over,
@@ -616,10 +617,15 @@ describe("Duplicate", () => {
 			expect(pathOf(post!)).toBe(APPROVE_URL);
 			expect(JSON.parse(post!.body)).toEqual({ keep: "new" });
 
-			const statusText = () => screen.queryAllByRole("status").map(text);
+			// While apply runs both choices wait; the running state itself is the review bar's to show.
 			await throughPolls(() =>
-				expect(statusText().some((s) => /\bapplying\b/.test(s))).toBe(true),
+				expect(
+					screen.getByRole("button", {
+						name: "Keep the new one: a process is running",
+					}),
+				).toBeDisabled(),
 			);
+			const statusText = () => screen.queryAllByRole("status").map(text);
 			await throughPolls(() =>
 				expect(
 					statusText().some(
@@ -637,7 +643,7 @@ describe("Duplicate", () => {
 			expect(gets(fake.calls)).toHaveLength(settled);
 		});
 
-		// Whether Move is offered here is left to AlbumActions and the page (criterion 41).
+		// Whether Move is offered here is left to the review bar (criterion 41).
 		it("shows which step failed on which file when the move is not verified", async () => {
 			vi.useFakeTimers({ shouldAdvanceTime: true });
 			const error =

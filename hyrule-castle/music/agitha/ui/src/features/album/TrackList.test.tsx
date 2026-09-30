@@ -69,6 +69,7 @@ function view(files: PlanFile[], facts: FileFacts[]): AlbumView {
 		extras_to: [],
 		decision: null,
 		cover: null,
+		cover_now: null,
 		duplicate: null,
 		approvable: { ok: true, reason: null, code: null, hold: null },
 	};
@@ -193,10 +194,12 @@ function rowOf(title: string) {
 	return row;
 }
 
+// The row's texts, one per innermost element, so a title reads apart from the file path under it.
 function cellTexts(row: HTMLElement) {
-	return within(row)
-		.getAllByRole("cell")
-		.map((cell) => cell.textContent?.trim() ?? "");
+	return Array.from(row.querySelectorAll("*"))
+		.filter((element) => element.childElementCount === 0)
+		.map((element) => element.textContent?.trim() ?? "")
+		.filter((text) => text !== "");
 }
 
 // Tabs until focus is on the row's select control: the row itself or a
@@ -217,7 +220,12 @@ async function tabToSelect(
 describe("TrackList", () => {
 	it("lists one row per file in plan order with its number, title and length", async () => {
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -242,7 +250,12 @@ describe("TrackList", () => {
 
 	it("numbers tracks disc-track when the album has more than one disc", async () => {
 		renderWithProviders(
-			<TrackList view={twoDiscFlac()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={twoDiscFlac()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -260,7 +273,12 @@ describe("TrackList", () => {
 
 	it("marks the selected track's row, and only it", async () => {
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected="1-2" onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected="1-2"
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -273,7 +291,12 @@ describe("TrackList", () => {
 		const user = userEvent.setup();
 		const onSelect = vi.fn();
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected={null} onSelect={onSelect} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={onSelect}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -289,7 +312,12 @@ describe("TrackList", () => {
 			const user = userEvent.setup();
 			const onSelect = vi.fn();
 			renderWithProviders(
-				<TrackList view={cleanAlbum()} selected={null} onSelect={onSelect} />,
+				<TrackList
+					changes={{}}
+					view={cleanAlbum()}
+					selected={null}
+					onSelect={onSelect}
+				/>,
 			);
 
 			await screen.findByRole("table", { name: "Tracks" });
@@ -304,7 +332,12 @@ describe("TrackList", () => {
 	it("plays the track's uploaded file and offers to stop it", async () => {
 		const user = userEvent.setup();
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await user.click(await screen.findByRole("button", { name: "Play Two" }));
@@ -334,7 +367,12 @@ describe("TrackList", () => {
 	it("plays one track at a time", async () => {
 		const user = userEvent.setup();
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await user.click(await screen.findByRole("button", { name: "Play One" }));
@@ -362,7 +400,12 @@ describe("TrackList", () => {
 	it("goes back to Play when the track ends", async () => {
 		const user = userEvent.setup();
 		renderWithProviders(
-			<TrackList view={cleanAlbum()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await user.click(await screen.findByRole("button", { name: "Play One" }));
@@ -382,7 +425,12 @@ describe("TrackList", () => {
 		unplayable = ["audio/x-ms-wma"];
 		const user = userEvent.setup();
 		renderWithProviders(
-			<TrackList view={mixedAlbum()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={mixedAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -414,6 +462,7 @@ describe("TrackList", () => {
 	it("never says it can't play an empty format when the file's facts are missing", async () => {
 		renderWithProviders(
 			<TrackList
+				changes={{}}
 				view={{ ...cleanAlbum(), files: [] }}
 				selected={null}
 				onSelect={() => {}}
@@ -432,7 +481,12 @@ describe("TrackList", () => {
 	it("names the format the browser can't play", async () => {
 		unplayable = ["audio/flac"];
 		renderWithProviders(
-			<TrackList view={twoDiscFlac()} selected={null} onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={twoDiscFlac()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });
@@ -443,10 +497,32 @@ describe("TrackList", () => {
 		for (const control of controls) expect(control).toBeDisabled();
 	});
 
+	it("says how many of a track's own tags change, and nothing on a track whose tags stay", async () => {
+		renderWithProviders(
+			<TrackList
+				changes={{ "1-1": 0, "1-2": 2 }}
+				view={cleanAlbum()}
+				selected={null}
+				onSelect={() => {}}
+			/>,
+		);
+
+		await screen.findByRole("table", { name: "Tracks" });
+		const [one, two, three] = trackRows();
+		expect(within(two!).getByText("2 of its tags change")).toBeInTheDocument();
+		for (const row of [one!, three!])
+			expect(within(row).queryByText(/of its tags change/)).toBeNull();
+	});
+
 	it("gives every button an accessible name", async () => {
 		unplayable = ["audio/x-ms-wma"];
 		renderWithProviders(
-			<TrackList view={mixedAlbum()} selected="1-1" onSelect={() => {}} />,
+			<TrackList
+				changes={{}}
+				view={mixedAlbum()}
+				selected="1-1"
+				onSelect={() => {}}
+			/>,
 		);
 
 		await screen.findByRole("table", { name: "Tracks" });

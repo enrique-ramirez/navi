@@ -50,6 +50,7 @@ function view(
 		extras_to: [EXTRA],
 		decision: null,
 		cover: null,
+		cover_now: null,
 		duplicate: null,
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		...over,
@@ -84,21 +85,35 @@ function ownText(item: HTMLElement): string {
 }
 
 describe("where the album lands", () => {
-	it("shows the full library path the album will have", async () => {
+	it("shows where in the library the album goes, with the full path on hover", async () => {
 		renderWithProviders(<Landing view={view(clean)} />);
 		const region = await landing();
 
-		expect(within(region).getByText(LIBRARY_PATH)).toBeInTheDocument();
+		const destination = within(region).getByText(clean.destination ?? "");
+		expect(destination).toHaveAttribute("title", LIBRARY_PATH);
 		expect(
 			within(region).queryByText("no destination yet"),
 		).not.toBeInTheDocument();
 	});
 
 	it("says there is no destination yet when the plan has none", async () => {
-		renderWithProviders(<Landing view={view(clean, { library_path: null })} />);
+		renderWithProviders(
+			<Landing
+				view={view({ ...clean, destination: null }, { library_path: null })}
+			/>,
+		);
 		const region = await landing();
 
 		expect(within(region).getByText("no destination yet")).toBeInTheDocument();
+	});
+
+	it("counts the files of the album folder in its summary", async () => {
+		renderWithProviders(<Landing view={view(clean)} />);
+		const region = await landing();
+
+		expect(
+			within(region).getByText("Album folder (5 files)"),
+		).toBeInTheDocument();
 	});
 
 	it("shows the album folder as a tree of folders and files, in the order given", async () => {
@@ -144,29 +159,31 @@ describe("where the album lands", () => {
 		expect(ownItems(nestedList(scans[1])).map(ownText)).toEqual(["back.jpg"]);
 	});
 
-	it("lists the files that will be deleted", async () => {
+	it("lists the files that will be deleted by name, and counts them", async () => {
 		renderWithProviders(<Landing view={view(clean)} />);
 		const region = await landing();
 
+		expect(within(region).getByText("Deleted (1)")).toBeInTheDocument();
 		const deleted = within(region).getByRole("list", { name: "Deleted" });
-		expect(ownItems(deleted).map(ownText)).toEqual([DELETED]);
-		expect(within(region).queryByText("none")).not.toBeInTheDocument();
+		expect(ownItems(deleted).map(ownText)).toEqual([DELETED.split("/").pop()]);
 	});
 
-	it("says none when nothing is deleted", async () => {
+	it("leaves out the deletions when nothing is deleted", async () => {
 		const nothingDeleted: PlanEntry = { ...clean, deletions: [] };
 		renderWithProviders(<Landing view={view(nothingDeleted)} />);
 		const region = await landing();
 
-		// Extras and holds are not both empty here, so this "none" can only be the deletions'.
-		expect(within(region).getByText("none")).toBeInTheDocument();
-		expect(within(region).queryByText(DELETED)).not.toBeInTheDocument();
+		expect(
+			within(region).queryByRole("list", { name: "Deleted" }),
+		).not.toBeInTheDocument();
+		expect(within(region).queryByText(/^Deleted/)).not.toBeInTheDocument();
 	});
 
 	it("lists each extra with where it is now and its path in /srv/music/extras", async () => {
 		renderWithProviders(<Landing view={view(clean)} />);
 		const region = await landing();
 
+		expect(within(region).getByText("Extras (1)")).toBeInTheDocument();
 		const extras = ownItems(
 			within(region).getByRole("list", { name: "Extras" }),
 		);
@@ -175,53 +192,13 @@ describe("where the album lands", () => {
 		expect(extras[0]).toHaveTextContent(EXTRA.path);
 	});
 
-	it("shows the preview's status and state", async () => {
-		renderWithProviders(<Landing view={view(clean)} />);
+	it("leaves out the extras when there are none", async () => {
+		renderWithProviders(<Landing view={view(clean, { extras_to: [] })} />);
 		const region = await landing();
 
-		expect(within(region).getByText(/\bcertain\b/)).toBeInTheDocument();
-		expect(within(region).getByText(/\bauto\b/)).toBeInTheDocument();
-	});
-
-	it("shows the state of a held album as held", async () => {
-		renderWithProviders(<Landing view={view(held)} />);
-		const region = await landing();
-
-		expect(within(region).getByText(/\bheld\b/)).toBeInTheDocument();
-		expect(within(region).queryByText(/\bauto\b/)).not.toBeInTheDocument();
-	});
-
-	it("shows every hold with its kind and detail, and a hold without detail as its kind alone", async () => {
-		renderWithProviders(<Landing view={view(held)} />);
-		const region = await landing();
-
-		const holds = ownItems(within(region).getByRole("list", { name: "Holds" }));
-		expect(holds).toHaveLength(4);
-
-		const details = held.holds.filter((hold) => hold.detail !== "");
-		expect(details).toHaveLength(3);
-		for (const hold of details) {
-			const item = holds.find((each) =>
-				each.textContent?.includes(hold.detail),
-			);
-			expect(item, hold.detail).toBeDefined();
-			expect(item).toHaveTextContent(hold.kind);
-		}
-
-		const decision = holds.filter((each) =>
-			/\bdecision\b/.test(each.textContent ?? ""),
-		);
-		expect(decision).toHaveLength(1);
-		// Nothing follows the kind: no stray colon, no placeholder.
-		expect(ownText(decision[0])).toBe("decision");
-		expect(within(region).queryByText("no holds")).not.toBeInTheDocument();
-	});
-
-	it("says no holds when the album has none", async () => {
-		renderWithProviders(<Landing view={view(clean)} />);
-		const region = await landing();
-
-		expect(within(region).getByText("no holds")).toBeInTheDocument();
+		expect(
+			within(region).queryByRole("list", { name: "Extras" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("names every list it shows", async () => {
@@ -229,24 +206,25 @@ describe("where the album lands", () => {
 		const region = await landing();
 
 		const lists = within(region).getAllByRole("list");
-		// The tree, its Scans folder, deletions, extras and holds.
-		expect(lists.length).toBeGreaterThanOrEqual(5);
+		// The tree, its Scans folder, deletions and extras.
+		expect(lists.length).toBeGreaterThanOrEqual(4);
 		for (const list of lists) expect(list).toHaveAccessibleName();
 	});
 
-	it("shows only that there is no preview yet when identify has written none", async () => {
+	it("shows nothing when identify has written no preview yet", async () => {
 		renderWithProviders(
-			<Landing
-				view={view(null, { library_path: null, tree: [], extras_to: [] })}
-			/>,
+			<>
+				<p>page</p>
+				<Landing
+					view={view(null, { library_path: null, tree: [], extras_to: [] })}
+				/>
+			</>,
 		);
-		const region = await landing();
 
-		expect(within(region).getByText("no preview yet")).toBeInTheDocument();
-		expect(within(region).queryAllByRole("list")).toHaveLength(0);
-		for (const text of ["no destination yet", "none", "no holds"]) {
-			expect(within(region).queryByText(text)).not.toBeInTheDocument();
-		}
+		await screen.findByText("page");
+		expect(
+			screen.queryByRole("region", { name: "Where it lands" }),
+		).not.toBeInTheDocument();
 	});
 });
 
@@ -268,14 +246,12 @@ describe("where the album lands, in Spanish", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("names the status, state and hold kinds in Spanish and leaves each hold's detail as written", async () => {
-		const certain = spanish("status.certain");
-		const heldState = spanish("planState.held");
-		const decision = spanish("hold.decision");
-		// A phrase equal to the engine's word would let raw output pass.
-		expect(certain).not.toBe("certain");
-		expect(heldState).not.toBe("held");
-		expect(decision).not.toBe("decision");
+	it("names the region and the folder, deletions and extras in Spanish and leaves the paths as written", async () => {
+		const title = spanish("landing.title");
+		const folder = spanish("landing.folder");
+		// A phrase equal to the English one would let an untranslated page pass.
+		expect(title).not.toBe("Where it lands");
+		expect(folder).not.toBe("Album folder");
 
 		// A fresh page load on a Spanish browser: the locale store starts anew.
 		vi.resetModules();
@@ -288,24 +264,20 @@ describe("where the album lands, in Spanish", () => {
 		const page = await import("@/test/render");
 
 		page.renderWithProviders(<SpanishLanding view={view(held)} />);
-		const region = await page.screen.findByRole("region", {
-			name: spanish("landing.title"),
-		});
+		const region = await page.screen.findByRole("region", { name: title });
 
-		expect(within(region).getByText(certain)).toBeInTheDocument();
-		expect(within(region).getByText(heldState)).toBeInTheDocument();
-
-		const holds = ownItems(
-			within(region).getByRole("list", { name: spanish("landing.holds") }),
-		);
-		expect(holds.map(ownText)).toContain(decision);
-		expect(holds.map(ownText)).not.toContain("decision");
-		// The detail is the engine's sentence, data rather than a phrase.
-		for (const hold of held.holds.filter((each) => each.detail !== "")) {
-			expect(
-				holds.some((item) => item.textContent?.includes(hold.detail)),
-				hold.detail,
-			).toBe(true);
-		}
+		expect(
+			within(region).getByText(
+				spanish("landing.folderCount").replace("{n}", String(TREE.length)),
+			),
+		).toBeInTheDocument();
+		expect(
+			within(region).getByRole("list", { name: folder }),
+		).toBeInTheDocument();
+		expect(
+			within(region).getByRole("list", { name: spanish("landing.extras") }),
+		).toBeInTheDocument();
+		// The paths are data rather than phrases.
+		expect(within(region).getByText(EXTRA.path)).toBeInTheDocument();
 	});
 });

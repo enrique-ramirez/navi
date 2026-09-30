@@ -58,6 +58,14 @@ export interface Candidate {
 	matches_counts: boolean;
 	/** Seconds by which the release's length differs from the folder's. */
 	duration_diff: number;
+	/** Whether musiclib fetched the release; `false` where the search listed too few tracks, and the rest is the search's. */
+	checked: boolean;
+	/** Whether the release's artist credit agrees with the folder's artist. */
+	artist_agrees: boolean;
+	/** Tracks whose title or length does not fit the release; `null` where the counts do not match. */
+	failing_tracks: number | null;
+	/** MusicBrainz release status (`Official`, `Promotion`, `Bootleg`...), `null` where unknown. */
+	status: string | null;
 	/** Cover Art Archive URL, 250 px. */
 	thumbnail: string;
 }
@@ -417,7 +425,10 @@ export interface AlbumView {
 	extras_to: ExtraTarget[];
 	/** The last decision agitha wrote for this album, or `null`. */
 	decision: Decision | null;
+	/** The cover the plan writes, served at `.../cover`; `null` where it writes none. */
 	cover: AlbumCover | null;
+	/** The cover the files have now, served at `.../cover/now`: the first track's embedded picture, else the folder's image. */
+	cover_now: AlbumCover | null;
 	duplicate: Comparison | null;
 	approvable: Approvable;
 }
