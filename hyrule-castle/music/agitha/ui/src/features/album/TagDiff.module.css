@@ -66,7 +66,6 @@
 	color: var(--faint);
 }
 
-/* A change shows in the New column: amber changed, green added, red removed. */
 tr[data-change="changed"] .next,
 tr[data-change="changed"] .next .input {
 	color: var(--caution);
@@ -233,12 +232,11 @@ tr[data-edited] .icon {
 }
 
 @media (max-width: 640px) {
-	.nameCol {
-		width: 7rem;
+	.wrapper {
+		overflow-x: auto;
 	}
 
-	.table thead th:nth-child(2),
-	.table tbody td.now {
-		display: none;
+	.table {
+		min-width: 36rem;
 	}
 }

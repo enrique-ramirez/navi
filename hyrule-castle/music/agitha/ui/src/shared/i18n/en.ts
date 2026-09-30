@@ -291,6 +291,7 @@ export const en = {
 	"landed.at": "Filed at",
 	"landed.next": "Next: {title}",
 	"landed.home": "Back to drops",
+	"editor.added": "stamped on import with the upload time",
 } as const;
 
 export type Phrase = keyof typeof en;

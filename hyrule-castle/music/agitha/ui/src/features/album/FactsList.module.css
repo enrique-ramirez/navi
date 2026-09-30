@@ -1,0 +1,43 @@
+.facts {
+	display: grid;
+	margin: 0;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font-size: 0.875rem;
+}
+
+.facts > div {
+	display: grid;
+	grid-template-columns: 11rem 1fr;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
+}
+
+.facts > div + div {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.facts dt {
+	color: var(--muted);
+}
+
+.facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.path {
+	font-family: var(--font-numeric);
+	font-size: 0.8125rem;
+}
+
+.compact > div {
+	grid-template-columns: 7rem 1fr;
+}
+
+@media (max-width: 640px) {
+	.facts > div {
+		grid-template-columns: 7rem 1fr;
+	}
+}

@@ -1,7 +1,6 @@
 import type { AlbumView } from "@/shared/api/types";
 import { uploadedValues } from "./albumTags";
 
-/** What the album's files have in common, or the range they span. */
 export interface Summary {
 	tracks: number;
 	discs: number;
@@ -9,12 +8,11 @@ export interface Summary {
 	length: number;
 	/** Bytes. */
 	size: number;
-	/** The one format, or every format joined where they differ. */
 	format: string;
 	lossless: boolean;
-	/** Bits per second; `min` equals `max` where every file agrees. */
+	/** Bits per second. */
 	bitrate: { min: number; max: number };
-	/** Hz; `null` where the files differ. */
+	/** Hz. */
 	sampleRate: number | null;
 	bitDepth: number | null;
 	channels: number | null;
@@ -23,7 +21,6 @@ export interface Summary {
 const one = <T>(values: T[]) =>
 	values.every((value) => value === values[0]) ? (values[0] ?? null) : null;
 
-// The planned files, or the uploaded ones where nothing is planned, each with its disc.
 function audioOf(view: AlbumView) {
 	if (view.files.length > 0)
 		return view.files.map((file) => ({

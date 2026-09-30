@@ -124,6 +124,7 @@ export function ReviewBar({
 								type="button"
 								className={styles.danger}
 								disabled={view.busy || busy}
+								aria-label={view.busy ? t("actions.discardBusy") : undefined}
 								title={view.busy ? t("actions.discardBusy") : undefined}
 								onClick={() => setAsking(true)}
 							>
@@ -131,7 +132,6 @@ export function ReviewBar({
 								{t("action.discard")}
 							</button>
 						)}
-						{/* A preview not yet accepted can be planned again without approving, to look first. */}
 						{!busy &&
 							view.state === "ready" &&
 							!pending.dirty &&
@@ -150,6 +150,11 @@ export function ReviewBar({
 								type="button"
 								className={styles.primary}
 								disabled={busy || blocked !== null}
+								aria-label={
+									blocked === null
+										? undefined
+										: t("actions.approveWhy", { why: blocked })
+								}
 								title={blocked ?? undefined}
 								onClick={press}
 							>

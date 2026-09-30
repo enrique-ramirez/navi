@@ -279,5 +279,6 @@
 	"landed.title": "{title} está en la biblioteca",
 	"landed.at": "Guardado en",
 	"landed.next": "Siguiente: {title}",
-	"landed.home": "Volver a las entregas"
+	"landed.home": "Volver a las entregas",
+	"editor.added": "se marca al importar con la hora de subida"
 }

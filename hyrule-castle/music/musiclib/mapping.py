@@ -86,6 +86,9 @@ PICARD: dict[str, dict[str, str | None]] = {
 
 _ITUNES_FREEFORM = "----:com.apple.iTunes:"
 
+#: The time an import added the album, `YYYY-MM-DDTHH:MM` local, as foobar2000 reads `$meta(added)`.
+ADDED: dict[str, str] = {"id3": "TXXX:ADDED", "vorbis": "added", "mp4": _ITUNES_FREEFORM + "ADDED", "asf": "ADDED"}
+
 #: Readable name -> `{family: real key}`, for showing a tag by name. The rows
 #: after `PICARD`'s are tags the engine never plans, in Picard's keys. The ASF
 #: comment is `Description`, the key `files.read` reports for it.
@@ -132,6 +135,7 @@ READABLE: dict[str, dict[str, str | None]] = {
     "ReplayGain album peak": {"id3": "TXXX:REPLAYGAIN_ALBUM_PEAK", "vorbis": "replaygain_album_peak",
                               "mp4": _ITUNES_FREEFORM + "REPLAYGAIN_ALBUM_PEAK", "asf": "ReplayGain/Album Peak"},
     "Compilation": {"id3": "TCMP", "vorbis": "compilation", "mp4": "cpil", "asf": "WM/IsCompilation"},
+    "Added": ADDED,
 }
 
 _BY_KEY: dict[str, dict[str, str]] = {
@@ -298,14 +302,15 @@ def with_titles_of(release: dict, pseudo: dict) -> dict:
 def plan_tags(track: files.Track, release: dict, medium_position: int, track_position: int,
              genres: list[str], disc_folder: str | None = None, *, number: int | None = None,
              total: int | None = None, disc: int | None = None, discs: int | None = None,
-             credited_name: Callable[[list[dict]], str] | None = None) -> FileTags:
+             credited_name: Callable[[list[dict]], str] | None = None, added: str | None = None) -> FileTags:
     """The tag plan for one track of `release`, at `medium_position`/`track_position` (both 1-based).
 
     Track position 0 is the medium's pregap. `number`, `total`, `disc` and
     `discs` are what gets written as the track and disc pairs; each falls
     back to the position or count the release gives. `credited_name` turns a
     credit into the text of `ARTIST` and `ALBUMARTIST`; the credit as joined
-    when it is not given.
+    when it is not given. `added` is written as `ADDED`, replacing one the file
+    has in any case; without it the file's own is kept as it is.
     """
     family = track.family
     media = release["media"]
@@ -411,6 +416,10 @@ def plan_tags(track: files.Track, release: dict, medium_position: int, track_pos
             planned[genre_key] = None
             if genre_key in track.tags:
                 removals.append(residue.Removal(genre_key, None, "no genres for the album"))
+
+    if added is not None:
+        planned.update({key: None for key in track.tags if tagwrite.is_added_field(family, key)})
+        planned[ADDED[family]] = [added]
 
     merged = tagwrite.merge(track, planned)
     target, residue_removals = residue.strip(family, merged)

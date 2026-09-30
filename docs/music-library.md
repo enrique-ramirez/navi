@@ -80,6 +80,8 @@ No field credits whoever ripped, encoded or uploaded the file, or links to where
 
 **Ratings.** Whole stars, 1 to 5. MP3 holds one `POPM` frame with the email `Windows Media Player 9 Series` on the WMP byte scale (1, 64, 128, 196, 255), which is what foobar2000 writes. FLAC and Ogg hold `RATING` as a plain number. An unrated track has no rating tag at all, never `0` or `-1`. The import never writes a rating: ratings come from listening, in foobar2000 or Jean.
 
+**Added.** An import writes `ADDED` on every track, the time its upload started in the box's local time, to the minute (`2026-09-30T11:02`), and a library job leaves the `ADDED` a file has as it is.
+
 **Whitespace.** No leading or trailing spaces, no doubled spaces, in any single-line text field. Lyrics, play history and machine-written values are kept as they are.
 
 ## Images

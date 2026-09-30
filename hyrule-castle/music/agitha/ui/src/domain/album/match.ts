@@ -1,10 +1,8 @@
 import type { Candidate } from "@/shared/api/types";
 
-/** How well a candidate fits the folder, from musiclib's own ranking checks. */
 export type Level = "strong" | "possible" | "weak" | "unchecked";
 
-// Seconds the release's total length may differ from the folder's and still count as a fit.
-const CLOSE_LENGTH = 15;
+const CLOSE_LENGTH_SECONDS = 15;
 
 export function levelOf(candidate: Candidate): Level {
 	// A plan written before `checked` existed shows an unchecked release as one with no title.
@@ -13,7 +11,7 @@ export function levelOf(candidate: Candidate): Level {
 	if (!candidate.matches_counts) return "weak";
 	const lengthFits =
 		candidate.duration_diff !== null &&
-		Math.abs(candidate.duration_diff) <= CLOSE_LENGTH;
+		Math.abs(candidate.duration_diff) <= CLOSE_LENGTH_SECONDS;
 	const tracksFit = (candidate.failing_tracks ?? 0) === 0;
 	return lengthFits && tracksFit && candidate.artist_agrees !== false
 		? "strong"
@@ -27,7 +25,7 @@ const ORDER: Record<Level, number> = {
 	unchecked: 3,
 };
 
-/** Best fit first; musiclib's ranking breaks ties, and the list arrives in it. */
+// Ties keep musiclib's ranking, which is the order the list arrives in.
 export function byLevel(candidates: Candidate[]): Candidate[] {
 	return candidates
 		.map((candidate, rank) => ({ candidate, rank }))

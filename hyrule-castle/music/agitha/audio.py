@@ -46,7 +46,6 @@ def facts(path: Path) -> Facts | None:
 
 
 def facts_of(found: mutagen.FileType | None, path: Path) -> Facts | None:
-    """`facts` of the file mutagen already loaded from `path` as `found`."""
     kind = KINDS.get(type(found)) if found is not None else None
     if kind is None:
         return None
@@ -61,7 +60,6 @@ def facts_of(found: mutagen.FileType | None, path: Path) -> Facts | None:
 
 
 def encoder(found: mutagen.FileType) -> str | None:
-    """What made the file, where it says: an MP3's LAME header (`LAME 3.99.1+ -b 320`), a FLAC or Ogg vendor string, an MP4's `©too`."""
     info_line = " ".join(part for part in (getattr(found.info, "encoder_info", ""),
                                            getattr(found.info, "encoder_settings", "")) if part)
     if info_line:

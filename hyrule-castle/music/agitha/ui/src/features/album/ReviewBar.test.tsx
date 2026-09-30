@@ -173,7 +173,7 @@ describe("ReviewBar", () => {
 			expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual(UNCHANGED);
 
 			await waitFor(() =>
-				expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled(),
+				expect(screen.getByRole("button", { name: /^Discard/ })).toBeDisabled(),
 			);
 			for (const button of screen.queryAllByRole("button", {
 				name: /^Approv/,
@@ -380,9 +380,10 @@ describe("ReviewBar", () => {
 			restore = serve(accepted({ state: "applying", busy: true })).restore;
 			renderBar();
 
-			const discard = await screen.findByRole("button", { name: "Discard" });
+			const discard = await screen.findByRole("button", {
+				name: "Discard: a process is running",
+			});
 			expect(discard).toBeDisabled();
-			expect(discard).toHaveAttribute("title", "Discard: a process is running");
 		});
 	});
 
@@ -399,11 +400,10 @@ describe("ReviewBar", () => {
 		).restore;
 		renderBar();
 
-		const approve = await screen.findByRole("button", { name: "Approve" });
+		const approve = await screen.findByRole("button", {
+			name: "Approve: held: collision: album 02 plans this folder",
+		});
 		expect(approve).toBeDisabled();
-		expect(
-			screen.getByText("Approve: held: collision: album 02 plans this folder"),
-		).toBeInTheDocument();
 		expect(screen.queryByText(/SERVER TEXT/)).not.toBeInTheDocument();
 	});
 

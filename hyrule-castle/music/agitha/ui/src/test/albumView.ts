@@ -9,8 +9,6 @@ import autoClean from "@/test/fixtures/auto-clean/plan.json";
 export const DROP = "20260929-210000";
 export const ALBUM_URL = `/api/drops/${DROP}/albums/01`;
 
-// The auto-clean album as the page gets it: three MP3s (ID3 keys) titled One, Two, Three,
-// identified with certainty and ready to approve. Every call is a fresh copy, so a case may edit it.
 export function albumView(over: Partial<AlbumView> = {}): AlbumView {
 	const preview = structuredClone(autoClean.albums[0]) as PlanEntry;
 	return {
@@ -75,7 +73,6 @@ export function facts(
 	};
 }
 
-// A release that fits the three-track folder in every way musiclib checks.
 export function candidate(over: Partial<Candidate> = {}): Candidate {
 	return {
 		release_id: "6f1a2b3c-0000-4000-8000-000100000001",

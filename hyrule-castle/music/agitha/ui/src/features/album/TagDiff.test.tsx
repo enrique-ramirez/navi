@@ -184,6 +184,20 @@ describe("TagDiff", () => {
 		).toHaveLength(2);
 	});
 
+	it("shows the ADDED stamp read-only, saying where it comes from", async () => {
+		const view = albumView();
+		for (const file of view.preview!.files)
+			file.after["TXXX:ADDED"] = ["2026-09-30T11:02"];
+		await renderTags(view);
+
+		const row = rowOf("TXXX:ADDED");
+		expect(within(row).queryByRole("textbox")).toBeNull();
+		expect(within(row).queryByRole("button")).toBeNull();
+		expect(
+			within(row).getByTitle("stamped on import with the upload time"),
+		).toHaveTextContent("2026-09-30T11:02");
+	});
+
 	it("says which engine rule removes a tag", async () => {
 		const view = albumView();
 		for (const file of view.preview!.files) file.before["TXXX:JUNK"] = ["x"];

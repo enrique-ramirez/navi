@@ -10,10 +10,10 @@ import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./AlbumSide.module.css";
 import { CoverCard } from "./CoverCard";
+import { type Fact, FactsList } from "./FactsList";
 import { Landing } from "./Landing";
 import type { Pending } from "./pending";
 
-// The album as it will be written, and the facts every one of its files shares.
 export function AlbumSide({
 	view,
 	pending,
@@ -26,39 +26,45 @@ export function AlbumSide({
 	const title = tags.title || view.name;
 	const summary = summaryOf(view);
 
-	const facts: [string, string][] = summary
+	const facts: Fact[] = summary
 		? [
-				[
-					t("summary.tracks"),
-					summary.discs > 1
-						? t("summary.tracksOnDiscs", {
-								n: summary.tracks,
-								discs: summary.discs,
-							})
-						: String(summary.tracks),
-				],
-				[t("summary.length"), formatTotalLength(summary.length)],
-				[
-					t("file.format"),
-					`${summary.format} · ${t(summary.lossless ? "file.lossless" : "file.lossy")}${
+				{
+					name: t("summary.tracks"),
+					value:
+						summary.discs > 1
+							? t("summary.tracksOnDiscs", {
+									n: summary.tracks,
+									discs: summary.discs,
+								})
+							: String(summary.tracks),
+				},
+				{
+					name: t("summary.length"),
+					value: formatTotalLength(summary.length),
+				},
+				{
+					name: t("file.format"),
+					value: `${summary.format} · ${t(summary.lossless ? "file.lossless" : "file.lossy")}${
 						summary.bitDepth
 							? ` · ${t("file.bitDepth", { n: summary.bitDepth })}`
 							: ""
 					}`,
-				],
-				[
-					t("file.bitrate"),
-					summary.bitrate.min === summary.bitrate.max
-						? formatKbps(summary.bitrate.min)
-						: `${formatKbps(summary.bitrate.min)} – ${formatKbps(summary.bitrate.max)}`,
-				],
-				[
-					t("summary.sampleRate"),
-					summary.sampleRate === null
-						? t("summary.mixed")
-						: formatKilohertz(summary.sampleRate),
-				],
-				[t("summary.size"), formatSize(summary.size)],
+				},
+				{
+					name: t("file.bitrate"),
+					value:
+						summary.bitrate.min === summary.bitrate.max
+							? formatKbps(summary.bitrate.min)
+							: `${formatKbps(summary.bitrate.min)} – ${formatKbps(summary.bitrate.max)}`,
+				},
+				{
+					name: t("summary.sampleRate"),
+					value:
+						summary.sampleRate === null
+							? t("summary.mixed")
+							: formatKilohertz(summary.sampleRate),
+				},
+				{ name: t("summary.size"), value: formatSize(summary.size) },
 			]
 		: [];
 
@@ -77,14 +83,9 @@ export function AlbumSide({
 			</div>
 
 			{facts.length > 0 && (
-				<dl className={styles.facts}>
-					{facts.map(([name, value]) => (
-						<div key={name}>
-							<dt>{name}</dt>
-							<dd>{value}</dd>
-						</div>
-					))}
-				</dl>
+				<div className={styles.wide}>
+					<FactsList facts={facts} compact />
+				</div>
 			)}
 
 			<div className={styles.wide}>

@@ -32,8 +32,7 @@ RULES = (
 )
 TIE = "the copy in the library"
 
-#: Seconds two paired tracks may differ by and still be the same length.
-LENGTH_DIFFERS = 2.0
+LENGTH_TOLERANCE_SECONDS = 2.0
 
 COVER_NAMES = ("cover.jpg", "folder.jpg", "front.jpg")
 _YEAR = re.compile(r"\(\d{4}\)\s+")
@@ -62,7 +61,6 @@ class Copy:
     length: float
     size: int
     cover: CoverInfo | None
-    #: The first track's tags, read through `PICARD`.
     release_id: str | None
     album: str | None
     album_artist: str | None
@@ -74,18 +72,13 @@ class Copy:
     discs: int
     bitrate_min: int
     bitrate_max: int
-    #: The first track's that names one (`audio.encoder`).
     encoder: str | None
-    #: Distinct tag keys per file, on average.
     tag_count: float
 
 
 @dataclass(frozen=True)
 class Tracks:
-    """The two copies' tracks paired by disc and track number where every file has both, else in order."""
-
     paired: int
-    #: Pairs more than `LENGTH_DIFFERS` seconds apart.
     length_differs: int
     only_new: int
     only_library: int
@@ -105,14 +98,10 @@ class Comparison:
 
 @dataclass(frozen=True)
 class _Track:
-    """One audio file of a copy, read once."""
-
     facts: audio.Facts
     tags: dict[str, list[str]]
     encoder: str | None
-    #: The disc number the tags give, else the disc folder's number or name, else 1.
     disc: int | str
-    #: The track number the tags give.
     number: int | None
 
     @property
@@ -278,7 +267,6 @@ def _copy(folder: Path, tracks: list[_Track], cover_url: str | None) -> Copy:
 
 
 def _pairs(new: list[_Track], library: list[_Track]) -> list[tuple[_Track, _Track]]:
-    """Tracks at the same `(disc, track)` where every track on both sides has one and none repeats, else in order."""
     sides = []
     for tracks in (new, library):
         positions = [t.position for t in tracks]
@@ -292,7 +280,7 @@ def _pairs(new: list[_Track], library: list[_Track]) -> list[tuple[_Track, _Trac
 def _track_counts(new: list[_Track], library: list[_Track]) -> Tracks:
     pairs = _pairs(new, library)
     diffs = [abs(a.facts.length - b.facts.length) for a, b in pairs]
-    return Tracks(paired=len(pairs), length_differs=sum(d > LENGTH_DIFFERS for d in diffs),
+    return Tracks(paired=len(pairs), length_differs=sum(d > LENGTH_TOLERANCE_SECONDS for d in diffs),
                   only_new=len(new) - len(pairs), only_library=len(library) - len(pairs),
                   max_length_diff=max(diffs, default=0.0))
 

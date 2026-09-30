@@ -192,7 +192,10 @@ class QueueCase(unittest.TestCase):
         (self.control / f"go-{k}").touch()
 
     def identify(self, drop: str, n: str) -> list[str]:
-        return ["batch", "identify", str(self.inbox / drop / n), "--job", str(self.jobs / f"agitha-{drop}-{n}")]
+        # `started` is the server's local time, naive: its first 16 characters are the minute.
+        started = json.loads((self.inbox / drop / "drop.json").read_text(encoding="utf-8"))["started"]
+        return ["batch", "identify", str(self.inbox / drop / n), "--job", str(self.jobs / f"agitha-{drop}-{n}"),
+                "--added", started[:16]]
 
     def watch(self, until, check=None, seconds: float = 15) -> dict[tuple[str, str], dict]:
         """Polls `GET /api/drops` until `until(albums)`; records every state each album showed.
@@ -279,6 +282,41 @@ class Identifying(QueueCase):
         self.assertIn(self.seen[x], (["queued", "identifying", "ready"], ["identifying", "ready"]))
         self.assertEqual(self.seen[y1], ["queued", "identifying", "ready"])
         self.assertEqual(self.seen[y2], ["queued", "identifying", "ready"])
+
+
+class AddedStamp(unittest.TestCase):
+    """`ADDED` is the drop's upload start, in the box's local time, to the minute."""
+
+    def setUp(self) -> None:
+        zone = os.environ.get("TZ")
+        os.environ["TZ"] = "America/Mexico_City"
+        time.tzset()
+
+        def restore() -> None:
+            if zone is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = zone
+            time.tzset()
+
+        self.addCleanup(restore)
+
+    def test_a_naive_start_is_already_local_and_is_cut_to_the_minute(self) -> None:
+        from agitha.queue import added_stamp
+
+        self.assertEqual(added_stamp({"started": "2026-09-30T11:02:59.912345"}), "2026-09-30T11:02")
+
+    def test_a_start_with_an_offset_is_turned_into_local_time(self) -> None:
+        from agitha.queue import added_stamp
+
+        self.assertEqual(added_stamp({"started": "2026-09-30T17:02:10+00:00"}), "2026-09-30T11:02")
+
+    def test_a_record_without_a_start_that_reads_gives_none(self) -> None:
+        from agitha.queue import added_stamp
+
+        for record in (None, {}, {"started": "yesterday"}):
+            with self.subTest(record=record):
+                self.assertIsNone(added_stamp(record))
 
 
 class Failing(QueueCase):

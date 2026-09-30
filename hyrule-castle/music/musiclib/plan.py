@@ -10,8 +10,7 @@ the whole result the same way `musiclib check` judges a tree already on disk
 are never held to different rules.
 
 A unit that cannot be planned at all - it needs a person, or a file could not
-be read - comes back as a `Plan` holding only that problem and no files,
-except the one a person has already settled by naming the release.
+be read - comes back as a `Plan` holding only that problem and no files.
 """
 
 from __future__ import annotations
@@ -342,6 +341,7 @@ def plan_album(
     pairs: list[TrackPair] | None = None, edition: str | None = None,
     local: Sequence[tuple[str, bytes]] | None = None, created: Sequence[str] = (),
     owner_cover: bytes | None = None, composer: bool = True, chosen: bool = False,
+    added: str | None = None,
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`.
 
@@ -361,9 +361,7 @@ def plan_album(
     relationships over the file's composer tags (`composers`), at one more
     lookup per release. Off, those tags are left as the file has them.
 
-    `chosen` says the owner named `release`: files that disagree on the album
-    tag are then planned as that one release, with the disagreement kept as a
-    hold. Nothing else a unit is stopped for is planned.
+    `added`, an import's `YYYY-MM-DDTHH:MM`, is every track's `ADDED` (`mapping.plan_tags`).
     """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
@@ -464,7 +462,7 @@ def plan_album(
                 planned = mapping.plan_tags(track, release, medium_index, pair_.position, album_genres,
                                             disc_folder=disc_folder_name, number=pair_.number,
                                             total=pair_.total, disc=pair_.disc, discs=pair_.discs,
-                                            credited_name=lambda c: artists.credited_name(c, mb))
+                                            credited_name=lambda c: artists.credited_name(c, mb), added=added)
                 problems.extend(planned.problems)
                 holds.extend(planned.holds)
                 people = composed.get(pair_.mb_track["recording"]["id"])

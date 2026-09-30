@@ -61,7 +61,6 @@
 	overflow-wrap: anywhere;
 }
 
-/* The recommended copy reads as one highlighted column, header to button. */
 .table [data-recommended] {
 	background: color-mix(in oklch, var(--accent) 7%, transparent);
 	border-right: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
@@ -87,7 +86,6 @@
 	font-weight: 400;
 }
 
-/* Where the copies agree the row steps back, so the differences are what reads first. */
 .table tbody tr:not([data-differs]) td {
 	color: var(--muted);
 }

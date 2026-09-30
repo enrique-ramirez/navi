@@ -1,4 +1,5 @@
 import { ChevronRight, File, Folder as FolderIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -6,11 +7,9 @@ import styles from "./Landing.module.css";
 
 interface Folder {
 	name: string;
-	// `null` for a file; a folder holds its children in the order they first appeared.
 	children: Folder[] | null;
 }
 
-// Files of one folder gather under one item, wherever they sit in the list; every level keeps the given order.
 function nest(paths: string[]): Folder[] {
 	const root: Folder[] = [];
 	for (const path of paths) {
@@ -47,7 +46,24 @@ function Tree({ nodes, label }: { nodes: Folder[]; label: string }) {
 	);
 }
 
-// Where the album will be in the library, and what happens to the files that are not its audio.
+function Disclosure({
+	summary,
+	children,
+}: {
+	summary: string;
+	children: ReactNode;
+}) {
+	return (
+		<details className={styles.details}>
+			<summary>
+				<ChevronRight size={14} aria-hidden="true" className={styles.chevron} />
+				{summary}
+			</summary>
+			{children}
+		</details>
+	);
+}
+
 export function Landing({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const preview = view.preview;
@@ -66,46 +82,26 @@ export function Landing({ view }: { view: AlbumView }) {
 				<p className={styles.muted}>{t("landing.noDestination")}</p>
 			)}
 
-			<details className={styles.details}>
-				<summary>
-					<ChevronRight
-						size={14}
-						aria-hidden="true"
-						className={styles.chevron}
-					/>
-					{t("landing.folderCount", { n: view.tree.length })}
-				</summary>
+			<Disclosure summary={t("landing.folderCount", { n: view.tree.length })}>
 				<Tree nodes={nest(view.tree)} label={t("landing.folder")} />
-			</details>
+			</Disclosure>
 
 			{preview.deletions.length > 0 && (
-				<details className={styles.details}>
-					<summary>
-						<ChevronRight
-							size={14}
-							aria-hidden="true"
-							className={styles.chevron}
-						/>
-						{t("landing.deletedCount", { n: preview.deletions.length })}
-					</summary>
+				<Disclosure
+					summary={t("landing.deletedCount", { n: preview.deletions.length })}
+				>
 					<ul className={styles.plain} aria-label={t("landing.deleted")}>
 						{preview.deletions.map((path) => (
 							<li key={path}>{path.split("/").pop()}</li>
 						))}
 					</ul>
-				</details>
+				</Disclosure>
 			)}
 
 			{view.extras_to.length > 0 && (
-				<details className={styles.details}>
-					<summary>
-						<ChevronRight
-							size={14}
-							aria-hidden="true"
-							className={styles.chevron}
-						/>
-						{t("landing.extrasCount", { n: view.extras_to.length })}
-					</summary>
+				<Disclosure
+					summary={t("landing.extrasCount", { n: view.extras_to.length })}
+				>
 					<ul className={styles.plain} aria-label={t("landing.extras")}>
 						{view.extras_to.map((extra) => (
 							<li key={extra.source}>
@@ -115,7 +111,7 @@ export function Landing({ view }: { view: AlbumView }) {
 							</li>
 						))}
 					</ul>
-				</details>
+				</Disclosure>
 			)}
 		</section>
 	);

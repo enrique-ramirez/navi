@@ -53,7 +53,7 @@ def _identify(args: argparse.Namespace) -> int:
     job = Job(Path(args.job))
     memory = Path(args.memory) if args.memory else job.path.resolve().parent / "agitha-memory.json"
     return run(Path(args.root), job, memory, list(args.reopen or []), transport=_services(),
-               env={}, which=lambda _name: None, composer=not args.no_composer)
+               env={}, which=lambda _name: None, composer=not args.no_composer, added=args.added)
 
 
 def _apply(args: argparse.Namespace) -> int:
@@ -81,6 +81,7 @@ def main(argv: list[str]) -> int:
     identify.add_argument("--memory")
     identify.add_argument("--reopen", action="append", default=[])
     identify.add_argument("--no-composer", action="store_true")
+    identify.add_argument("--added")
 
     apply = batch.add_parser("apply")
     apply.add_argument("--job", required=True)

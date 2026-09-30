@@ -3,23 +3,17 @@ import { useNavigate } from "@tanstack/react-router";
 import { ThumbsUp } from "lucide-react";
 
 import { albumQuery } from "@/domain/album/albumQuery";
-import {
-	formatKbps,
-	formatKilohertz,
-	formatSize,
-	formatTotalLength,
-} from "@/domain/album/format";
-import type { AlbumView, Comparison, Copy, CopySide } from "@/shared/api/types";
+import type { AlbumView, Comparison, CopySide } from "@/shared/api/types";
 import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import { Alert } from "@/shared/ui/Alert";
 import { approveReason } from "./approveReason";
 import styles from "./Duplicate.module.css";
+import { copyFacts } from "./duplicateFacts";
 import { Outcome } from "./Outcome";
 import type { Pending } from "./pending";
 import { useDecision } from "./useDecision";
 
-// Criterion 48's rules, by the code the server sends.
 const RULES: Record<Comparison["rule_code"], Phrase> = {
 	"more-files": "rule.moreFiles",
 	lossless: "rule.lossless",
@@ -38,7 +32,6 @@ export function Duplicate({
 }) {
 	const { t } = useTranslate();
 	const navigate = useNavigate();
-	// The same query as the album page, so this panel keeps polling where it is shown alone.
 	const { data: current } = useQuery({
 		...albumQuery(view.drop, view.n),
 		initialData: view,
@@ -61,7 +54,6 @@ export function Duplicate({
 		}
 	}
 
-	// What stops the buttons: a running process, an unsent change, or, for the new copy, a hold.
 	const stopped = current.busy
 		? t("duplicate.running")
 		: pending.dirty
@@ -86,61 +78,13 @@ export function Duplicate({
 			: t("duplicate.keepWhy", { action: t(phrase), why: reason });
 	};
 
-	const kbpsRange = (copy: Copy) =>
-		copy.bitrate_min === copy.bitrate_max
-			? formatKbps(copy.bitrate)
-			: `${formatKbps(copy.bitrate)} (${formatKbps(copy.bitrate_min)} – ${formatKbps(copy.bitrate_max)})`;
-	const release = (copy: Copy) =>
-		[copy.album, copy.date, copy.country, copy.label, copy.catalog]
-			.filter(Boolean)
-			.join(" · ") || "—";
-
-	// Each fact of a copy, as text so the two sides can be compared.
-	const facts: [string, (copy: Copy) => string][] = [
-		[t("duplicate.release"), release],
-		[
-			t("duplicate.mbRelease"),
-			(copy) => copy.release_id ?? t("duplicate.none"),
-		],
-		[t("file.format"), (copy) => copy.format],
-		[
-			t("duplicate.lossless"),
-			(copy) => t(copy.lossless ? "file.lossless" : "file.lossy"),
-		],
-		// A FLAC re-tagged by Mutagen reports the tagger as its vendor, which says nothing of the encoder.
-		[
-			t("duplicate.encoder"),
-			(copy) =>
-				copy.encoder && !/^mutagen\b/i.test(copy.encoder)
-					? copy.encoder
-					: t("duplicate.none"),
-		],
-		[
-			t("duplicate.bitDepth"),
-			(copy) =>
-				copy.bit_depth === null
-					? t("duplicate.none")
-					: t("file.bitDepth", { n: copy.bit_depth }),
-		],
-		[t("duplicate.sampleRate"), (copy) => formatKilohertz(copy.sample_rate)],
-		[t("duplicate.bitrate"), kbpsRange],
-		[
-			t("duplicate.files"),
-			(copy) =>
-				copy.discs > 1
-					? t("summary.tracksOnDiscs", { n: copy.files, discs: copy.discs })
-					: String(copy.files),
-		],
-		[t("duplicate.length"), (copy) => formatTotalLength(copy.length)],
-		[t("duplicate.size"), (copy) => formatSize(copy.size)],
-		[t("duplicate.tags"), (copy) => String(Math.round(copy.tag_count))],
-		[t("duplicate.folder"), (copy) => copy.folder],
-	];
-
+	const facts = copyFacts(t);
 	const sides = ["new", "library"] as const;
 	const copyOf = (side: CopySide) =>
 		side === "new" ? duplicate?.new : duplicate?.library;
 	const tracks = duplicate?.tracks;
+	const flagRecommended = (side: CopySide) =>
+		duplicate?.recommended === side || undefined;
 
 	return (
 		<section className={styles.duplicate} aria-labelledby="duplicate-title">
@@ -171,10 +115,7 @@ export function Duplicate({
 						<colgroup>
 							<col className={styles.factCol} />
 							{sides.map((side) => (
-								<col
-									key={side}
-									data-recommended={duplicate.recommended === side || undefined}
-								/>
+								<col key={side} data-recommended={flagRecommended(side)} />
 							))}
 						</colgroup>
 						<thead>
@@ -188,9 +129,7 @@ export function Duplicate({
 										<th
 											key={side}
 											scope="col"
-											data-recommended={
-												duplicate.recommended === side || undefined
-											}
+											data-recommended={flagRecommended(side)}
 										>
 											<div className={styles.copyHead}>
 												<span className={styles.copyName}>
@@ -252,9 +191,7 @@ export function Duplicate({
 										{values.map((value, index) => (
 											<td
 												key={sides[index]}
-												data-recommended={
-													duplicate.recommended === sides[index] || undefined
-												}
+												data-recommended={flagRecommended(sides[index])}
 											>
 												{value}
 											</td>
@@ -267,18 +204,11 @@ export function Duplicate({
 							<tr>
 								<td />
 								{sides.map((side) => (
-									<td
-										key={side}
-										data-recommended={
-											duplicate.recommended === side || undefined
-										}
-									>
+									<td key={side} data-recommended={flagRecommended(side)}>
 										<button
 											type="button"
 											className={styles.button}
-											data-recommended={
-												duplicate.recommended === side || undefined
-											}
+											data-recommended={flagRecommended(side)}
 											disabled={busy || why[side] !== null}
 											onClick={() => void keep(side)}
 										>

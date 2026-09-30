@@ -100,7 +100,6 @@ def _size(data: bytes) -> tuple[int, int]:
 
 
 def mime(data: bytes) -> str | None:
-    """The MIME type of the image `data` is, or None where it is not one Pillow reads."""
     try:
         with Image.open(io.BytesIO(data)) as image:
             return Image.MIME.get(image.format or "")

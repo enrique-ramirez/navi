@@ -166,7 +166,9 @@ class AlbumCase(unittest.TestCase):
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def identify_argv(self, n: str = "01") -> list[str]:
-        return ["batch", "identify", str(self.inbox / DROP / n), "--job", str(self.jobs / f"agitha-{DROP}-{n}")]
+        # `stage_album` writes the drop as started at 2026-09-29T21:00:00, local.
+        return ["batch", "identify", str(self.inbox / DROP / n), "--job", str(self.jobs / f"agitha-{DROP}-{n}"),
+                "--added", "2026-09-29T21:00"]
 
     def request(self, method: str, path: str, body: bytes | None = None,
                 headers: dict[str, str] | None = None) -> tuple[int, str, bytes]:

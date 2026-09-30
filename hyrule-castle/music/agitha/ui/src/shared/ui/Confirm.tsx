@@ -4,8 +4,6 @@ import { createPortal } from "react-dom";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./Confirm.module.css";
 
-// Asks before something that cannot be undone. Cancel has the focus, so Enter
-// alone never confirms; Escape and a click outside cancel.
 export function Confirm({
 	message,
 	confirmLabel,

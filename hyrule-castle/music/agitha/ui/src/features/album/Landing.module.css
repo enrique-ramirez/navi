@@ -4,12 +4,7 @@
 }
 
 .label {
-	margin: 0;
-	color: var(--muted);
-	font-size: 0.6875rem;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: caption from "../../shared/styles/caption.module.css";
 }
 
 .path {

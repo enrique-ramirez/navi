@@ -6,20 +6,15 @@ import { albumUrl, post } from "@/shared/api/album";
 import type { AlbumView, CopySide } from "@/shared/api/types";
 import type { Pending } from "./pending";
 
-/** What to do once identify has answered a sent decision. */
 export type Then = { kind: "preview" } | { kind: "approve"; keep?: CopySide };
 
 interface Awaiting {
 	then: Then;
 	/** Whether the view has shown identify running; the view arrives a render after this state. */
 	seen: boolean;
-	/** The preview the owner was looking at when they pressed. */
 	digest: string | null;
 }
 
-// Sending the owner's decision, waiting for identify to plan under it, and approving after.
-// An approve waits on a preview planned the same as the one on screen: where identify plans
-// something else, it stops and says so, since the owner never saw what would be written.
 export function useDecision(view: AlbumView, pending: Pending) {
 	const client = useQueryClient();
 	const [refusal, setRefusal] = useState<string | null>(null);
@@ -73,7 +68,6 @@ export function useDecision(view: AlbumView, pending: Pending) {
 				(view.approvable.code !== "not-accepted" || view.error !== null));
 		if (!answered) return;
 		setAwaiting(null);
-		// A message keeps the draft; none settles it.
 		if (view.error) return;
 		pending.reset();
 		const { then } = awaiting;
@@ -88,7 +82,6 @@ export function useDecision(view: AlbumView, pending: Pending) {
 
 	return {
 		refusal,
-		/** Identify planned something other than what was on screen, so nothing was approved. */
 		changed,
 		sending,
 		awaiting,

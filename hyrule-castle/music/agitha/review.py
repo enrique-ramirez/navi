@@ -1,4 +1,4 @@
-"""The album view: `GET /api/drops/<drop>/albums/<n>` and the two covers it shows, planned and current.
+"""The album view: `GET /api/drops/<drop>/albums/<n>` and the covers it shows.
 
 The plan is read again on every request, so an identify that finished a
 second ago shows. Files are found under `inbox/<drop>/<n>/`, not under the
@@ -52,22 +52,11 @@ def _cached(job: Path) -> list[Path]:
         return []
 
 
-#: Covers converted to JPEG, by the digest the plan gives them. A PNG front
-#: takes a few hundred milliseconds to convert, and the view is asked for often.
 _CONVERTED: dict[str, bytes] = {}
 _CONVERTED_KEPT = 16
 
 
 def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
-    """The bytes shown as the album's cover and their content type, or None where the plan writes no cover.
-
-    The owner's image where the plan's inputs name it, as uploaded. Otherwise
-    the exact bytes of the plan's `cover.jpg`, from wherever the engine took
-    them: an image in the album folder or a Cover Art Archive download in the
-    job's cache, as it is or converted to JPEG as `images.as_jpeg` converts it.
-    None also where none of those gives those bytes any more, since showing
-    another image would claim it is what the plan writes.
-    """
     job = config.jobs / f"agitha-{drop}-{n}"
     named = ((entry or {}).get("inputs") or {}).get("owner_cover")
     path = job / named["path"] if isinstance(named, dict) and isinstance(named.get("path"), str) else None
@@ -86,7 +75,7 @@ def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
     for path in sources:
         if path.stat().st_size == planned["length"] and drops.file_sha256(path) == planned["sha256"]:
             return path.read_bytes(), "image/jpeg"
-    # An image the engine converted; the cache is mostly JSON, which is no image at all.
+    # The cache is mostly JSON, which is no image at all.
     for path in sources:
         data = path.read_bytes()
         if images.mime(data) in (None, "image/jpeg"):
@@ -104,19 +93,12 @@ def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
 
 
 def _first_track(config: Config, drop: str, n: str, entry: dict[str, Any] | None, folder: Path) -> Path | None:
-    """The plan's first track, else the folder's first audio file by path."""
     if entry and entry.get("files"):
         return config.inbox / drop / n / entry["source"] / _tail(entry["files"][0]["source"], entry["source"])
     return next((path for path in sorted(folder.rglob("*")) if audio.facts(path) is not None), None)
 
 
 def current_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
-    """The cover as the album is now, before musiclib writes anything, and its content type; None where it has none.
-
-    The front picture embedded in the first track (else its first picture),
-    else the folder's image `images.local_covers` puts first, else the first
-    image in the folder by name.
-    """
     folder = ranges.album_folder(config, drop, n)
     if folder is None:
         return None
@@ -143,7 +125,6 @@ def current_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
 
 
 def _checked(found: tuple[bytes, str] | None, url: str) -> dict[str, Any] | None:
-    """The `AlbumCover` of `found`, or None where there is none or it is not an image."""
     if found is None:
         return None
     try:
@@ -236,12 +217,6 @@ def _with_sizes(config: Config, drop: str, n: str, entry: dict[str, Any]) -> dic
 
 
 def _uploaded(config: Config, drop: str, n: str) -> list[dict[str, Any]]:
-    """Every track of the staged album folder as uploaded, in the order musiclib reads them, with its tags now.
-
-    A track is what `files.is_track` says; the tags are read the way the
-    plan's `before` is, binary ones shown as kind and size. A file mutagen
-    cannot read is left out, as the plan leaves it.
-    """
     folder = ranges.album_folder(config, drop, n)
     if folder is None:
         return []

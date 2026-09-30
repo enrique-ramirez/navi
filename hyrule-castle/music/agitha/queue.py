@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import threading
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,21 @@ if TYPE_CHECKING:
 STDERR_LINES = 20
 WHILE = {"identify": "identifying", "apply": "applying"}
 RETRYABLE = ("identify failed", "identify interrupted")
+
+
+def added_stamp(record: dict[str, Any] | None) -> str | None:
+    """The drop's upload start as the box's local `YYYY-MM-DDTHH:MM`, the `ADDED` of every file it imports.
+
+    `started` is written local and naive; one with an offset is turned into
+    local time first. None where the record has no time that reads.
+    """
+    try:
+        started = datetime.fromisoformat((record or {})["started"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if started.tzinfo is not None:
+        started = started.astimezone().replace(tzinfo=None)
+    return started.strftime("%Y-%m-%dT%H:%M")
 
 
 class Queue:
@@ -92,7 +108,9 @@ class Queue:
         config = self.config
         job = str(config.jobs / f"agitha-{drop}-{n}")
         if command == "identify":
-            return [config.musiclib, "batch", "identify", str(config.inbox / drop / n), "--job", job]
+            added = added_stamp(drops.read_record(config.inbox / drop))
+            return [config.musiclib, "batch", "identify", str(config.inbox / drop / n), "--job", job,
+                    *(["--added", added] if added else [])]
         return [config.musiclib, "batch", "apply", "--job", job,
                 "--extras", str(config.extras), "--live-root", str(config.library)]
 

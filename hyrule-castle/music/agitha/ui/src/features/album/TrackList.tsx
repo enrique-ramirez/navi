@@ -11,7 +11,6 @@ interface Props {
 	view: AlbumView;
 	selected: string | null;
 	onSelect: (position: string) => void;
-	/** Per position, how many of its own tags change. */
 	changes: Record<string, number>;
 }
 
@@ -33,7 +32,6 @@ function PlayButton({
 	player: ReturnType<typeof usePlayer>;
 }) {
 	const { t } = useTranslate();
-	// Without the file's facts there is nothing to play and no format to name.
 	if (!facts) return null;
 	const mime = mimeOf(facts.format);
 	if (!player.canPlay(mime)) {
@@ -48,7 +46,6 @@ function PlayButton({
 				>
 					<Play size={16} aria-hidden="true" />
 				</button>
-				{/* The button already carries the name; the words are for sighted users. */}
 				<span className={styles.reason} aria-hidden="true">
 					{reason}
 				</span>

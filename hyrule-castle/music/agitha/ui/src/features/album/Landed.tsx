@@ -8,7 +8,6 @@ import type { AlbumState, AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./Landed.module.css";
 
-// The states an album of the drop can still be reviewed or finished in.
 const OPEN: AlbumState[] = [
 	"queued",
 	"identifying",
@@ -19,7 +18,6 @@ const OPEN: AlbumState[] = [
 	"apply failed",
 ];
 
-// What the page becomes once the album is in the library: where it went, and where to go next.
 export function Landed({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const { data: drops = [] } = useQuery({

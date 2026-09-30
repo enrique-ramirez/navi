@@ -1,12 +1,14 @@
 const BYTES = /\((\d+) bytes\)\s*$/;
 
-/** The byte count a binary frame's value carries, or `undefined`. */
 export const bytesOf = (value: string) => BYTES.exec(value)?.[1];
 
-export type Locked = "id" | "rating" | "binary";
+/** Keys of embedded pictures, which show in the cover card rather than as rows. */
+export const PICTURE = /^(APIC|covr|METADATA_BLOCK_PICTURE|WM\/Picture)/;
+
+export type Locked = "id" | "rating" | "binary" | "added";
 
 // The tags the owner cannot change: the six MusicBrainz IDs (they come from the release),
-// ratings (the library's rule) and binary frames.
+// ratings (the library's rule), binary frames, and ADDED, which the import stamps.
 export function lockedKind(key: string, values: string[]): Locked | null {
 	const compact = key.toLowerCase().replace(/[^a-z0-9]/g, "");
 	if (
@@ -15,8 +17,10 @@ export function lockedKind(key: string, values: string[]): Locked | null {
 	)
 		return "id";
 	if (key.startsWith("POPM") || compact.includes("rating")) return "rating";
+	if (/(^|:)added$/i.test(key)) return "added";
 	if (
-		/^(APIC|covr|METADATA_BLOCK_PICTURE|WM\/Picture|GEOB|PRIV)/.test(key) ||
+		PICTURE.test(key) ||
+		/^(GEOB|PRIV)/.test(key) ||
 		values.some((value) => BYTES.test(value))
 	)
 		return "binary";

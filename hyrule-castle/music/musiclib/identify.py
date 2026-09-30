@@ -35,11 +35,7 @@ _MIN_TRACK_SHARE = 0.6
 
 @dataclass
 class Candidate:
-    """One release under consideration: what it fetched to, and how well it fits.
-
-    `listing` is the search result's entry for a release never fetched
-    (`release` None) because its listed track counts are too short.
-    """
+    """One release under consideration: what it fetched to, and how well it fits."""
 
     release_id: str
     release: dict | None
@@ -137,7 +133,6 @@ def _failing_pairs(candidate: Candidate, owner_input: dict | None) -> int:
 
 
 def failing_tracks(candidate: Candidate, owner_input: dict | None) -> int | None:
-    """How many of `candidate`'s pairs fail, as ranking counts them; None where it paired with nothing to count."""
     return None if candidate.pairs is None else _failing_pairs(candidate, owner_input)
 
 

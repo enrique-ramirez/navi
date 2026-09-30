@@ -22,7 +22,6 @@ interface Progress {
 	sentBytes: number;
 }
 
-// The server answered and said no; its sentence is shown as it came.
 class Refusal extends Error {}
 
 // Megabytes of 10^6 bytes, as the free-space check counts them.

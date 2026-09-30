@@ -31,7 +31,6 @@ const RELEASE_URL = new RegExp(
 
 type Translate = ReturnType<typeof useTranslate>["t"];
 
-// What to search MusicBrainz for: the album tag, less any disc marker, or the folder's name.
 function searchTerm(view: AlbumView) {
 	const tags = view.preview?.files[0]?.before ?? view.uploaded?.[0]?.tags ?? {};
 	const album = ["TALB", "album", "©alb", "WM/AlbumTitle"]
@@ -72,7 +71,6 @@ function Badge({ level }: { level: Level }) {
 	);
 }
 
-// Why a candidate got its level, in the terms musiclib ranks by.
 function reasonsOf(candidate: Candidate, folder: number, t: Translate) {
 	if (levelOf(candidate) === "unchecked") return [t("match.why.unchecked")];
 	const reasons: string[] = [];
@@ -159,7 +157,6 @@ export function MatchPicker({
 		setOpen(false);
 	}
 
-	// A pasted release is chosen outright, as picking it from the list would be.
 	function use() {
 		const release = pasted.trim();
 		const id = new RegExp(UUID, "i").exec(release)?.[0]?.toLowerCase();

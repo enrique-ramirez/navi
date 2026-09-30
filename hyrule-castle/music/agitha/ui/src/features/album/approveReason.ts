@@ -4,8 +4,7 @@ import type { useTranslate } from "@/shared/i18n/useTranslate";
 
 type Translate = ReturnType<typeof useTranslate>["t"];
 
-// Why the album cannot be approved, in the catalogue's words and built from `approvable.code`
-// and `hold`; the server's `reason` sentence is for logs and never shown. `null` where it can.
+// The server's `reason` sentence is for logs and never shown.
 export function approveReason(view: AlbumView, t: Translate): string | null {
 	const { code, hold, ok } = view.approvable;
 	if (ok) return null;

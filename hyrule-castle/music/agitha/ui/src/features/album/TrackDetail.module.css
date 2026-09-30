@@ -17,55 +17,9 @@
 }
 
 .label {
-	margin: 0;
-	color: var(--muted);
-	font-size: 0.6875rem;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: caption from "../../shared/styles/caption.module.css";
 }
 
-.facts {
-	display: grid;
-	margin: 0;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-	font-size: 0.875rem;
-}
-
-.facts > div {
-	display: grid;
-	grid-template-columns: 11rem 1fr;
-	gap: var(--space-3);
-	padding: var(--space-2) var(--space-3);
-}
-
-.facts > div + div {
-	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
-}
-
-.facts dt {
-	color: var(--muted);
-}
-
-.facts dd {
-	margin: 0;
-}
-
-.path {
-	font-family: var(--font-numeric);
-	font-size: 0.8125rem;
-	overflow-wrap: anywhere;
-}
-
-@media (max-width: 640px) {
-	.facts > div {
-		grid-template-columns: 7rem 1fr;
-	}
-}
-
-/* Beside a long track list, the chosen track stays in view under the review bar. */
 @media (min-width: 1101px) {
 	.detail {
 		position: sticky;

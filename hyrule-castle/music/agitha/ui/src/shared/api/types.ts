@@ -60,7 +60,6 @@ export interface Candidate {
 	duration_diff: number;
 	/** Whether musiclib fetched the release; `false` where the search listed too few tracks, and the rest is the search's. */
 	checked: boolean;
-	/** Whether the release's artist credit agrees with the folder's artist. */
 	artist_agrees: boolean;
 	/** Tracks whose title or length does not fit the release; `null` where the counts do not match. */
 	failing_tracks: number | null;
@@ -332,7 +331,6 @@ export interface FileFacts {
 export interface UploadedFile {
 	/** Album-relative path as uploaded, `/`-separated. */
 	path: string;
-	/** The tag family its tags are keyed in. */
 	family: Family;
 	/** The file's tags now, raw keys of its family, binary frames as text like `before`. */
 	tags: TagMap;
@@ -346,7 +344,6 @@ export interface UploadedFile {
 	sample_rate: number;
 	/** `null` for a lossy format. */
 	bit_depth: number | null;
-	/** 1 mono, 2 stereo. */
 	channels: number;
 	/** Seconds. */
 	length: number;
@@ -391,43 +388,33 @@ export interface Copy {
 	/** Bytes. */
 	size: number;
 	cover: CoverInfo | null;
-	/** The MusicBrainz release id the first track carries, to tell whether both copies are one release. */
+	/** From `release_id` through `media`: the first track's tags, `date` as written. */
 	release_id: string | null;
-	/** The first track's album tag. */
 	album: string | null;
-	/** The first track's album artist tag. */
 	album_artist: string | null;
-	/** The first track's date tag, as written. */
 	date: string | null;
-	/** The first track's label tag. */
 	label: string | null;
-	/** The first track's catalogue number tag. */
 	catalog: string | null;
-	/** The first track's release country tag, e.g. `JP`. */
 	country: string | null;
-	/** The first track's media tag, e.g. `CD`. */
 	media: string | null;
 	/** Distinct disc numbers the tags give, else disc folders; 1 for a single disc. */
 	discs: number;
 	/** Lowest file bitrate, bits per second. */
 	bitrate_min: number;
-	/** Highest file bitrate, bits per second; differs from `bitrate_min` for VBR or a straggler. */
+	/** Highest file bitrate, bits per second. */
 	bitrate_max: number;
 	/** What made the files where one says: MP3 LAME header (`LAME 3.99.1+ -b 320`), FLAC/Ogg vendor, MP4 `©too`. */
 	encoder: string | null;
-	/** Distinct tag keys per file on average, one decimal: how well tagged. */
+	/** Distinct tag keys per file, on average. */
 	tag_count: number;
 }
 
 /** The two copies' tracks, paired by disc and track number where every file has both, else in path order. */
 export interface TrackComparison {
-	/** Tracks present in both copies. */
 	paired: number;
-	/** Pairs whose lengths differ by more than 2 s. */
+	/** Pairs whose lengths differ by more than the engine's tolerance. */
 	length_differs: number;
-	/** Tracks only the new copy has. */
 	only_new: number;
-	/** Tracks only the library copy has. */
 	only_library: number;
 	/** The largest length difference among the pairs, seconds; 0 with none paired. */
 	max_length_diff: number;
@@ -449,7 +436,6 @@ export interface Comparison {
 		| "sample-rate"
 		| "bitrate"
 		| "library";
-	/** How the two copies' tracks line up. */
 	tracks: TrackComparison;
 }
 

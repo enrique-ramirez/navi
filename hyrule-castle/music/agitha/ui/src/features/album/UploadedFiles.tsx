@@ -2,17 +2,14 @@ import { Play, Square } from "lucide-react";
 import { useState } from "react";
 
 import { uploadedValues } from "@/domain/album/albumTags";
-import {
-	formatKbps,
-	formatKilohertz,
-	formatLength,
-	formatSize,
-} from "@/domain/album/format";
+import { formatKbps, formatLength, formatSize } from "@/domain/album/format";
 import { bytesOf } from "@/domain/album/tagModel";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
 import type { AlbumView, UploadedFile } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import pageStyles from "./AlbumPage.module.css";
+import { describeEncoding } from "./describeEncoding";
+import { FactsList } from "./FactsList";
 import detailStyles from "./TrackDetail.module.css";
 import listStyles from "./TrackList.module.css";
 import styles from "./UploadedFiles.module.css";
@@ -63,8 +60,6 @@ function Tags({ view, file }: { view: AlbumView; file: UploadedFile }) {
 	);
 }
 
-// The files as they were uploaded, for an album nothing is planned for yet: enough to compare
-// against a release on MusicBrainz before choosing it.
 export function UploadedFiles({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const player = usePlayer();
@@ -116,9 +111,16 @@ export function UploadedFiles({ view }: { view: AlbumView }) {
 											type="button"
 											className={listStyles.play}
 											disabled={!player.canPlay(mime)}
-											aria-label={t(playing ? "track.stop" : "track.play", {
-												title,
-											})}
+											aria-label={
+												player.canPlay(mime)
+													? t(playing ? "track.stop" : "track.play", { title })
+													: t("track.cantPlay", { format: each.format })
+											}
+											title={
+												player.canPlay(mime)
+													? undefined
+													: t("track.cantPlay", { format: each.format })
+											}
 											onClick={(event) => {
 												event.stopPropagation();
 												if (playing) player.stop();
@@ -159,33 +161,14 @@ export function UploadedFiles({ view }: { view: AlbumView }) {
 				</div>
 				<div className={detailStyles.group}>
 					<h4 className={detailStyles.label}>{t("file.title")}</h4>
-					<dl className={detailStyles.facts}>
-						<div>
-							<dt>{t("file.format")}</dt>
-							<dd>
-								{[
-									file.format,
-									t(file.lossless ? "file.lossless" : "file.lossy"),
-									...(file.bit_depth === null
-										? []
-										: [t("file.bitDepth", { n: file.bit_depth })]),
-									formatKilohertz(file.sample_rate),
-								].join(" · ")}
-							</dd>
-						</div>
-						<div>
-							<dt>{t("file.bitrate")}</dt>
-							<dd>{formatKbps(file.bitrate)}</dd>
-						</div>
-						<div>
-							<dt>{t("file.size")}</dt>
-							<dd>{formatSize(file.size)}</dd>
-						</div>
-						<div>
-							<dt>{t("file.pathNow")}</dt>
-							<dd className={detailStyles.path}>{file.path}</dd>
-						</div>
-					</dl>
+					<FactsList
+						facts={[
+							{ name: t("file.format"), value: describeEncoding(file, t) },
+							{ name: t("file.bitrate"), value: formatKbps(file.bitrate) },
+							{ name: t("file.size"), value: formatSize(file.size) },
+							{ name: t("file.pathNow"), value: file.path, path: true },
+						]}
+					/>
 				</div>
 			</section>
 		</section>

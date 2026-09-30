@@ -1,27 +1,20 @@
 import type { AlbumView, Edits, PlanFile } from "@/shared/api/types";
 import { familyOf, genreKeyOf } from "./albumTags";
-import { type Locked, lockedKind } from "./tagModel";
+import { type Locked, lockedKind, PICTURE } from "./tagModel";
 
-/** A side of a row: the values, `null` where the tag is absent, `"differs"` where the tracks disagree. */
 export type Side = string[] | null | "differs";
 
 export type Change = "same" | "changed" | "added" | "removed";
 
 export interface DiffRow {
-	/** The raw key of the file's family (`TALB`, `album`, `©alb`). */
 	key: string;
 	now: Side;
 	next: Side;
 	change: Change;
 	locked: Locked | null;
-	/** Whether an unsent edit of the owner's sets this row. */
 	edited: boolean;
-	/** The engine rules that removed the tag, where it goes. */
 	removedBy: string[];
 }
-
-// Pictures show in the cover card, not as rows.
-const PICTURE = /^(APIC|covr|METADATA_BLOCK_PICTURE|WM\/Picture)/;
 
 const present = (values: string[] | undefined) =>
 	values && values.length > 0 ? values : null;
@@ -40,10 +33,7 @@ function common(sides: (string[] | null)[]): Side {
 		: "differs";
 }
 
-/**
- * The edit the owner has made to `key` on `file`, `null` for a removal, `undefined` for none.
- * Genres are edited under the neutral name `genre`, whatever the family calls them.
- */
+// Genres are edited under the neutral name `genre`, whatever the family calls them.
 function editOf(
 	edits: Edits,
 	file: PlanFile,
@@ -74,15 +64,11 @@ function changeOf(now: Side, next: Side): Change {
 }
 
 export interface Diff {
-	/** Tags every track shares once written. */
 	album: DiffRow[];
-	/** Per position, the tags that differ between the tracks. */
 	tracks: Record<string, DiffRow[]>;
 }
 
-// Every key the tracks have now, will have, or the owner has added, split into the ones every
-// track shares once written and the ones that differ between tracks. Rows follow the order of
-// `names`, which is Picard's; unknown keys come after, and the locked ones last.
+// Rows follow the order of `names`, which is Picard's.
 export function diffOf(view: AlbumView, edits: Edits): Diff {
 	const files = view.preview?.files ?? [];
 	const first = files[0];
@@ -169,7 +155,6 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 	return { album, tracks };
 }
 
-/** The genre key of the album's family, which edits name `genre`. */
 export function editKeyOf(view: AlbumView, key: string): string {
 	const first = view.preview?.files[0];
 	if (!first) return key;

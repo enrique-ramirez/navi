@@ -27,43 +27,12 @@
 	font-size: 0.875rem;
 }
 
-.facts {
-	display: grid;
-	margin: 0;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-sm);
-}
-
-.facts > div {
-	display: grid;
-	grid-template-columns: 7rem 1fr;
-	gap: var(--space-3);
-	padding: var(--space-2) var(--space-3);
-	font-size: 0.875rem;
-}
-
-.facts > div + div {
-	border-top: 1px solid var(--border);
-}
-
-.facts dt {
-	color: var(--muted);
-}
-
-.facts dd {
-	margin: 0;
-	overflow-wrap: anywhere;
-}
-
-/* Beside the album tags on a narrow screen: the cover and heading side by side, the facts below. */
 @media (max-width: 860px) {
 	.side {
 		grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
 		align-items: start;
 	}
 
-	.facts,
 	.wide {
 		grid-column: 1 / -1;
 	}

@@ -4,7 +4,6 @@ An album unit is one folder under `Letter/Artist/`, together with its `CDn`
 subfolders. When its files disagree on the album tag, the folder holds more
 than one album - a single filed together with the album it came from - and
 the engine marks it `needs a person` rather than plan it as one release.
-Titles that differ only by a disc suffix (`... (Disc 2)`) are one album.
 """
 
 from __future__ import annotations
@@ -190,14 +189,12 @@ def _album_value(track: files.Track) -> str | None:
     return value or None
 
 
-#: A trailing disc marker on an album title: `(Disc 1)`, `[CD 2]`, `- Disc 1`, `Disc 1 of 3`.
 _DISC_SUFFIX = re.compile(
-    r"\s*(?:[-:,]\s*)?(?:\(\s*|\[\s*)?(?:disc|disk|cd)\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[)\]]?\s*$",
+    r"\s*(?:[-:,]\s*)?(?:\(\s*|\[\s*)?(?<!\w)(?:disc|disk|cd)\s*-?\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[)\]]?\s*$",
     re.IGNORECASE)
 
 NEEDS_A_PERSON = "needs a person"
 
-#: The reason a unit whose files name more than one album is held, before the names.
 DISAGREEMENT = "files disagree on the album tag"
 
 
@@ -206,7 +203,6 @@ def _without_disc(value: str) -> str:
 
 
 def _disagreement(tracks: list[files.Track]) -> tuple[str | None, str | None]:
-    """`needs a person` where the files name more than one album; one album's discs, told apart by a suffix, are one."""
     values: list[str] = []
     albums: set[str] = set()
     for track in tracks:

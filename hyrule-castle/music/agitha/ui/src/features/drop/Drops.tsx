@@ -27,8 +27,6 @@ const DROP_STATE: Record<Drop["state"], Phrase | null> = {
 
 type Tone = "positive" | "danger" | "caution" | "working";
 
-// Green is done or ready to go on, red failed, yellow stopped halfway and
-// waiting on the owner, gray still running.
 const ALBUM_TONE: Record<AlbumState, Tone> = {
 	queued: "working",
 	identifying: "working",

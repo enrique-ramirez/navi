@@ -8,7 +8,7 @@ import { Parasol } from "@/shared/ui/Parasol";
 import styles from "./CoverCard.module.css";
 import type { Pending } from "./pending";
 
-// The image types the server reads; it names the file it keeps and answers with its path.
+// The image types the server reads.
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 interface Chosen {
@@ -18,7 +18,6 @@ interface Chosen {
 	problem: string | null;
 }
 
-// The cover the album will have, which is also where a new one is dropped, and the one it has now.
 export function CoverCard({
 	view,
 	pending,
@@ -42,7 +41,6 @@ export function CoverCard({
 		[],
 	);
 
-	// A reset draft drops the owner's unsent cover.
 	const sent = pending.draft.cover ?? null;
 	const shownChosen = sent ? chosen : null;
 	const next = shownChosen ?? view.cover;
@@ -61,7 +59,6 @@ export function CoverCard({
 			setError(answer.error ?? t("cover.failed"));
 			return;
 		}
-		// The owner's cover wins whether or not it passes; the test only warns.
 		const result = answer.body;
 		pending.setCover(result.path);
 		if (chosen) URL.revokeObjectURL(chosen.url);

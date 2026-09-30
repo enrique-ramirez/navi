@@ -9,7 +9,6 @@ import { useTranslate } from "@/shared/i18n/useTranslate";
 import type { Pending } from "./pending";
 import styles from "./TagDiff.module.css";
 
-// Several values of one tag are edited as one line, split on this.
 const SEPARATOR = "; ";
 
 type Translate = ReturnType<typeof useTranslate>["t"];
@@ -45,7 +44,6 @@ function ValueInput({
 	const { t } = useTranslate();
 	const shown = row.next === "differs" ? "" : text(row.next, row.key, t);
 	const [draft, setDraft] = useState(shown);
-	// A new preview, an undo or an edit elsewhere replaces what the field holds.
 	useEffect(() => setDraft(shown), [shown]);
 
 	const commit = () => {
@@ -90,7 +88,6 @@ export function TagDiff({
 	view: AlbumView;
 	pending: Pending;
 	rows: DiffRow[];
-	/** `all` edits every track at once. */
 	scope: string | "all";
 	family: Family;
 	label: string;
@@ -107,9 +104,9 @@ export function TagDiff({
 		id: t("editor.fromRelease"),
 		rating: t("editor.rating"),
 		binary: t("editor.binary"),
+		added: t("editor.added"),
 	};
 
-	// Setting a tag back to what the plan writes drops the edit instead of recording it.
 	function set(row: DiffRow, values: string[] | null) {
 		const key = editKeyOf(view, row.key);
 		const planned = view.preview?.files.find(
@@ -253,7 +250,6 @@ export function TagDiff({
 												<Trash2 size={14} aria-hidden="true" />
 											</button>
 										) : (
-											// A tag the plan removes can be kept, and then edited like any other.
 											Array.isArray(row.now) && (
 												<button
 													type="button"

@@ -362,6 +362,7 @@ class Disagreement(UnitsTestCase):
             "dash": ("Chrono Cross - Disc 1", "Chrono Cross - Disc 2", "Chrono Cross - disc 3"),
             "of": ("Chrono Cross Disc 1 of 3", "Chrono Cross Disc 2 of 3", "Chrono Cross (Disc 3 of 3)"),
             "some bare": ("Chrono Cross", "Chrono Cross (Disc 2)", "Chrono Cross [CD 3]"),
+            "cd hyphen": ("Chrono Cross CD-1", "Chrono Cross CD-2", "Chrono Cross CD-3"),
         }
         for name, values in suffixes.items():
             with self.subTest(name):
@@ -383,6 +384,13 @@ class Disagreement(UnitsTestCase):
         album = self.album("D/Daft Punk/(2001) Discovery")
         add(album, "01. One More Time.flac", "Discovery")
         add(album, "02. Aerodynamic.flac", "Discovery (Disc 1) Live")
+        self.assertEqual(self.only_unit().status, NEEDS_A_PERSON)
+
+    def test_a_disc_marker_ending_another_word_is_not_a_suffix(self) -> None:
+        # `ABCD 1` is not `AB` on disc 1, so it still differs from plain `AB`.
+        album = self.album("A/Artist/(2001) AB")
+        add(album, "01. One.flac", "AB")
+        add(album, "02. Two.flac", "ABCD 1")
         self.assertEqual(self.only_unit().status, NEEDS_A_PERSON)
 
 

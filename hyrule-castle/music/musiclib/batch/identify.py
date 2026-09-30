@@ -76,10 +76,6 @@ def _status_detail(status: str, reason: str | None) -> str:
 
 
 def _candidate_dict(candidate, owner_input: dict) -> dict:
-    """One `candidates` entry of the plan: the release's facts and the ones it was ranked on.
-
-    A release never fetched shows what its search result listed, and is not `checked`.
-    """
     release = candidate.release if candidate.release is not None else candidate.listing
     if release is None:
         title = artist = date = country = fmt = status = None
@@ -238,7 +234,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
                reopened: bool, *, edition: str | None = None, env: Mapping[str, str] = os.environ,
                which: Callable[[str], str | None] = shutil.which,
                rejudge: Rejudge | None = None, job_path: Path | None = None,
-               composer: bool = True) -> tuple[dict, Plan | None]:
+               composer: bool = True, added: str | None = None) -> tuple[dict, Plan | None]:
     """One album's entry, and its `Plan` if it has one. Collision holds and `state` are not this function's to add.
 
     `decision` folds the owner's `decisions.json` answer for this album in:
@@ -246,6 +242,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     both planned via `identify.chosen`, a `game` choice is folded into
     `owner_input` by release before the engine decides anything, and every
     edit - the memory's and the decision's - is laid over the plan before this entry is built from it.
+    `added` is written as every file's `ADDED` and kept in `inputs` for apply.
     """
     action = decision.get("action") if decision else None
     owner_input = {"soundtracks": dict(memory.get("soundtracks") or {}), "edits": dict(memory.get("edits") or {})}
@@ -322,7 +319,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
                           incoming=None, status=identification.status,
                           pairs=None if rejudged is not None else top.pairs, edition=edition,
                           local=local, created=created, owner_cover=owner_cover, composer=composer,
-                          chosen=forced_choice)
+                          chosen=forced_choice, added=added)
 
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         positions = [position_key(p) for p in pairs]
@@ -373,6 +370,8 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         }
         if edition is not None:
             entry["inputs"]["edition"] = edition
+        if added is not None:
+            entry["inputs"]["added"] = added
         if original_folder is not None:
             entry["inputs"]["original"] = {"folder": str(original_folder), "found": found_original}
         if created:
@@ -423,7 +422,8 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Pa
     plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=inputs["owner_input"],
                       status=inputs["status"], edition=inputs.get("edition"),
                       local=local, created=inputs.get("created", []), owner_cover=owner_cover,
-                      composer=inputs.get("composer", True), chosen=inputs.get("chosen", False))
+                      composer=inputs.get("composer", True), chosen=inputs.get("chosen", False),
+                      added=inputs.get("added"))
     edits = inputs.get("edits") or {}
     if edits:
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
@@ -602,7 +602,8 @@ def _print_counts(entries: list[dict], out) -> None:
 
 def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, transport=None,
         env: Mapping[str, str] = os.environ, which: Callable[[str], str | None] = shutil.which,
-        out=None, err=None, rejudge: Path | None = None, composer: bool = True) -> int:
+        out=None, err=None, rejudge: Path | None = None, composer: bool = True,
+        added: str | None = None) -> int:
     # `sys.stdout`/`sys.stderr` resolved here, not as the default value: a
     # default is bound once at import time, before a caller's redirect (a
     # test capturing output, or a later reassignment of `sys.stdout`) exists.
@@ -663,7 +664,7 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
         try:
             entry, plan = plan_entry(unit, root, built_clients, memory, decision,
                                      unit.rel in reopened_keys, env=env, which=which, rejudge=judging,
-                                     job_path=job.path, composer=composer)
+                                     job_path=job.path, composer=composer, added=added)
         except Exception as exc:
             entry, plan = _error_entry(unit, exc, decision), None
         entries.append(entry)
@@ -685,7 +686,7 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
     def replan(key: str, edition: str) -> tuple[dict, Plan]:
         return plan_entry(units_by_rel[key], root, built_clients, memory, resolved_decisions.get(key, (None, None))[1],
                           key in reopened_keys, edition=edition, env=env, which=which, rejudge=judging,
-                          job_path=job.path, composer=composer)
+                          job_path=job.path, composer=composer, added=added)
 
     _separate_editions(entries, plans, lambda e: edition_fields(built_clients.mb.release(e["release_id"])),
                        replan, err)

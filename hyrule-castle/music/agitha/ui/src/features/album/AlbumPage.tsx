@@ -67,7 +67,6 @@ function Soundtrack({ pending }: { pending: Pending }) {
 // The problem a hold names before its first colon, `no genre` of `no genre: 01. x.mp3 carries...`.
 const topicOf = (detail: string) => detail.split(":")[0]?.trim() ?? "";
 
-// Holds of one kind and topic fold into one notice, so eleven tracks without a genre read as one line.
 function Holds({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const holds = view.preview?.holds ?? [];

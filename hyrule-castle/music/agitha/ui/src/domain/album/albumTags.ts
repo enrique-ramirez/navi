@@ -101,7 +101,6 @@ function valuesOf(tags: TagMap, keys: Keys): AlbumValues {
 export function albumTags(view: AlbumView): AlbumTags {
 	const file = view.preview?.files[0];
 	if (!file) {
-		// Nothing planned: the album as the files say it is now.
 		const uploaded = view.uploaded?.[0];
 		const now: AlbumValues = uploaded
 			? valuesOf(uploaded.tags, KEYS[uploaded.family])
@@ -128,10 +127,8 @@ const DISC: Record<Family, string> = {
 	asf: "WM/PartOfSet",
 };
 
-// The number before a slash, `3` of `3/12`; empty where there is none.
 const leading = (value: string) => /^\s*(\d+)/.exec(value)?.[1] ?? "";
 
-/** What an uploaded file's tags say it is, before anything is planned. */
 export function uploadedValues(file: UploadedFile) {
 	const keys = KEYS[file.family];
 	return {

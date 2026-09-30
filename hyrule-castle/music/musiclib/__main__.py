@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from musiclib import check
@@ -27,6 +28,16 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _minute(value: str) -> str:
+    """`--added`'s argparse type: a local time as `YYYY-MM-DDTHH:MM`, exactly."""
+    try:
+        if datetime.strptime(value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%dT%H:%M") == value:
+            return value
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError(f"--added must be YYYY-MM-DDTHH:MM, not {value!r}")
+
+
 def _check(root: str) -> int:
     path = Path(root)
     if not path.is_dir():
@@ -47,7 +58,8 @@ def _batch_identify(args: argparse.Namespace) -> int:
     job = Job(Path(args.job))
     memory = Path(args.memory) if args.memory else default_memory(job)
     rejudge = Path(args.rejudge) if args.rejudge else None
-    return run(Path(args.root), job, memory, list(args.reopen or []), rejudge=rejudge, composer=not args.no_composer)
+    return run(Path(args.root), job, memory, list(args.reopen or []), rejudge=rejudge, composer=not args.no_composer,
+               added=args.added)
 
 
 def _batch_apply(args: argparse.Namespace) -> int:
@@ -83,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
     identify_parser.add_argument("--reopen", action="append", default=[], metavar="PATH")
     identify_parser.add_argument("--rejudge", metavar="ORIGINAL",
                                  help="judge the albums a job tagged again from their original tags and covers under ORIGINAL")
+    identify_parser.add_argument("--added", type=_minute, metavar="YYYY-MM-DDTHH:MM",
+                                 help="write this local time as every planned file's ADDED (imports only)")
     identify_parser.add_argument("--no-composer", action="store_true",
                                  help="make no work relationship lookup and leave every file's composer tags as they are")
 

@@ -155,6 +155,11 @@ def _is_named(family: str, key: str, names: set[str]) -> bool:
     return _freeform_name(family, key) in names
 
 
+def is_added_field(family: str, key: str) -> bool:
+    """A field named `added` in any case: the time an album came into the library."""
+    return _freeform_name(family, key) == "added"
+
+
 def is_lyrics_field(family: str, key: str) -> bool:
     """The lyrics fields: the one list `residue` and `tagwrite` both read."""
     if family == "id3":
