@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { ThumbsUp } from "lucide-react";
 
 import { albumQuery } from "@/domain/album/albumQuery";
 import {
@@ -86,12 +86,34 @@ export function Duplicate({
 			: t("duplicate.keepWhy", { action: t(phrase), why: reason });
 	};
 
-	const facts: [string, (copy: Copy, side: CopySide) => ReactNode][] = [
-		[t("duplicate.folder"), (copy) => copy.folder],
+	const kbpsRange = (copy: Copy) =>
+		copy.bitrate_min === copy.bitrate_max
+			? formatKbps(copy.bitrate)
+			: `${formatKbps(copy.bitrate)} (${formatKbps(copy.bitrate_min)} – ${formatKbps(copy.bitrate_max)})`;
+	const release = (copy: Copy) =>
+		[copy.album, copy.date, copy.country, copy.label, copy.catalog]
+			.filter(Boolean)
+			.join(" · ") || "—";
+
+	// Each fact of a copy, as text so the two sides can be compared.
+	const facts: [string, (copy: Copy) => string][] = [
+		[t("duplicate.release"), release],
+		[
+			t("duplicate.mbRelease"),
+			(copy) => copy.release_id ?? t("duplicate.none"),
+		],
 		[t("file.format"), (copy) => copy.format],
 		[
 			t("duplicate.lossless"),
 			(copy) => t(copy.lossless ? "file.lossless" : "file.lossy"),
+		],
+		// A FLAC re-tagged by Mutagen reports the tagger as its vendor, which says nothing of the encoder.
+		[
+			t("duplicate.encoder"),
+			(copy) =>
+				copy.encoder && !/^mutagen\b/i.test(copy.encoder)
+					? copy.encoder
+					: t("duplicate.none"),
 		],
 		[
 			t("duplicate.bitDepth"),
@@ -101,107 +123,196 @@ export function Duplicate({
 					: t("file.bitDepth", { n: copy.bit_depth }),
 		],
 		[t("duplicate.sampleRate"), (copy) => formatKilohertz(copy.sample_rate)],
-		[t("duplicate.bitrate"), (copy) => formatKbps(copy.bitrate)],
-		[t("duplicate.files"), (copy) => copy.files],
+		[t("duplicate.bitrate"), kbpsRange],
+		[
+			t("duplicate.files"),
+			(copy) =>
+				copy.discs > 1
+					? t("summary.tracksOnDiscs", { n: copy.files, discs: copy.discs })
+					: String(copy.files),
+		],
 		[t("duplicate.length"), (copy) => formatTotalLength(copy.length)],
 		[t("duplicate.size"), (copy) => formatSize(copy.size)],
-		[
-			t("duplicate.cover"),
-			(copy, side) =>
-				copy.cover ? (
-					<>
-						<img
-							src={copy.cover.url}
-							alt={t("duplicate.coverAlt", {
-								side: t(side === "new" ? "duplicate.new" : "duplicate.library"),
-								w: copy.cover.width,
-								h: copy.cover.height,
-							})}
-							className={styles.cover}
-						/>
-						<span>
-							{t("duplicate.by", { w: copy.cover.width, h: copy.cover.height })}
-						</span>
-					</>
-				) : (
-					t("duplicate.noCover")
-				),
-		],
+		[t("duplicate.tags"), (copy) => String(Math.round(copy.tag_count))],
+		[t("duplicate.folder"), (copy) => copy.folder],
 	];
+
+	const sides = ["new", "library"] as const;
+	const copyOf = (side: CopySide) =>
+		side === "new" ? duplicate?.new : duplicate?.library;
+	const tracks = duplicate?.tracks;
 
 	return (
 		<section className={styles.duplicate} aria-labelledby="duplicate-title">
-			<h2 id="duplicate-title">{t("duplicate.title")}</h2>
+			<header className={styles.header}>
+				<h2 id="duplicate-title">{t("duplicate.title")}</h2>
+				<p className={styles.lede}>{t("duplicate.lede")}</p>
+			</header>
 			{duplicate && (
 				<>
+					<p role="status" className={styles.recommendation}>
+						<ThumbsUp size={18} aria-hidden="true" />
+						<span>
+							{t("duplicate.recommended", {
+								which: t(
+									duplicate.recommended === "new"
+										? "duplicate.theNew"
+										: "duplicate.theLibrary",
+								),
+								rule: t(RULES[duplicate.rule_code]),
+							})}
+						</span>
+					</p>
+
 					<table
 						className={styles.table}
 						aria-label={t("duplicate.comparison")}
 					>
+						<colgroup>
+							<col className={styles.factCol} />
+							{sides.map((side) => (
+								<col
+									key={side}
+									data-recommended={duplicate.recommended === side || undefined}
+								/>
+							))}
+						</colgroup>
 						<thead>
 							<tr>
 								<th scope="col">
 									<span className="visually-hidden">{t("duplicate.fact")}</span>
 								</th>
-								{(["new", "library"] as const).map((side) => (
-									<th key={side} scope="col">
-										{t(
-											side === "new"
-												? "duplicate.new"
-												: "duplicate.libraryCopy",
-										)}
-										{duplicate.recommended === side && (
-											<span className={styles.recommended}>
-												{" "}
-												{t("duplicate.recommendedMark")}
-											</span>
-										)}
-									</th>
-								))}
+								{sides.map((side) => {
+									const copy = copyOf(side);
+									return (
+										<th
+											key={side}
+											scope="col"
+											data-recommended={
+												duplicate.recommended === side || undefined
+											}
+										>
+											<div className={styles.copyHead}>
+												<span className={styles.copyName}>
+													{t(
+														side === "new"
+															? "duplicate.new"
+															: "duplicate.libraryCopy",
+													)}
+													{duplicate.recommended === side && " "}
+													{duplicate.recommended === side && (
+														<span className={styles.badge}>
+															{t("duplicate.recommendedMark")}
+														</span>
+													)}
+												</span>{" "}
+												{copy?.cover ? (
+													<img
+														src={copy.cover.url}
+														alt={t("duplicate.coverAlt", {
+															side: t(
+																side === "new"
+																	? "duplicate.new"
+																	: "duplicate.library",
+															),
+															w: copy.cover.width,
+															h: copy.cover.height,
+														})}
+														className={styles.cover}
+													/>
+												) : (
+													<span className={styles.noCover}>
+														{t("duplicate.noCover")}
+													</span>
+												)}{" "}
+												{copy?.cover && (
+													<span className={styles.coverSize}>
+														{t("duplicate.by", {
+															w: copy.cover.width,
+															h: copy.cover.height,
+														})}
+													</span>
+												)}
+											</div>
+										</th>
+									);
+								})}
 							</tr>
 						</thead>
 						<tbody>
-							{facts.map(([name, show]) => (
-								<tr key={name}>
-									<th scope="row">{name}</th>
-									<td>{show(duplicate.new, "new")}</td>
-									<td>{show(duplicate.library, "library")}</td>
-								</tr>
-							))}
+							{facts.map(([name, show]) => {
+								const values = sides.map((side) => {
+									const copy = copyOf(side);
+									return copy ? show(copy) : "";
+								});
+								const differs = values[0] !== values[1];
+								return (
+									<tr key={name} data-differs={differs || undefined}>
+										<th scope="row">{name}</th>
+										{values.map((value, index) => (
+											<td
+												key={sides[index]}
+												data-recommended={
+													duplicate.recommended === sides[index] || undefined
+												}
+											>
+												{value}
+											</td>
+										))}
+									</tr>
+								);
+							})}
 						</tbody>
+						<tfoot>
+							<tr>
+								<td />
+								{sides.map((side) => (
+									<td
+										key={side}
+										data-recommended={
+											duplicate.recommended === side || undefined
+										}
+									>
+										<button
+											type="button"
+											className={styles.button}
+											data-recommended={
+												duplicate.recommended === side || undefined
+											}
+											disabled={busy || why[side] !== null}
+											onClick={() => void keep(side)}
+										>
+											{label(side)}
+										</button>
+										<span className={styles.consequence}>
+											{t(
+												side === "new"
+													? "duplicate.keepNewMeans"
+													: "duplicate.keepLibraryMeans",
+											)}
+										</span>
+									</td>
+								))}
+							</tr>
+						</tfoot>
 					</table>
-					<p role="status" className={styles.recommendation}>
-						{t("duplicate.recommended", {
-							which: t(
-								duplicate.recommended === "new"
-									? "duplicate.theNew"
-									: "duplicate.theLibrary",
-							),
-							rule: t(RULES[duplicate.rule_code]),
-						})}
-					</p>
-					<div className={styles.buttons}>
-						<button
-							type="button"
-							className={styles.button}
-							data-recommended={duplicate.recommended === "new" || undefined}
-							disabled={busy || why.new !== null}
-							onClick={() => void keep("new")}
-						>
-							{label("new")}
-						</button>
-						<button
-							type="button"
-							className={styles.button}
-							data-recommended={
-								duplicate.recommended === "library" || undefined
-							}
-							disabled={busy || why.library !== null}
-							onClick={() => void keep("library")}
-						>
-							{label("library")}
-						</button>
-					</div>
+
+					{tracks && (
+						<p className={styles.tracks}>
+							{t("duplicate.tracksPaired", { n: tracks.paired })}
+							{" · "}
+							{tracks.length_differs === 0
+								? t("duplicate.tracksSameLength")
+								: t("duplicate.tracksLengthDiffer", {
+										n: tracks.length_differs,
+										max: Math.round(tracks.max_length_diff),
+									})}
+							{tracks.only_new > 0 &&
+								` · ${t("duplicate.onlyNew", { n: tracks.only_new })}`}
+							{tracks.only_library > 0 &&
+								` · ${t("duplicate.onlyLibrary", { n: tracks.only_library })}`}
+						</p>
+					)}
 				</>
 			)}
 			<Outcome view={current} />

@@ -1,56 +1,163 @@
 .duplicate {
 	display: grid;
-	gap: var(--space-3);
+	gap: var(--space-4);
+	margin-top: var(--space-6);
+	padding: var(--space-6);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
 }
 
-.duplicate h2 {
+.header {
+	display: grid;
+	gap: var(--space-1);
+}
+
+.header h2 {
 	margin: 0;
+	font-size: 1.25rem;
+}
+
+.lede {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.875rem;
+}
+
+.recommendation {
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+	margin: 0;
+	padding: var(--space-3) var(--space-4);
+	background: var(--accent-quiet);
+	border: 1px solid color-mix(in oklch, var(--accent) 55%, transparent);
+	border-radius: var(--radius-sm);
+	font-weight: 600;
+}
+
+.recommendation svg {
+	flex: none;
+	color: var(--accent);
 }
 
 .table {
 	width: 100%;
-	border-collapse: collapse;
+	table-layout: fixed;
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: 0.875rem;
+}
+
+.factCol {
+	width: 10rem;
 }
 
 .table th,
 .table td {
-	padding: var(--space-2) var(--space-3);
-	border-top: 1px solid var(--border);
+	padding: var(--space-2) var(--space-4);
 	text-align: left;
 	vertical-align: top;
 	overflow-wrap: anywhere;
 }
 
-.table thead th {
-	border-top: 0;
+/* The recommended copy reads as one highlighted column, header to button. */
+.table [data-recommended] {
+	background: color-mix(in oklch, var(--accent) 7%, transparent);
+	border-right: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+	border-left: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+}
+
+.table thead th[data-recommended] {
+	border-top: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+	border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.table tfoot td[data-recommended] {
+	border-bottom: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+	border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.table tbody tr > * {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
 }
 
 .table tbody th {
 	color: var(--muted);
-	font-weight: 500;
-	white-space: nowrap;
+	font-weight: 400;
 }
 
-.recommended {
-	color: var(--accent);
+/* Where the copies agree the row steps back, so the differences are what reads first. */
+.table tbody tr:not([data-differs]) td {
+	color: var(--muted);
+}
+
+.table tbody tr[data-differs] td {
 	font-weight: 600;
 }
 
-.cover {
-	display: block;
-	max-width: 8rem;
-	margin-bottom: var(--space-1);
+.copyHead {
+	display: grid;
+	gap: var(--space-2);
+	justify-items: start;
+	padding-bottom: var(--space-2);
+}
+
+/* The name leads in the markup, so a reader hears it first; the cover shows above it. */
+.cover,
+.noCover {
+	order: -1;
+	width: 7rem;
+	aspect-ratio: 1;
 	border-radius: var(--radius-sm);
+	object-fit: cover;
 }
 
-.recommendation {
-	margin: 0;
+.noCover {
+	display: grid;
+	place-items: center;
+	background: var(--surface-raised);
+	color: var(--faint);
+	font-size: 0.75rem;
+	font-weight: 400;
 }
 
-.buttons {
-	display: flex;
+.copyName {
+	display: inline-flex;
 	flex-wrap: wrap;
 	gap: var(--space-2);
+	align-items: center;
+	font-size: 1rem;
+}
+
+.badge {
+	padding: 2px var(--space-2);
+	background: var(--accent);
+	border-radius: var(--radius-pill);
+	color: var(--on-accent);
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.coverSize {
+	color: var(--faint);
+	font-family: var(--font-numeric);
+	font-size: 0.75rem;
+	font-weight: 400;
+}
+
+.table tfoot td {
+	padding-top: var(--space-4);
+	padding-bottom: var(--space-4);
+}
+
+.consequence {
+	display: block;
+	margin-top: var(--space-2);
+	color: var(--faint);
+	font-size: 0.75rem;
 }
 
 .button {
@@ -58,6 +165,7 @@
 	background: transparent;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-pill);
+	font-weight: 500;
 }
 
 .button:hover:not(:disabled) {
@@ -74,4 +182,30 @@
 	border-color: var(--accent);
 	color: var(--on-accent);
 	font-weight: 600;
+}
+
+.tracks {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+@media (max-width: 640px) {
+	.duplicate {
+		padding: var(--space-4);
+	}
+
+	.factCol {
+		width: 6rem;
+	}
+
+	.table th,
+	.table td {
+		padding: var(--space-2);
+	}
+
+	.cover,
+	.noCover {
+		width: 4.5rem;
+	}
 }

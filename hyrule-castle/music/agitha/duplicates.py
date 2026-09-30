@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from musiclib import files, images
+from musiclib import files, images, units
 from musiclib.mapping import PICARD
 
 from . import audio, drops
@@ -32,11 +32,15 @@ RULES = (
 )
 TIE = "the copy in the library"
 
+#: Seconds two paired tracks may differ by and still be the same length.
+LENGTH_DIFFERS = 2.0
+
 COVER_NAMES = ("cover.jpg", "folder.jpg", "front.jpg")
 _YEAR = re.compile(r"\(\d{4}\)\s+")
 _TYPE = re.compile(r"\[(?:EP|Single|Mixtape|Live)\]\s+")
 _EDITION = re.compile(r"\s+\[[^\]]*\]$")
 _DISC = re.compile(r"CD\d+", re.IGNORECASE)
+_LEADING_NUMBER = re.compile(r"\d+")
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,34 @@ class Copy:
     length: float
     size: int
     cover: CoverInfo | None
+    #: The first track's tags, read through `PICARD`.
+    release_id: str | None
+    album: str | None
+    album_artist: str | None
+    date: str | None
+    label: str | None
+    catalog: str | None
+    country: str | None
+    media: str | None
+    discs: int
+    bitrate_min: int
+    bitrate_max: int
+    #: The first track's that names one (`audio.encoder`).
+    encoder: str | None
+    #: Distinct tag keys per file, on average.
+    tag_count: float
+
+
+@dataclass(frozen=True)
+class Tracks:
+    """The two copies' tracks paired by disc and track number where every file has both, else in order."""
+
+    paired: int
+    #: Pairs more than `LENGTH_DIFFERS` seconds apart.
+    length_differs: int
+    only_new: int
+    only_library: int
+    max_length_diff: float
 
 
 @dataclass(frozen=True)
@@ -68,6 +100,24 @@ class Comparison:
     rule: str
     #: `rule` as a code the page translates; `library` where nothing differed.
     rule_code: str
+    tracks: Tracks
+
+
+@dataclass(frozen=True)
+class _Track:
+    """One audio file of a copy, read once."""
+
+    facts: audio.Facts
+    tags: dict[str, list[str]]
+    encoder: str | None
+    #: The disc number the tags give, else the disc folder's number or name, else 1.
+    disc: int | str
+    #: The track number the tags give.
+    number: int | None
+
+    @property
+    def position(self) -> tuple[int | str, int] | None:
+        return None if self.number is None else (self.disc, self.number)
 
 
 def _bare(name: str) -> str:
@@ -128,12 +178,41 @@ def library_copy(config: Config, entry: dict[str, Any]) -> Path | None:
     return matches[0] if matches else None
 
 
-def _facts(path: Path) -> audio.Facts | None:
+def _number(tags: dict[str, list[str]], key: str | None) -> int | None:
+    values = tags.get(key) if key else None
+    found = _LEADING_NUMBER.search(values[0]) if values else None
+    return int(found.group()) if found else None
+
+
+def _disc(tags: dict[str, list[str]], family: str, rel: PurePosixPath) -> int | str:
+    tagged = _number(tags, units.DISC_NUMBER_KEY.get(family))
+    if tagged is not None:
+        return tagged
+    if len(rel.parts) < 2:
+        return 1
+    folder = units.DISC_FOLDER.match(rel.parts[0])
+    return int(folder.group(1)) if folder else rel.parts[0]
+
+
+def _read(path: Path, folder: Path) -> _Track | None:
     try:
-        return audio.facts(path)
-    except OSError:
+        found = files.load(path)
+        facts = audio.facts_of(found, path)
+    except (files.Unreadable, OSError):
         # A file that went between listing and reading: apply moves an album's files while its view is read.
         return None
+    if facts is None:
+        return None
+    tags = files.snapshot(found, facts.family)
+    number = _number(tags, units.TRACK_NUMBER_KEY.get(facts.family))
+    disc = _disc(tags, facts.family, PurePosixPath(path.relative_to(folder).as_posix()))
+    return _Track(facts, tags, audio.encoder(found), disc, number)
+
+
+def _first_tag(track: _Track | None, field: str) -> str | None:
+    key = PICARD[field].get(track.facts.family) if track else None
+    values = track.tags.get(key) if key else None
+    return values[0] if values else None
 
 
 def cover_file(folder: Path) -> Path | None:
@@ -159,9 +238,18 @@ def _cover(folder: Path, url: str | None) -> CoverInfo | None:
 
 def copy_of(folder: Path, cover_url: str | None = None) -> Copy:
     """The facts of the album folder `folder`; `size` counts every file, the others audio only."""
-    found = [f for f in (_facts(p) for p in _tracks(folder)) if f is not None]
+    return _copy(folder, _read_all(folder), cover_url)
+
+
+def _read_all(folder: Path) -> list[_Track]:
+    return [t for t in (_read(p, folder) for p in _tracks(folder)) if t is not None]
+
+
+def _copy(folder: Path, tracks: list[_Track], cover_url: str | None) -> Copy:
+    found = [t.facts for t in tracks]
     formats = {f.format for f in found}
     depths = [f.bit_depth for f in found if f.bit_depth is not None]
+    first = tracks[0] if tracks else None
     return Copy(
         folder=str(folder),
         format=formats.pop() if len(formats) == 1 else "mixed" if formats else "",
@@ -173,19 +261,54 @@ def copy_of(folder: Path, cover_url: str | None = None) -> Copy:
         length=sum(f.length for f in found),
         size=sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()),
         cover=_cover(folder, cover_url),
+        release_id=_first_tag(first, "release id"),
+        album=_first_tag(first, "album"),
+        album_artist=_first_tag(first, "albumartist"),
+        date=_first_tag(first, "date"),
+        label=_first_tag(first, "label"),
+        catalog=_first_tag(first, "catalognumber"),
+        country=_first_tag(first, "releasecountry"),
+        media=_first_tag(first, "media"),
+        discs=len({t.disc for t in tracks}),
+        bitrate_min=min((f.bitrate for f in found), default=0),
+        bitrate_max=max((f.bitrate for f in found), default=0),
+        encoder=next((t.encoder for t in tracks if t.encoder), None),
+        tag_count=round(sum(len(t.tags) for t in tracks) / len(tracks), 1) if tracks else 0,
     )
+
+
+def _pairs(new: list[_Track], library: list[_Track]) -> list[tuple[_Track, _Track]]:
+    """Tracks at the same `(disc, track)` where every track on both sides has one and none repeats, else in order."""
+    sides = []
+    for tracks in (new, library):
+        positions = [t.position for t in tracks]
+        if None in positions or len(set(positions)) != len(positions):
+            return list(zip(new, library))
+        sides.append({t.position: t for t in tracks})
+    ours, theirs = sides
+    return [(ours[key], theirs[key]) for key in ours if key in theirs]
+
+
+def _track_counts(new: list[_Track], library: list[_Track]) -> Tracks:
+    pairs = _pairs(new, library)
+    diffs = [abs(a.facts.length - b.facts.length) for a, b in pairs]
+    return Tracks(paired=len(pairs), length_differs=sum(d > LENGTH_DIFFERS for d in diffs),
+                  only_new=len(new) - len(pairs), only_library=len(library) - len(pairs),
+                  max_length_diff=max(diffs, default=0.0))
 
 
 def compare(new_folder: Path, library_folder: Path,
             cover_url: Callable[[str], str] | None = None) -> Comparison:
     """`cover_url(side)` names where each copy's cover is served; without it a cover's url is its path."""
-    new = copy_of(new_folder, cover_url("new") if cover_url else None)
-    library = copy_of(library_folder, cover_url("library") if cover_url else None)
+    ours, theirs = _read_all(new_folder), _read_all(library_folder)
+    new = _copy(new_folder, ours, cover_url("new") if cover_url else None)
+    library = _copy(library_folder, theirs, cover_url("library") if cover_url else None)
+    tracks = _track_counts(ours, theirs)
     for rule, code, measure in RULES:
-        ours, theirs = measure(new), measure(library)
-        if ours != theirs:
-            return Comparison(new, library, "new" if ours > theirs else "library", rule, code)
-    return Comparison(new, library, "library", TIE, "library")
+        mine, other = measure(new), measure(library)
+        if mine != other:
+            return Comparison(new, library, "new" if mine > other else "library", rule, code, tracks)
+    return Comparison(new, library, "library", TIE, "library", tracks)
 
 
 def find(config: Config, entry: dict[str, Any], new_folder: Path | None = None,

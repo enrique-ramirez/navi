@@ -582,6 +582,128 @@ class Finding(unittest.TestCase):
         self.assertEqual((got["recommended"], got["rule"]), ("library", RULES["files"]))
 
 
+#: What Picard would tag a copy of the album with; each test changes what it needs.
+TAGS = {"album": ["Chrono Cross"], "albumartist": [ARTIST], "date": ["1999-11-18"], "label": ["Square"],
+        "catalognumber": ["SSCX-10040"], "releasecountry": ["JP"], "media": ["CD"],
+        "release id": [CHRONO[0]["id"]]}
+
+
+def tagged(path: Path, number: int, total: int, *, disc: int = 1, discs: int = 1,
+           fields: dict[str, list[str]] | None = None, seconds: float | None = None) -> Path:
+    """A fixture file at `path` with Picard's tags, `seconds` long where given (FLAC only)."""
+    ext = path.suffix.lstrip(".")
+    if ext == "flac":
+        flac(path)
+        if seconds is not None:
+            info = FLAC(path).info
+            info.total_samples = round(seconds * info.sample_rate)
+            data = bytearray(path.read_bytes())
+            data[8:8 + 34] = info.write()
+            path.write_bytes(bytes(data))
+    else:
+        mp3(path)
+    builders.write_tags(path, builders.picard_tags(ext, TAGS if fields is None else fields,
+                                                   track=(number, total), disc=(disc, discs)), v2_version=4)
+    return path
+
+
+class Telling(unittest.TestCase):
+    """What the page shows to choose between two copies the rules cannot tell apart, both MP3s among them."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def compare(self, new: Path, library: Path) -> dict:
+        from agitha.duplicates import compare
+
+        return plain(compare(new, library))
+
+    def test_two_mp3_copies_show_their_release_tags_bitrates_and_tagging(self) -> None:
+        new, library = self.tmp / "new", self.tmp / "library copy"
+        for number in (1, 2, 3):
+            tagged(new / f"{number:02d}.mp3", number, 3)
+            tagged(library / f"{number:02d}.mp3", number, 3,
+                   fields={"album": ["Chrono Cross OST"], "release id": [OTHER_GROUP]})
+        got = self.compare(new, library)
+        self.assertEqual((got["recommended"], got["rule"], got["rule_code"]), ("library", RULES["tie"], "library"))
+        mine = {key: got["new"][key] for key in
+                ("release_id", "album", "album_artist", "date", "label", "catalog", "country", "media", "discs")}
+        self.assertEqual(mine, {"release_id": CHRONO[0]["id"], "album": "Chrono Cross", "album_artist": ARTIST,
+                                "date": "1999-11-18", "label": "Square", "catalog": "SSCX-10040",
+                                "country": "JP", "media": "CD", "discs": 1})
+        theirs = got["library"]
+        self.assertEqual((theirs["release_id"], theirs["album"], theirs["label"]), (OTHER_GROUP, "Chrono Cross OST", None))
+        bitrate = mutagen.File(new / "01.mp3").info.bitrate
+        self.assertEqual((got["new"]["bitrate_min"], got["new"]["bitrate_max"]), (bitrate, bitrate))
+        # The fixture was made by ffmpeg, whose MP3s carry no LAME header.
+        self.assertIsNone(got["new"]["encoder"])
+        keys = [len(mutagen.File(path).tags) for path in sorted(new.iterdir())]
+        self.assertAlmostEqual(got["new"]["tag_count"], mean(keys), delta=0.05)
+        self.assertGreater(got["new"]["tag_count"], got["library"]["tag_count"])
+        self.assertEqual(got["tracks"], {"paired": 3, "length_differs": 0, "only_new": 0, "only_library": 0,
+                                         "max_length_diff": 0.0})
+
+    def test_the_lowest_and_highest_bitrate_show_a_straggler(self) -> None:
+        new = self.tmp / "new"
+        flac(new / "01.flac")
+        flac(new / "02.flac", padding=6000)
+        got = self.compare(new, folder_of(self.tmp, "library copy", 2, flac))["new"]
+        rates = sorted(mutagen.File(path).info.bitrate for path in new.iterdir())
+        self.assertEqual((got["bitrate_min"], got["bitrate_max"]), (rates[0], rates[-1]))
+        self.assertLess(got["bitrate_min"], got["bitrate_max"])
+
+    def test_tracks_pair_by_disc_and_track_number_whatever_their_file_names(self) -> None:
+        new, library = self.tmp / "new", self.tmp / "library copy"
+        # Named against their numbers, so pairing by order would pair 1 with 3.
+        for name, number in (("a.flac", 3), ("b.flac", 2), ("c.flac", 1)):
+            tagged(new / name, number, 3)
+        tagged(library / "01.flac", 1, 3)
+        tagged(library / "03.flac", 3, 3, seconds=5.5)
+        tagged(library / "04.flac", 4, 4)
+        tracks = self.compare(new, library)["tracks"]
+        self.assertEqual({k: v for k, v in tracks.items() if k != "max_length_diff"},
+                         {"paired": 2, "length_differs": 1, "only_new": 1, "only_library": 1})
+        self.assertAlmostEqual(tracks["max_length_diff"], 4.5, delta=0.01)
+
+    def test_a_difference_of_two_seconds_or_less_is_the_same_length(self) -> None:
+        new, library = self.tmp / "new", self.tmp / "library copy"
+        tagged(new / "01.flac", 1, 1)
+        tagged(library / "01.flac", 1, 1, seconds=3.0)
+        tracks = self.compare(new, library)["tracks"]
+        self.assertEqual((tracks["paired"], tracks["length_differs"]), (1, 0))
+        self.assertAlmostEqual(tracks["max_length_diff"], 2.0, delta=0.01)
+
+    def test_without_track_numbers_on_a_side_tracks_pair_in_path_order(self) -> None:
+        new = folder_of(self.tmp, "new", 3, mp3)
+        library = self.tmp / "library copy"
+        for number in (1, 2):
+            tagged(library / f"{number:02d}.mp3", number, 2)
+        tracks = self.compare(new, library)["tracks"]
+        self.assertEqual((tracks["paired"], tracks["only_new"], tracks["only_library"]), (2, 1, 0))
+
+    def test_discs_count_disc_numbers_else_disc_folders(self) -> None:
+        by_tag = self.tmp / "by tag"
+        for disc in (1, 2, 3):
+            tagged(by_tag / f"{disc}-01.flac", 1, 1, disc=disc, discs=3)
+        by_folder = self.tmp / "by folder"
+        for disc in (1, 2):
+            flac(by_folder / f"CD{disc}" / "01.flac")
+        got = self.compare(by_tag, by_folder)
+        self.assertEqual((got["new"]["discs"], got["library"]["discs"]), (3, 2))
+
+    def test_the_encoder_is_what_the_file_says(self) -> None:
+        from agitha.audio import encoder
+
+        path = tagged(self.tmp / "01.flac", 1, 1)
+        self.assertEqual(encoder(mutagen.File(path)), FLAC(path).tags.vendor)
+        self.assertIsNone(encoder(mutagen.File(mp3(self.tmp / "01.mp3"))))
+        # mutagen reads a LAME header into these two; the fixture has none, so they are set here.
+        lame = mutagen.File(self.tmp / "01.mp3")
+        lame.info.encoder_info, lame.info.encoder_settings = "LAME 3.100", "-V 0"
+        self.assertEqual(encoder(lame), "LAME 3.100 -V 0")
+
+
 class Keeping(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

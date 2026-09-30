@@ -25,6 +25,29 @@ const LIBRARY_PATH = "/srv/music/library/C/Chrono Cross/(1999) Chrono Cross";
 // through the catalogue, so this text must never reach the screen.
 const SERVER_TEXT = "SERVER TEXT";
 
+// The facts a copy's tags and files add, the same on both sides unless a case says otherwise.
+const TAGGED = {
+	release_id: null,
+	album: "Chrono Cross",
+	album_artist: "Yasunori Mitsuda",
+	date: "1999",
+	label: null,
+	catalog: null,
+	country: null,
+	media: null,
+	discs: 3,
+	encoder: null,
+	tag_count: 14,
+} satisfies Partial<Copy>;
+
+const TRACKS: Comparison["tracks"] = {
+	paired: 67,
+	length_differs: 0,
+	only_new: 0,
+	only_library: 0,
+	max_length_diff: 0,
+};
+
 // 67 FLAC files at 16-bit 44.1 kHz against 67 MP3s.
 function chronoCross(): Comparison {
 	return {
@@ -35,6 +58,9 @@ function chronoCross(): Comparison {
 			bit_depth: 16,
 			sample_rate: 44100,
 			bitrate: 900000,
+			bitrate_min: 900000,
+			bitrate_max: 900000,
+			...TAGGED,
 			files: 67,
 			length: 8040,
 			size: 700_000_000,
@@ -47,6 +73,9 @@ function chronoCross(): Comparison {
 			bit_depth: null,
 			sample_rate: 44100,
 			bitrate: 320000,
+			bitrate_min: 320000,
+			bitrate_max: 320000,
+			...TAGGED,
 			files: 67,
 			length: 8040,
 			size: 320_000_000,
@@ -55,6 +84,7 @@ function chronoCross(): Comparison {
 		recommended: "new",
 		rule: SERVER_TEXT,
 		rule_code: "lossless",
+		tracks: TRACKS,
 	};
 }
 
@@ -67,6 +97,10 @@ function hiResLibrary(): Comparison {
 		bit_depth: 16,
 		sample_rate: 44100,
 		bitrate: 800000,
+		bitrate_min: 800000,
+		bitrate_max: 800000,
+		...TAGGED,
+		discs: 1,
 		files: 12,
 		length: 545,
 		size: 250_000_000,
@@ -83,6 +117,8 @@ function hiResLibrary(): Comparison {
 			bit_depth: 24,
 			sample_rate: 88200,
 			bitrate: 999000,
+			bitrate_min: 999000,
+			bitrate_max: 999000,
 			length: 2601,
 			size: 987_654_321,
 			cover: {
@@ -94,6 +130,7 @@ function hiResLibrary(): Comparison {
 		recommended: "library",
 		rule: SERVER_TEXT,
 		rule_code: "bit-depth",
+		tracks: { ...TRACKS, paired: 12 },
 	};
 }
 
@@ -291,7 +328,7 @@ describe("Duplicate", () => {
 				["Bit depth", "16-bit", "—"],
 				["Sample rate", "44.1 kHz", "44.1 kHz"],
 				["Average bitrate", "900 kbps", "320 kbps"],
-				["Audio files", "67", "67"],
+				["Audio files", "67 on 3 discs", "67 on 3 discs"],
 				// 8040 s is 2 h 14 min.
 				["Total length", "2:14:00", "2:14:00"],
 				// Megabytes of 10^6 bytes, as DropArea counts them.
@@ -310,15 +347,15 @@ describe("Duplicate", () => {
 			renderDuplicate(view());
 
 			await screen.findByRole("table", { name: "Comparison" });
-			const newCover = cell("Cover", "New");
+			const newCover = header(/^New\b/)!;
 			const image = within(newCover).getByRole("img", {
 				name: /^new cover, 600 by 600$/i,
 			});
 			expect(image).toHaveAttribute("src", `${ALBUM_URL}/cover`);
 			expect(text(newCover)).toMatch(/600\D+600/);
 
-			const libraryCover = cell("Cover", "In the library");
-			expect(text(libraryCover)).toBe("no cover");
+			const libraryCover = header(/^In the library\b/)!;
+			expect(text(libraryCover)).toMatch(/no cover/);
 			expect(within(libraryCover).queryByRole("img")).not.toBeInTheDocument();
 		});
 
@@ -340,8 +377,8 @@ describe("Duplicate", () => {
 			expect(text(cell("Total size", "New"))).toBe("250.0 MB");
 			expect(text(cell("Total size", "In the library"))).toBe("987.7 MB");
 
-			expect(text(cell("Cover", "New"))).toBe("no cover");
-			const libraryCover = cell("Cover", "In the library");
+			expect(text(header(/^New\b/)!)).toMatch(/no cover/);
+			const libraryCover = header(/^In the library\b/)!;
 			expect(
 				within(libraryCover).getByRole("img", {
 					name: /^library cover, 1200 by 1000$/i,
@@ -368,7 +405,7 @@ describe("Duplicate", () => {
 					.getAllByRole("status")
 					.map(text)
 					.some((line) =>
-						/Recommended: the new one,? by lossless over lossy/.test(line),
+						/Recommended: keep the new one \(lossless over lossy\)/.test(line),
 					),
 			).toBe(true);
 			expect(
@@ -389,7 +426,7 @@ describe("Duplicate", () => {
 			const lines = within(region).getAllByRole("status").map(text);
 			expect(
 				lines.some((line) =>
-					/Recommended: the one in the library,? by higher bit depth/.test(
+					/Recommended: keep the one in the library \(higher bit depth\)/.test(
 						line,
 					),
 				),
@@ -422,7 +459,7 @@ describe("Duplicate", () => {
 				const lines = within(region).getAllByRole("status").map(text);
 				expect(
 					lines.some((line) =>
-						line.includes(`Recommended: the new one, by ${phrase}`),
+						line.includes(`Recommended: keep the new one (${phrase})`),
 					),
 				).toBe(true);
 				expect(lines.join(" ")).not.toContain(SERVER_TEXT);

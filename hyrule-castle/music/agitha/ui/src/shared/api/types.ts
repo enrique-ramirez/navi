@@ -391,6 +391,46 @@ export interface Copy {
 	/** Bytes. */
 	size: number;
 	cover: CoverInfo | null;
+	/** The MusicBrainz release id the first track carries, to tell whether both copies are one release. */
+	release_id: string | null;
+	/** The first track's album tag. */
+	album: string | null;
+	/** The first track's album artist tag. */
+	album_artist: string | null;
+	/** The first track's date tag, as written. */
+	date: string | null;
+	/** The first track's label tag. */
+	label: string | null;
+	/** The first track's catalogue number tag. */
+	catalog: string | null;
+	/** The first track's release country tag, e.g. `JP`. */
+	country: string | null;
+	/** The first track's media tag, e.g. `CD`. */
+	media: string | null;
+	/** Distinct disc numbers the tags give, else disc folders; 1 for a single disc. */
+	discs: number;
+	/** Lowest file bitrate, bits per second. */
+	bitrate_min: number;
+	/** Highest file bitrate, bits per second; differs from `bitrate_min` for VBR or a straggler. */
+	bitrate_max: number;
+	/** What made the files where one says: MP3 LAME header (`LAME 3.99.1+ -b 320`), FLAC/Ogg vendor, MP4 `©too`. */
+	encoder: string | null;
+	/** Distinct tag keys per file on average, one decimal: how well tagged. */
+	tag_count: number;
+}
+
+/** The two copies' tracks, paired by disc and track number where every file has both, else in path order. */
+export interface TrackComparison {
+	/** Tracks present in both copies. */
+	paired: number;
+	/** Pairs whose lengths differ by more than 2 s. */
+	length_differs: number;
+	/** Tracks only the new copy has. */
+	only_new: number;
+	/** Tracks only the library copy has. */
+	only_library: number;
+	/** The largest length difference among the pairs, seconds; 0 with none paired. */
+	max_length_diff: number;
 }
 
 export type CopySide = "new" | "library";
@@ -409,6 +449,8 @@ export interface Comparison {
 		| "sample-rate"
 		| "bitrate"
 		| "library";
+	/** How the two copies' tracks line up. */
+	tracks: TrackComparison;
 }
 
 export interface Approvable {

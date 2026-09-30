@@ -42,6 +42,11 @@ def facts(path: Path) -> Facts | None:
         found = mutagen.File(path)
     except (OSError, mutagen.MutagenError):
         return None
+    return facts_of(found, path)
+
+
+def facts_of(found: mutagen.FileType | None, path: Path) -> Facts | None:
+    """`facts` of the file mutagen already loaded from `path` as `found`."""
     kind = KINDS.get(type(found)) if found is not None else None
     if kind is None:
         return None
@@ -53,3 +58,18 @@ def facts(path: Path) -> Facts | None:
         bit_depth=getattr(info, "bits_per_sample", None) if lossless else None,
         channels=info.channels, length=info.length, size=path.stat().st_size,
     )
+
+
+def encoder(found: mutagen.FileType) -> str | None:
+    """What made the file, where it says: an MP3's LAME header (`LAME 3.99.1+ -b 320`), a FLAC or Ogg vendor string, an MP4's `©too`."""
+    info_line = " ".join(part for part in (getattr(found.info, "encoder_info", ""),
+                                           getattr(found.info, "encoder_settings", "")) if part)
+    if info_line:
+        return info_line
+    vendor = getattr(found.tags, "vendor", None)
+    if vendor:
+        return vendor
+    if isinstance(found, MP4):
+        tool = (found.tags or {}).get("\xa9too")
+        return str(tool[0]) if tool else None
+    return None

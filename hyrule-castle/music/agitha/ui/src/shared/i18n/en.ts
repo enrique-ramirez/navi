@@ -127,7 +127,7 @@ export const en = {
 	"duplicate.libraryCopy": "In the library",
 	"duplicate.library": "Library",
 	"duplicate.recommendedMark": "recommended",
-	"duplicate.recommended": "Recommended: {which}, by {rule}",
+	"duplicate.recommended": "Recommended: keep {which} ({rule})",
 	"duplicate.theNew": "the new one",
 	"duplicate.theLibrary": "the one in the library",
 	"duplicate.keepNew": "Keep the new one",
@@ -185,7 +185,7 @@ export const en = {
 	"rule.bitDepth": "higher bit depth",
 	"rule.sampleRate": "higher sample rate",
 	"rule.bitrate": "higher average bitrate",
-	"rule.library": "the copy in the library",
+	"rule.library": "nothing makes the new one better",
 	"duplicate.running": "a process is running",
 	"duplicate.keepWhy": "{action}: {why}",
 	"confirm.cancel": "Cancel",
@@ -272,6 +272,21 @@ export const en = {
 	"review.repreview": "Re-preview",
 	"review.changed":
 		"Identify planned something different from what was on screen, so nothing was approved. Look it over and approve again.",
+	"duplicate.lede":
+		"This album is already in your library. Keep one copy; the other is deleted.",
+	"duplicate.release": "Release",
+	"duplicate.mbRelease": "MusicBrainz release",
+	"duplicate.encoder": "Encoder",
+	"duplicate.tags": "Tags per file",
+	"duplicate.keepNewMeans":
+		"Replaces the library's copy, which is deleted once the new one is verified.",
+	"duplicate.keepLibraryMeans":
+		"Deletes this upload; the library stays as it is.",
+	"duplicate.tracksPaired": "{n} tracks compared",
+	"duplicate.tracksSameLength": "every track the same length",
+	"duplicate.tracksLengthDiffer": "{n} differ in length, by up to {max} s",
+	"duplicate.onlyNew": "{n} only in the new one",
+	"duplicate.onlyLibrary": "{n} only in the library",
 } as const;
 
 export type Phrase = keyof typeof en;
