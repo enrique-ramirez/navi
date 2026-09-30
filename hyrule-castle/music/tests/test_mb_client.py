@@ -175,6 +175,20 @@ class Lookups(ClientTestCase):
         self.assertNotIn("tracks:", lucene)
         self.assertNotIn('"', lucene)
 
+    def test_a_search_requires_both_the_title_and_the_artist(self) -> None:
+        # Joined by OR, a common title crowds the artist out of the 25 results.
+        client, transport = self.client((200, SEARCH))
+        client.search_releases("Weezer (White Album)", "Weezer")
+        self.assertEqual(query(transport.requests[0].url)["query"],
+                         r"release:(weezer \(white album\)) AND artist:(weezer)")
+
+    def test_a_search_that_finds_nothing_with_both_terms_asks_again_with_either(self) -> None:
+        # The files may spell the artist unlike MusicBrainz does.
+        client, transport = self.client((200, b'{"releases": []}'), (200, SEARCH))
+        self.assertEqual(client.search_releases("Abbey Road", "Beatles"), json.loads(SEARCH))
+        self.assertEqual([query(r.url)["query"] for r in transport.requests],
+                         ["release:(abbey road) AND artist:(beatles)", "release:(abbey road) artist:(beatles)"])
+
     def test_lucene_characters_in_a_search_term_are_still_escaped(self) -> None:
         # Unescaped, the brackets in the title would close `release:(` early.
         client, transport = self.client((200, SEARCH))

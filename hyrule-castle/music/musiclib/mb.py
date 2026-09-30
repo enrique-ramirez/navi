@@ -218,6 +218,17 @@ class MusicBrainz:
         url = f"{_BASE}/release-group/{mbid}?inc=genres+tags&fmt=json"
         return json.loads(self._get(url))
 
+    def artist_release_groups(self, mbid: str) -> list[dict]:
+        """Every release group the artist `mbid` is credited on, a page of 100 at a time."""
+        groups: list[dict] = []
+        while True:
+            url = f"{_BASE}/release-group?artist={mbid}&limit=100&offset={len(groups)}&fmt=json"
+            page = json.loads(self._get(url))
+            found = page.get("release-groups", [])
+            groups.extend(found)
+            if not found or len(groups) >= page.get("release-group-count", 0):
+                return groups
+
     def artist(self, mbid: str) -> dict:
         url = f"{_BASE}/artist/{mbid}?inc=aliases+genres&fmt=json"
         return json.loads(self._get(url))
@@ -230,6 +241,14 @@ class MusicBrainz:
             terms.append(f"arid:{VARIOUS_ARTISTS}")
         elif artist:
             terms.append(f"artist:({_lucene_escape(artist.lower())})")
-        lucene = " ".join(terms)
+        # MusicBrainz joins bare terms with OR, which lets a common title crowd the artist's own
+        # releases out of the 25 ("Weezer (White Album)" found 25 White Albums, none of them Weezer's).
+        # The OR search is kept for an artist the files spell unlike MusicBrainz.
+        found = self._search(" AND ".join(terms))
+        if len(terms) > 1 and not found.get("releases"):
+            found = self._search(" ".join(terms))
+        return found
+
+    def _search(self, lucene: str) -> dict:
         url = f"{_BASE}/release/?query={quote(lucene, safe='')}&fmt=json&limit=25"
         return json.loads(self._get(url))

@@ -394,6 +394,11 @@ class Finding(unittest.TestCase):
         library_copy(self.library, f"Y/{ARTIST}/(1999) [Single] Radical Dreamers", group=OTHER_GROUP)
         self.assertIsNone(self.find(self.japan))
 
+    def test_a_folder_of_the_same_name_whose_audio_names_another_release_group_is_not_the_album(self) -> None:
+        # Weezer's Green Album against its Red Album: both titled "Weezer".
+        library_copy(self.library, f"Y/{ARTIST}/(2008) Chrono Cross", group=OTHER_GROUP)
+        self.assertIsNone(self.find(self.japan))
+
     def test_a_name_that_only_contains_the_title_is_not_the_album(self) -> None:
         # Guards a substring or prefix match standing in for equality.
         library_copy(self.library, f"Y/{ARTIST}/(1999) Chrono Cross Arrange Album", group=OTHER_GROUP)

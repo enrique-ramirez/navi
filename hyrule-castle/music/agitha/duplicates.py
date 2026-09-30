@@ -161,8 +161,15 @@ def library_copy(config: Config, entry: dict[str, Any]) -> Path | None:
     if not artist.is_dir():
         return None
     name, group = _bare(parts[2]), _planned_group(entry)
-    matches = [p for p in sorted(artist.iterdir()) if p.is_dir()
-               and (_bare(p.name) == name or (group is not None and _group_of(p) == group))]
+
+    def same_album(folder: Path) -> bool:
+        theirs = _group_of(folder) if group is not None else None
+        if theirs is not None:
+            # Two release groups can share a title, as Weezer's coloured albums do.
+            return theirs == group
+        return _bare(folder.name) == name
+
+    matches = [p for p in sorted(artist.iterdir()) if p.is_dir() and same_album(p)]
     matches.sort(key=lambda p: p.name != parts[2])
     return matches[0] if matches else None
 

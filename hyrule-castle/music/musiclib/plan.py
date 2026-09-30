@@ -281,10 +281,9 @@ def sort_others(unit: Unit, image_names: set[str], moving: bool, consumed: str |
         # apart: by content, not just by name.
         kind = check.classify_other(unit.path / rel, rel)
         # "unexpected" (a type the doc neither allows, removes nor moves to
-        # extras) is carried like a kept file: it moves with the album, and
-        # `check_album` on the resulting state is what refuses the plan for
-        # it, the same "unexpected file" a finished write would show.
-        (deletions if kind == "delete" else extras if kind == "extra" else kept).append(full)
+        # extras, such as a `.torrent`) is deleted with the junk: nothing
+        # of a type the doc does not list comes into the library.
+        (deletions if kind in ("delete", "unexpected") else extras if kind == "extra" else kept).append(full)
     left_behind = {PurePosixPath(path).name for path in created if PurePosixPath(path).parent.as_posix() == unit.rel}
     for name in sorted(left_behind):
         full = f"{unit.rel}/{name}"
@@ -308,6 +307,32 @@ def _without_brackets(value: str) -> str:
     if value.startswith("[") and value.endswith("]") and not re.search(r"[\[\]]", value[1:-1]):
         value = value[1:-1]
     return value.replace("[", "(").replace("]", ")").strip()
+
+
+def _told_apart(release: dict, release_group: dict, mb) -> dict:
+    """`release` titled `Group title (Comment) rest` where its artist has another release group of the same title.
+
+    The comment is the release group's disambiguation, which is how
+    MusicBrainz tells Weezer's self-titled albums apart ("Green Album", "Red
+    Album"). It goes straight after the group's title, so the Blue Album's
+    `Weezer (deluxe edition)` becomes `Weezer (Blue Album) (deluxe edition)`,
+    and at the end of a release title that does not start with it. The album
+    tag carries it, and the folder with it, so jean and the library show the
+    albums apart too. A release group without one, or a compilation, keeps
+    its title.
+    """
+    comment = _without_brackets(release_group.get("disambiguation") or "")
+    credit = release.get("artist-credit") or []
+    group_title = release_group.get("title") or ""
+    if not comment or not credit or not group_title or is_compilation(release):
+        return release
+    own = release["release-group"]["id"]
+    others = mb.artist_release_groups(credit[0]["artist"]["id"])
+    if not any(g["id"] != own and g.get("title", "").casefold() == group_title.casefold() for g in others):
+        return release
+    title = release["title"]
+    head = len(group_title) if title.casefold().startswith(group_title.casefold()) else len(title)
+    return {**release, "title": f"{title[:head]} ({comment}){title[head:]}"}
 
 
 def edition_fields(release: dict) -> list[str]:
@@ -381,7 +406,8 @@ def plan_album(
         release = mapping.with_titles_of(release, latin[0])
 
     release_group = mb.release_group(release["release-group"]["id"])
-    album_genres = _album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
+    release = _told_apart(release, release_group, mb)
+    album_genres =_album_genres(release_group, unit.tracks, release, owner_input, incoming, mb)
 
     folder_files = _loose_files(unit)
     left_behind = {PurePosixPath(path).name for path in created if PurePosixPath(path).parent.as_posix() == unit.rel}

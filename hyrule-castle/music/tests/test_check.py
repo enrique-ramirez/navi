@@ -1182,9 +1182,11 @@ class _Services:
     behind the front's address.
     """
 
-    def __init__(self, release: dict, release_group: dict, front: bool, front_image: bytes = FRONT) -> None:
+    def __init__(self, release: dict, release_group: dict, front: bool, front_image: bytes = FRONT,
+                 artist_groups: list[dict] | None = None) -> None:
         self.release = release
         self.release_group = release_group
+        self.artist_groups = artist_groups
         self.front = front
         self.front_image = front_image
 
@@ -1196,6 +1198,9 @@ class _Services:
                 return 200, json.dumps(self.release_group).encode()
             if path == f"/ws/2/release/{self.release['id']}":
                 return 200, json.dumps(self.release).encode()
+            if path == "/ws/2/release-group" and self.artist_groups is not None:
+                body = {"release-group-count": len(self.artist_groups), "release-groups": self.artist_groups}
+                return 200, json.dumps(body).encode()
             return 404, b'{"error": "Not Found"}'
         if parts.netloc == "coverartarchive.org" and self.front:
             if path == f"/release/{self.release['id']}":
@@ -1271,8 +1276,8 @@ class _Planning(unittest.TestCase):
         return root
 
     def plan(self, unit: Unit, release: dict, release_group: dict | None = None, *,
-             front: bool = True, front_image: bytes = FRONT, **kwargs):
-        services = _Services(release, release_group or _release_group(), front, front_image)
+             front: bool = True, front_image: bytes = FRONT, artist_groups: list[dict] | None = None, **kwargs):
+        services = _Services(release, release_group or _release_group(), front, front_image, artist_groups)
         # A cache of its own per plan: one shared across subtests replays the
         # last subtest's cover art to a case that has none.
         cache = Cache(Path(tempfile.mkdtemp(prefix="cache-", dir=self.tmp)))
@@ -1357,6 +1362,62 @@ class APlan(_Planning):
         self.assertEqual(list(plan.problems), [])
         self.assertLessEqual(set(lrc), _names(plan.deletions))
         self.assertFalse(set(lrc) & (_names(plan.kept) | _names(plan.extras)))
+
+    def test_a_file_of_a_type_the_doc_does_not_list_is_planned_for_deletion_and_holds_nothing(self):
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        (album / "Disintegration.torrent").write_bytes(b"d8:announce0:e")
+
+        plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]),
+                         status="auto")
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertIn("Disintegration.torrent", _names(plan.deletions))
+        self.assertNotIn("Disintegration.torrent", _names(plan.kept) | _names(plan.extras))
+
+    def test_a_title_the_artist_has_on_another_release_group_takes_its_groups_disambiguation(self):
+        # Weezer's self-titled albums: the Green Album beside the Red.
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        group = {**_release_group(), "disambiguation": "Green Album"}
+        others = [{"id": builders.RELEASE_GROUP_ID, "title": "Disintegration"},
+                  {"id": "another-group", "title": "DISINTEGRATION"}]
+
+        plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]), group,
+                         status="auto", artist_groups=others)
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(plan.files[0].target["album"], ["Disintegration (Green Album)"])
+        self.assertEqual(PurePosixPath(str(plan.destination)).name, "(2010) Disintegration (Green Album)")
+
+    def test_the_disambiguation_goes_after_the_groups_title_where_the_release_adds_to_it(self):
+        # The Blue Album's deluxe release is titled "Weezer (deluxe edition)".
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        group = {**_release_group(), "disambiguation": "Blue Album"}
+        others = [{"id": builders.RELEASE_GROUP_ID, "title": "Disintegration"},
+                  {"id": "another-group", "title": "Disintegration"}]
+        release = _release(["Plainsong", "Pictures of You"], title="Disintegration (deluxe edition)")
+
+        plan = self.plan(self.unit(root, album), release, group, status="auto", artist_groups=others)
+
+        self.assertEqual(list(plan.problems), [])
+        self.assertEqual(plan.files[0].target["album"], ["Disintegration (Blue Album) (deluxe edition)"])
+        self.assertEqual(PurePosixPath(str(plan.destination)).name,
+                         "(2010) Disintegration (Blue Album) (deluxe edition)")
+
+    def test_a_disambiguation_no_other_release_group_of_the_artist_needs_is_left_off(self):
+        root = self.library()
+        album = _rip(root, ["Plainsong", "Pictures of You"])
+        group = {**_release_group(), "disambiguation": "Green Album"}
+        others = [{"id": builders.RELEASE_GROUP_ID, "title": "Disintegration"},
+                  {"id": "another-group", "title": "Wish"}]
+
+        plan = self.plan(self.unit(root, album), _release(["Plainsong", "Pictures of You"]), group,
+                         status="auto", artist_groups=others)
+
+        self.assertEqual(plan.files[0].target["album"], ["Disintegration"])
+        self.assertEqual(PurePosixPath(str(plan.destination)).name, "(2010) Disintegration")
 
     def test_a_plan_given_no_status_is_review(self):
         root = self.library()

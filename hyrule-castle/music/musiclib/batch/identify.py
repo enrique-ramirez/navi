@@ -35,6 +35,8 @@ from musiclib.write import Collision, check_collisions
 
 #: The decision hold on an accept that left the soundtrack choice unmade.
 SOUNDTRACK_CHOICE_HOLD = "choose video game music, soundtrack or neither"
+ACCEPTED_WITH_PROBLEMS_HOLD = "accepted, but the validation problems listed stop it being written"
+ACCEPTED_WITH_COLLISION_HOLD = "accepted, but another album in the drop would land in the same folder"
 
 #: The identification statuses `plan_entry` may build a plan for, at all: any
 #: other status (`unidentified`, `needs a person`) means there is no release
@@ -342,7 +344,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         if action == "accept" and plan.problems:
             # Kept so the page still shows why, even though the owner
             # already said yes.
-            entry["holds"].append({"kind": "decision", "detail": ""})
+            entry["holds"].append({"kind": "decision", "detail": ACCEPTED_WITH_PROBLEMS_HOLD})
 
         choice = owner_input["soundtracks"].get(top.release_id)
         entry["release_id"] = top.release_id
@@ -493,7 +495,7 @@ def _add_collision(entry: dict, detail: str) -> None:
     if entry["decision"] == "accept" and not any(h["kind"] == "decision" for h in entry["holds"]):
         # An accept no single album could know would fail until every
         # album's destination was known.
-        entry["holds"].append({"kind": "decision", "detail": ""})
+        entry["holds"].append({"kind": "decision", "detail": ACCEPTED_WITH_COLLISION_HOLD})
 
 
 def _finalize(entries: list[dict], plans: dict[str, Plan], root: Path) -> None:

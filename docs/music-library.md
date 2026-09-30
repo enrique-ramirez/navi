@@ -102,7 +102,7 @@ The owner can supply the cover. An accept in `decisions.json` may name an image 
 
 Audio, images, PDF booklets, `.log` files (a rip log proves how the audio was made) and `.txt` notes. All of them sit in the album folder itself, never in a subfolder other than a `CDn`.
 
-Removed: OS junk (`.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, Windows Media Player's `AlbumArtSmall.jpg` and `AlbumArt_*.jpg`), and rip lists that name the old filenames and go stale the moment files are renamed (`.cue`, `.m3u`, `.m3u8`, `.sfv`, `.accurip`, `.ffp`, `.md5`), plus `.lrc`, `.nfo`, `.url`, `.ini` and `.ico`.
+Removed: OS junk (`.DS_Store`, `._*`, `__MACOSX/`, `Thumbs.db`, `desktop.ini`, `.directory`, `Icon\r`, Windows Media Player's `AlbumArtSmall.jpg` and `AlbumArt_*.jpg`), and rip lists that name the old filenames and go stale the moment files are renamed (`.cue`, `.m3u`, `.m3u8`, `.sfv`, `.accurip`, `.ffp`, `.md5`), plus `.lrc`, `.nfo`, `.url`, `.ini` and `.ico`. An album coming in also loses any file of a type this section does not name, such as a `.torrent`.
 
 Videos, disc images and CD-ROM software are kept, but outside the library, in `/srv/music/extras` under the same `Letter/Artist/Album` path. foobar2000 does not watch that folder.
 
