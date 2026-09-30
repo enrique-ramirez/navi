@@ -275,5 +275,9 @@
 	"duplicate.tracksSameLength": "todas las pistas duran lo mismo",
 	"duplicate.tracksLengthDiffer": "{n} duran distinto, hasta {max} s",
 	"duplicate.onlyNew": "{n} solo en la nueva",
-	"duplicate.onlyLibrary": "{n} solo en la biblioteca"
+	"duplicate.onlyLibrary": "{n} solo en la biblioteca",
+	"landed.title": "{title} está en la biblioteca",
+	"landed.at": "Guardado en",
+	"landed.next": "Siguiente: {title}",
+	"landed.home": "Volver a las entregas"
 }

@@ -287,6 +287,10 @@ export const en = {
 	"duplicate.tracksLengthDiffer": "{n} differ in length, by up to {max} s",
 	"duplicate.onlyNew": "{n} only in the new one",
 	"duplicate.onlyLibrary": "{n} only in the library",
+	"landed.title": "{title} is in the library",
+	"landed.at": "Filed at",
+	"landed.next": "Next: {title}",
+	"landed.home": "Back to drops",
 } as const;
 
 export type Phrase = keyof typeof en;

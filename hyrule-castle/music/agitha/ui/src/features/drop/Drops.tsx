@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { isRunning } from "@/domain/album/albumQuery";
 import { post } from "@/shared/api/album";
+import { dropsKey, fetchDrops } from "@/shared/api/drops";
 import type {
 	AlbumAction,
 	AlbumState,
@@ -70,12 +71,6 @@ function refetchInterval(query: { state: { data?: DropList } }) {
 			drop.albums.some((album) => isRunning(album.state)),
 	);
 	return running ? 2000 : false;
-}
-
-async function fetchDrops(): Promise<DropList> {
-	const response = await fetch("/api/drops");
-	if (!response.ok) throw new Error(String(response.status));
-	return response.json();
 }
 
 function AlbumRow({
@@ -147,7 +142,7 @@ export function Drops() {
 		message: string;
 	} | null>(null);
 	const { data: drops = [] } = useQuery({
-		queryKey: ["drops"],
+		queryKey: dropsKey,
 		queryFn: fetchDrops,
 		refetchInterval,
 	});
@@ -157,7 +152,7 @@ export function Drops() {
 		setError(null);
 		const answer = await post(`/api/drops/${path}`, {});
 		if (!answer.ok) setError(answer.error);
-		await client.invalidateQueries({ queryKey: ["drops"] });
+		await client.invalidateQueries({ queryKey: dropsKey });
 	}
 
 	const cancel = useCallback(() => setAsking(null), []);

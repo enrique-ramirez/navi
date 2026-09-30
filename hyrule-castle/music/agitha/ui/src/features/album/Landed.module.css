@@ -1,0 +1,79 @@
+.landed {
+	display: grid;
+	gap: var(--space-3);
+	justify-items: center;
+	max-width: 40rem;
+	margin: var(--space-8) auto;
+	padding: var(--space-8) var(--space-6);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	text-align: center;
+}
+
+.icon {
+	color: var(--positive);
+}
+
+.title {
+	margin: 0;
+	font-size: 1.5rem;
+	overflow-wrap: anywhere;
+}
+
+.artist {
+	margin: 0;
+	color: var(--muted);
+}
+
+.path {
+	display: grid;
+	gap: var(--space-1);
+	margin: var(--space-2) 0 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.path code {
+	color: var(--text);
+	font-family: var(--font-numeric);
+	overflow-wrap: anywhere;
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	justify-content: center;
+	margin-top: var(--space-4);
+}
+
+.primary,
+.secondary {
+	display: inline-flex;
+	gap: var(--space-2);
+	align-items: center;
+	padding: var(--space-2) var(--space-4);
+	border-radius: var(--radius-pill);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.primary {
+	background: var(--accent);
+	border: 1px solid var(--accent);
+	color: var(--on-accent);
+}
+
+.primary:hover {
+	filter: brightness(1.08);
+}
+
+.secondary {
+	border: 1px solid var(--border);
+	color: var(--text);
+}
+
+.secondary:hover {
+	background: var(--accent-quiet);
+}

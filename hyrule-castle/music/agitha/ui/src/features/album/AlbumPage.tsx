@@ -12,6 +12,7 @@ import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./AlbumPage.module.css";
 import { AlbumSide } from "./AlbumSide";
 import { Duplicate } from "./Duplicate";
+import { Landed } from "./Landed";
 import { MatchPicker } from "./MatchPicker";
 import { type Pending, usePending } from "./pending";
 import { ReviewBar } from "./ReviewBar";
@@ -113,6 +114,11 @@ function Holds({ view }: { view: AlbumView }) {
 }
 
 function AlbumBody({ view }: { view: AlbumView }) {
+	if (view.state === "in the library") return <Landed view={view} />;
+	return <Review view={view} />;
+}
+
+function Review({ view }: { view: AlbumView }) {
 	const { t } = useTranslate();
 	const pending = usePending(view);
 	const [selected, setSelected] = useState<string | null>(null);
