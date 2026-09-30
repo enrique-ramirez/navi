@@ -1,0 +1,70 @@
+.duplicate {
+	display: grid;
+	gap: var(--space-3);
+}
+
+.duplicate h2 {
+	margin: 0;
+}
+
+.table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.table th,
+.table td {
+	padding: var(--space-2) var(--space-3);
+	border-top: 1px solid var(--border);
+	text-align: left;
+	vertical-align: top;
+	overflow-wrap: anywhere;
+}
+
+.table thead th {
+	border-top: 0;
+}
+
+.table tbody th {
+	color: var(--muted);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.recommended {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.cover {
+	display: block;
+	max-width: 8rem;
+	margin-bottom: var(--space-1);
+	border-radius: var(--radius-sm);
+}
+
+.recommendation {
+	margin: 0;
+}
+
+.buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.button {
+	padding: var(--space-2) var(--space-4);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+}
+
+.button:hover:not(:disabled) {
+	background: var(--accent-quiet);
+}
+
+.button:disabled {
+	color: var(--faint);
+	cursor: not-allowed;
+}

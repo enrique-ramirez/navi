@@ -1,0 +1,23 @@
+{
+  "albums": {
+    "drop/album/Edited Album": {
+      "action": "accept",
+      "cover": "owner/cover.png",
+      "edits": {
+        "1-1": {
+          "TCOM": [
+            "Someone"
+          ],
+          "TXXX:MOOD": null
+        },
+        "1-2": {
+          "title": [
+            "Two, Edited"
+          ]
+        }
+      },
+      "release_id": "6f1a2b3c-0000-4000-8000-000100000004"
+    }
+  },
+  "job": "agitha-20260929-210000-01"
+}

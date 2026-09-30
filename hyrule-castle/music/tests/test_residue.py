@@ -13,6 +13,7 @@ produce would pass a test and match nothing in the library.
 from __future__ import annotations
 
 import copy
+import io
 import tempfile
 import unittest
 
@@ -347,7 +348,6 @@ KEPT = [
     (ID3, "TXXX:source", ["CD"]),
     (VORBIS, "copyright", ["\u2117 1999 Nothing Records"]),
     (MP4, "cprt", ["\u2117 1999 Nothing Records"]),
-    (MP4, "cprt", ["www.some-label.com"]),
     (MP4, ITUNES + "REPLAYGAIN_TRACK_GAIN", ["-6.20 dB"]),
     (ASF, "WM/Genre", ["industrial rock"]),
     (ASF, "Author", ["Nine Inch Nails"]),
@@ -357,9 +357,6 @@ KEPT = [
     (ASF, "WM/Lyrics", ["Ripped by the storm, see scene.org"]),
     # Starts with is case-sensitive, as the spec words it; not asserted either way.
     (ID3, "TCOP", ["℗ 1999 Nothing Records"]),
-    # TCOP is removed by listed value only. An unlisted site name waits for
-    # `check` to show it and the owner to add it.
-    (ID3, "TCOP", ["www.some-label.com"]),
     (ID3, "TMED", ["CD"]),
     (ID3, "TXXX:CATALOGNUMBER", ["halo 14"]),
     (ID3, "TXXX:RELEASECOUNTRY", ["US"]),
@@ -386,12 +383,9 @@ KEPT = [
     # A name the table qualifies TXXX is removed from TXXX only. The same
     # name in Vorbis, MP4 or ASF is off the list, even holding a link.
     (VORBIS, "cuesheet", ['FILE "x.wav" WAVE']),
-    (VORBIS, "url", ["http://gamemp3s.net/"]),
-    (VORBIS, "web", ["http://example.org/"]),
     (VORBIS, "software", ["Lavf52.94.0"]),
     (VORBIS, "tool", ["Media Center"]),
     (VORBIS, "logfile", ["Exact Audio Copy V0.99 prebeta 5 ..."]),
-    (VORBIS, "episodeid", ["LOMASRANKIAO.COM"]),
     (VORBIS, "account_id", ["someone@example.org"]),
     (VORBIS, "mp3gain_minmax", ["091,208"]),
     (VORBIS, "pztageditor info", ["stamp"]),
@@ -405,9 +399,6 @@ KEPT = [
     (ASF, "itunnorm", [" 00000312"]),
     (MP4, ITUNES + "AccurateRipResult", ["AccurateRip: Accurate (confidence 5)  [37DEB629]"]),
     (ASF, "AccurateRipResult", ["AccurateRip: Accurate (confidence 5)  [37DEB629]"]),
-    # Picard's `website` is ASF `WM/AuthorURL`, but the table has no
-    # `website`, and its `url` is qualified TXXX.
-    (ASF, "WM/AuthorURL", ["http://example.org/"]),
     # "Equals" is exact. Only the TCOP list says ignoring case and spaces.
     (VORBIS, "comment", ["RG ANIBOTERS"]),
     (VORBIS, "comment", ["  rg aniboters "]),
@@ -416,6 +407,18 @@ KEPT = [
     (VORBIS, "source", ["Core Radio"]),
     (VORBIS, "organization", [" CORE RADIO"]),
     (ID3, "TOWN", ["[pirate shovon]"]),
+]
+
+#: Values that are wholly a link, in fields the engine does not plan from
+#: MusicBrainz: (family, key, value, the record it leaves). `WM/AuthorURL`
+#: is Picard's `website`, so it goes whole as a site key first.
+WHOLLY_LINKS = [
+    (MP4, "cprt", "www.some-label.com", "www.some-label.com"),
+    (ID3, "TCOP", "www.some-label.com", "www.some-label.com"),
+    (VORBIS, "url", "http://gamemp3s.net/", "http://gamemp3s.net/"),
+    (VORBIS, "web", "http://example.org/", "http://example.org/"),
+    (VORBIS, "episodeid", "LOMASRANKIAO.COM", "LOMASRANKIAO.COM"),
+    (ASF, "WM/AuthorURL", "http://example.org/", None),
 ]
 
 #: What every sample file carries besides the field under test, so a strip
@@ -613,6 +616,277 @@ class Rules(unittest.TestCase):
                     # own pattern. Either name is honest for that value.
                     continue
                 self.assertFalse(rules[a] & rules[b], f"{a!r} and {b!r} share a rule")
+
+
+#: The Acoustic Adventures rip (24-bit 88.2 kHz FLAC) as `Track.tags` holds
+#: its Vorbis comments. PMEDIA, the site it came from, is in fourteen keys.
+#: `website`, `wwwaudiofile` and `wwwaudiosource` hold the three shapes a
+#: link comes in: an `https://` URL, a `www.` URL and a bare domain.
+ACOUSTIC_ADVENTURES = {
+    "title": ["Morning Light"],
+    "artist": ["Various Artists"],
+    "album": ["Acoustic Adventures"],
+    "date": ["2019"],
+    "tracknumber": ["1"],
+    "genre": ["Folk"],
+    "uploader": ["PMEDIA"],
+    "provider": ["PMEDIA"],
+    "website": ["https://pmedia.example"],
+    "wwwaudiofile": ["www.pmedia.example/file"],
+    "wwwaudiosource": ["pmedia.example"],
+    "encoded-by": ["PMEDIA"],
+    "comment": ["PMEDIA"],
+    "conductor": ["PMEDIA"],
+    "credits": ["PMEDIA"],
+    "work": ["PMEDIA"],
+    "language": ["PMEDIA"],
+    "publisher": ["PMEDIA"],
+    "copyright": ["PMEDIA"],
+    "compilation": ["PMEDIA"],
+}
+SITE_KEYS = ("uploader", "provider", "website", "wwwaudiofile", "wwwaudiosource")
+
+#: Each of the five names as every format carries a free-form name, in the
+#: case taggers write them: (name, family, key or frame).
+SITE_KEY_FORMS = [
+    form
+    for name, upper, mixed in (
+        ("uploader", "UPLOADER", "Uploader"),
+        ("provider", "PROVIDER", "Provider"),
+        ("website", "WEBSITE", "Website"),
+        ("wwwaudiofile", "WWWAUDIOFILE", "WwwAudioFile"),
+        ("wwwaudiosource", "WWWAUDIOSOURCE", "WwwAudioSource"),
+    )
+    for form in (
+        (name, VORBIS, name),
+        (name, ID3, TXXX(upper)),
+        (name, ID3, TXXX(mixed)),
+        (name, MP4, ITUNES + upper),
+        (name, MP4, ITUNES + mixed),
+        (name, ASF, mixed),
+    )
+] + [
+    # Picard's native ASF name for `website`: a Windows Media file carries
+    # the site's link here, never under a free-form name.
+    ("website", ASF, "WM/AuthorURL"),
+]
+
+#: A link as rippers leave it: every value here is a URL or a bare domain
+#: and nothing else. `.example` and `.xyz` are real top-level domains no
+#: fixed list of site TLDs has had; a bare domain of any top-level label counts.
+LINKS = [
+    "https://pmedia.example/album/acoustic-adventures",
+    "www.pmedia.example",
+    "pmedia.example",
+    "PMEDIA.EXAMPLE",
+    "downloads.pmedia.xyz",
+    # Sites write their own names in mixed case.
+    "Pmedia.net",
+    "RuTracker.org",
+    "Musify.club",
+]
+
+#: Text tags the engine does not plan from MusicBrainz: free text, fields
+#: with their own by-value list (copyright, organization), credit and work
+#: fields, and a free-form name the denylist qualifies TXXX (Vorbis `url`),
+#: which is kept by name but not when it holds a link.
+TEXT_TAGS = [
+    (VORBIS, "comment"),
+    (VORBIS, "conductor"),
+    (VORBIS, "credits"),
+    (VORBIS, "work"),
+    (VORBIS, "language"),
+    (VORBIS, "publisher"),
+    (VORBIS, "copyright"),
+    (VORBIS, "organization"),
+    (VORBIS, "compilation"),
+    (VORBIS, "url"),
+    (VORBIS, "lyricist"),
+    (ID3, "COMM::eng"),
+    (ID3, "TPE3"),
+    (ID3, "TPUB"),
+    (ID3, "TCOP"),
+    (ID3, "TIT1"),
+    (ID3, "TLAN"),
+    (ID3, "TEXT"),
+    (ID3, "TXXX:CREDITS"),
+    (ID3, "TXXX:source"),
+    (MP4, "\xa9cmt"),
+    (MP4, "cprt"),
+    (MP4, ITUNES + "CONDUCTOR"),
+    (MP4, ITUNES + "LABEL"),
+    (MP4, ITUNES + "LYRICIST"),
+    (ASF, "Description"),
+    (ASF, "WM/Conductor"),
+    (ASF, "WM/Publisher"),
+    (ASF, "Copyright"),
+    (ASF, "WM/Writer"),
+]
+
+#: The name fields the engine plans from MusicBrainz, in every family:
+#: title, artist, album, album artist, the two sort names, composer and
+#: composer sort.
+PLANNED_NAMES = [
+    (ID3, k) for k in ("TIT2", "TPE1", "TALB", "TPE2", "TSOP", "TSO2", "TCOM", "TSOC")
+] + [
+    (VORBIS, k) for k in ("title", "artist", "album", "albumartist", "artistsort",
+                          "albumartistsort", "composer", "composersort")
+] + [
+    (MP4, k) for k in ("\xa9nam", "\xa9ART", "\xa9alb", "aART", "soar", "soaa", "\xa9wrt", "soco")
+] + [
+    (ASF, k) for k in ("Title", "Author", "WM/AlbumTitle", "WM/AlbumArtist", "WM/ArtistSortOrder",
+                       "WM/AlbumArtistSortOrder", "WM/Composer", "WM/ComposerSortOrder")
+]
+
+#: Artist names MusicBrainz spells with dots. `will.i.am` ends in a country
+#: code (`.am`), so only a planned field keeps it. The rest end in a label
+#: no top-level domain has, like the names in `NOT_A_TLD`.
+DOTTED_NAMES = ["will.i.am", "AC.DC", "MC.SOLAAR", "MR.CHILDREN"]
+NOT_A_TLD = ["St.Anger", "Mr.Big", "B.o.B", "R.E.M.", "Vol.2", "Op.27"]
+
+
+class DownloadSiteKeys(unittest.TestCase):
+    """`uploader`, `provider`, `website`, `wwwaudiofile` and
+    `wwwaudiosource` go whole, in every format."""
+
+    def test_the_acoustic_adventures_rip_loses_the_five_site_keys_and_encoded_by_and_nothing_else(self):
+        kept, removals = residue.strip(VORBIS, copy.deepcopy(ACOUSTIC_ADVENTURES))
+        gone = (*SITE_KEYS, "encoded-by")
+        # Every PMEDIA left in comment, conductor, credits, work, language,
+        # publisher, copyright and compilation is the owner's to remove.
+        self.assertEqual(kept, {k: v for k, v in ACOUSTIC_ADVENTURES.items() if k not in gone})
+        # One whole-field record per key, even for the three holding a link.
+        self.assertEqual(removed(removals), sorted(((k, None) for k in gone), key=repr))
+        for removal in removals:
+            with self.subTest(key=removal.key):
+                self.assertTrue(removal.rule.strip())
+
+    def test_each_site_key_goes_whole_in_vorbis_id3_mp4_and_asf_under_one_rule_per_name(self):
+        rules: dict[str, set[str]] = {}
+        for name, family, spec in SITE_KEY_FORMS:
+            k = key(spec)
+            with self.subTest(key=k):
+                # PMEDIA is no link, so only the key can remove it; the link
+                # beside it must not add a second, per-value record.
+                tags = {**CONTEXT[family], k: ["PMEDIA", "https://pmedia.example"]}
+                kept, removals = residue.strip(family, tags)
+                self.assertEqual(kept, CONTEXT[family])
+                self.assertEqual(removed(removals), [(k, None)])
+                self.assertTrue(removals[0].rule.strip())
+                rules.setdefault(name, set()).add(removals[0].rule)
+        # The page shows the rule: one name reads the same in every format.
+        for name, found in rules.items():
+            with self.subTest(name=name):
+                self.assertEqual(len(found), 1, found)
+
+
+class LinksInAnyTextTag(unittest.TestCase):
+    """A value that is a URL or a bare domain goes from any
+    text tag but lyrics."""
+
+    def test_a_url_or_bare_domain_value_goes_from_any_text_tag_and_the_rest_of_the_field_stays(self):
+        rules = set()
+        for family, k in TEXT_TAGS:
+            for link in LINKS:
+                with self.subTest(key=k, value=link):
+                    tags = {**CONTEXT[family], k: ["PMEDIA", link]}
+                    kept, removals = residue.strip(family, tags)
+                    self.assertEqual(kept, {**CONTEXT[family], k: ["PMEDIA"]})
+                    self.assertEqual(removed(removals), [(k, link)])
+                    self.assertTrue(removals[0].rule.strip())
+                    rules.add(removals[0].rule)
+        # One clause, so one rule on the page, whatever the
+        # field it was found in.
+        self.assertEqual(len(rules), 1, rules)
+
+    def test_the_links_kept_before_criterion_38_now_go(self):
+        for family, k, value, record in WHOLLY_LINKS:
+            with self.subTest(key=k, value=value):
+                kept, removals = residue.strip(family, {**CONTEXT[family], k: [value]})
+                self.assertEqual(kept, CONTEXT[family])
+                self.assertEqual(removed(removals), [(k, record)])
+                if record is not None:
+                    # The rule the same value gets in a comment today.
+                    _, in_comment = residue.strip(VORBIS, {"comment": [value]})
+                    self.assertEqual(removals[0].rule, in_comment[0].rule)
+
+    def test_a_name_field_planned_from_musicbrainz_keeps_a_dotted_name_a_site_or_a_pattern(self):
+        # The engine writes these from the matched release, and `check` runs
+        # residue again on what it wrote. A value rule here would strip
+        # will.i.am from his own album and hold it for good.
+        for family, k in PLANNED_NAMES:
+            for value in (*DOTTED_NAMES, "pmedia.example", "https://pmedia.example", "Track 3"):
+                with self.subTest(key=k, value=value):
+                    tags = {**CONTEXT[family], k: [value]}
+                    kept, removals = residue.strip(family, tags)
+                    self.assertEqual(kept, tags)
+                    self.assertEqual(list(removals), [])
+
+    def test_a_dotted_name_whose_last_label_is_no_top_level_domain_stays_in_any_field(self):
+        for family, k in TEXT_TAGS + PLANNED_NAMES:
+            for value in NOT_A_TLD + DOTTED_NAMES[1:]:
+                with self.subTest(key=k, value=value):
+                    tags = {**CONTEXT[family], k: [value]}
+                    kept, removals = residue.strip(family, tags)
+                    self.assertEqual(kept, tags)
+                    self.assertEqual(list(removals), [])
+
+    def test_a_field_holding_only_a_link_disappears(self):
+        for family, k in ((VORBIS, "conductor"), (ID3, "TPE3"), (MP4, ITUNES + "CONDUCTOR"),
+                          (ASF, "WM/Conductor")):
+            with self.subTest(key=k):
+                kept, removals = residue.strip(family, {**CONTEXT[family], k: ["pmedia.example"]})
+                self.assertEqual(kept, CONTEXT[family])
+                self.assertEqual(removed(removals), [(k, "pmedia.example")])
+
+    def test_a_link_in_lyrics_is_kept(self):
+        for family, spec in LYRICS:
+            k = key(spec)
+            for link in LINKS:
+                with self.subTest(key=k, value=link):
+                    tags = {**CONTEXT[family], k: [link]}
+                    kept, removals = residue.strip(family, tags)
+                    self.assertEqual(kept, tags)
+                    self.assertEqual(list(removals), [])
+
+    def test_values_with_a_dot_that_no_reading_makes_a_domain_are_kept(self):
+        # A domain has no spaces and no all-digit top-level label, so none
+        # of these is one. A link rule that only looks for a dot eats them.
+        for family, k, value in (
+            (VORBIS, "album", "Acoustic Adventures, Vol. 1"),
+            (VORBIS, "title", "Symphony No. 5 in C minor, Op. 67"),
+            (VORBIS, "date", "2019.05.01"),
+            (VORBIS, "replaygain_track_gain", "-6.20 dB"),
+            (ID3, "TALB", "Acoustic Adventures, Vol. 1"),
+            (MP4, ITUNES + "REPLAYGAIN_TRACK_GAIN", "-6.20 dB"),
+            (ASF, "WM/AlbumTitle", "Acoustic Adventures, Vol. 1"),
+        ):
+            with self.subTest(key=k, value=value):
+                tags = {**CONTEXT[family], k: [value]}
+                kept, removals = residue.strip(family, tags)
+                self.assertEqual(kept, tags)
+                self.assertEqual(list(removals), [])
+
+    def test_an_m4a_cover_whose_image_carries_links_is_kept(self):
+        # `Track.tags` holds `covr` as the repr of the image bytes. A JPEG
+        # with an XMP packet has `http://ns.adobe.com/xap/1.0/` and
+        # `www.w3.org` in them, as text. A picture is not a text tag.
+        from PIL import Image
+
+        from musiclib import files
+
+        xmp = (b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+               b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/></x:xmpmeta>')
+        out = io.BytesIO()
+        Image.new("RGB", (8, 8)).save(out, "JPEG", xmp=xmp)
+        path = builders.copy_fixture(_TMP.name, "m4a", "xmp-cover")
+        builders.embed_picture(path, out.getvalue())
+        tags = files.read(path).tags
+        self.assertIn("http://", tags["covr"][0])  # the trap is really there
+
+        kept, removals = residue.strip(MP4, tags)
+        self.assertEqual(kept, tags)
+        self.assertEqual(list(removals), [])
 
 
 if __name__ == "__main__":

@@ -51,12 +51,36 @@ The `docs/` file for that machine or subject: `docs/er605.md` for the router, `d
 |---|---|
 | syntax of one script | `bash -n scripts/wan-check.sh` |
 | lint one script, where installed | `shellcheck scripts/wan-check.sh` (not installed on the MacBook today) |
+| one engine module | `cd hyrule-castle/music && ../../_tmp/venv/bin/python -m unittest tests.test_<name>` |
+| the whole engine suite | `cd hyrule-castle/music && ../../_tmp/venv/bin/python -m unittest` (about two and a half minutes, run alone: its server cases poll with deadlines and can flake under load) |
+| page lint (Biome) | `cd hyrule-castle/music/agitha/ui && pnpm lint` |
+| page typecheck | `pnpm typecheck` (`tsc -b`), same folder |
+| one page test file | `pnpm exec vitest run src/features/drop/DropArea.test.tsx`, same folder |
+| every page test | `pnpm exec vitest run`, same folder (a few seconds) |
+| page build | `pnpm build`, same folder |
 
-There is no test suite. `scripts/thermal-test.sh` is a hardware load test for navi, not a test of the code, and must not be run from a review.
+The engine under `hyrule-castle/music/` has a test suite. The venv is `_tmp/venv`, gitignored and made by the owner: `python3 -m venv _tmp/venv && _tmp/venv/bin/pip install mutagen pillow`. The shell scripts have no tests. `scripts/thermal-test.sh` is a hardware load test for navi, not a test of the code, and must not be run from a review.
+
+The page (`hyrule-castle/music/agitha/ui/`) is React on Vite, tested with Vitest and Testing Library. Its conventions:
+
+- A test sits beside its component as `Thing.test.tsx`.
+- Components render through `src/test/render.tsx`, which wraps the Query client, the router and the catalogue.
+- The network is faked at `fetch` with a per-test handler table in `src/test/fakeFetch.ts`.
+- Queries go by role and name. Interaction goes through `user-event`.
 
 ## What cannot be verified here
 
-Nearly all of it. Every script and unit runs on navi (Raspberry Pi, Raspberry Pi OS) or on hyrule-castle (x86, Debian 13), under systemd and Docker, against real hardware, the router and two ISP lines. A change is reviewed, not tested, unless somebody runs it on the box. The deploy scripts refuse to run on the MacBook by design.
+Nearly all of the box's side of it. Every script and unit runs on navi (Raspberry Pi, Raspberry Pi OS) or on hyrule-castle (x86, Debian 13), under systemd and Docker, against real hardware, the router and two ISP lines. A change is reviewed, not tested, unless somebody runs it on the box. The deploy scripts refuse to run on the MacBook by design.
+
+The engine and page tests pass on the Mac and still leave these unchecked:
+
+- The real drop and folder walk in a browser.
+- RAR extraction on Debian.
+- Playback in a real browser.
+- The look at each width and theme, and the favicon.
+- Caddy and Pi-hole on navi.
+- The deploy, and the page build on the box.
+- Whether foobar2000 under Wine sees a new folder while it is running.
 
 ## Voice
 

@@ -664,6 +664,19 @@ class Tags(_Library):
                     self.assertEqual(Path(v.album), album.relative_to(root))
                     self.assertIn(rule, v.rule)
 
+    def test_an_artist_and_composer_named_will_i_am_are_no_residue(self):
+        # `will.i.am` ends in a country code. The engine planned it from
+        # MusicBrainz, so calling it a site here would hold his albums for
+        # good: the plan writes the name back and check rejects it again.
+        for ext, composer in (("flac", "COMPOSER"), ("mp3", "TCOM")):
+            with self.subTest(ext):
+                root = self.library()
+                album = builders.library_album(root, ext=ext, letter="W", artist="will.i.am",
+                                               album="Willpower", date="2013-04-19")
+                for path in self.audio(album):
+                    builders.write_tags(path, {composer: "will.i.am"}, v2_version=4)
+                self.assertEqual(check.check(root), [])
+
 
 class Whitespace(_Library):
     """What `whitespace` reports on disk, and what it leaves alone."""

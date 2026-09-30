@@ -188,8 +188,9 @@ class Reading(unittest.TestCase):
     def test_an_edit_to_a_field_the_page_does_not_offer_is_refused_naming_the_field(self):
         # `release id` is a neutral field, but one of the six MusicBrainz IDs
         # the page never offers: an edit to it would retag the album as a
-        # release nobody planned it against. `mood` is not a neutral field.
-        for field in ("release id", "mood"):
+        # release nobody planned it against. `musicbrainz_albumid` is the same
+        # ID by the FLAC's own key, which a raw edit may not name either.
+        for field in ("release id", "musicbrainz_albumid"):
             with self.subTest(field=field):
                 self.assertRejected(self.accept_with(edits={"1-1": {field: ["x"]}}), field)
 
@@ -256,7 +257,8 @@ class Reading(unittest.TestCase):
         del every["albums"][ACCEPTED]["release_id"]
         cases = {
             "no release_id": (no_release, [ACCEPTED]),
-            "unoffered field": (self.accept_with(edits={"1-1": {"mood": ["x"]}}), ["mood"]),
+            "unoffered field": (self.accept_with(edits={"1-1": {"musicbrainz_albumid": ["x"]}}),
+                                ["musicbrainz_albumid"]),
             "missing position": (self.accept_with(edits={"1-3": {"title": ["Three"]}}), ["1-3"]),
             "another job": (other_job, [OTHER_JOB]),
             "all three": (every, [OTHER_JOB, "release_id", "1-3"]),

@@ -23,9 +23,9 @@ from pathlib import Path, PurePosixPath
 from typing import Sequence
 
 from musiclib import ascii as ascii_
-from musiclib import artists, check, files, genres, images, mapping, names
+from musiclib import artists, check, composers, files, genres, images, mapping, names
 from musiclib.caa import CoverArtError
-from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzUnavailable
+from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzNotFound, MusicBrainzUnavailable
 from musiclib.units import TrackPair, Unit, counted_media, group_media, pair
 
 #: The one instruction every "the archive is unavailable" problem carries:
@@ -340,6 +340,7 @@ def plan_album(
     incoming: str | None = None, status: str | None = None,
     pairs: list[TrackPair] | None = None, edition: str | None = None,
     local: Sequence[tuple[str, bytes]] | None = None, created: Sequence[str] = (),
+    owner_cover: bytes | None = None, composer: bool = True,
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`.
 
@@ -352,6 +353,12 @@ def plan_album(
     folder (paths from the library root) that a changed release leaves behind:
     each is deleted unless the plan writes its name again, and none counts as
     a copy of an image the plan would save.
+
+    `owner_cover` is the owner's own image for `cover.jpg` (`images.plan_images`).
+
+    `composer` lays each track's composers from MusicBrainz's work
+    relationships over the file's composer tags (`composers`), at one more
+    lookup per release. Off, those tags are left as the file has them.
     """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
@@ -380,6 +387,7 @@ def plan_album(
             caa_images, caa.download,
             group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
             local=images.local_covers(unit.path) if local is None else local,
+            owner_cover=owner_cover,
             existing={name: data for name, data in folder_files.items() if name not in left_behind})
     except CoverArtError as exc:
         # A 500 or a timeout is not "this release has no images" (`caa`
@@ -416,6 +424,14 @@ def plan_album(
         # mapping problem below (from every track) is what stops the write.
         destination = source
 
+    composed: dict[str, list[tuple[str, str]]] = {}
+    if composer:
+        try:
+            composed = composers.composers_by_recording(mb.release_works(release["id"]), mb)
+        except MusicBrainzNotFound:
+            # Only a 404 means no composers; any other refusal holds the album.
+            composed = {}
+
     if pairs is None:
         pairs = pair(unit, release)
     file_plans: list[FilePlan] = []
@@ -443,6 +459,9 @@ def plan_album(
                                             credited_name=lambda c: artists.credited_name(c, mb))
                 problems.extend(planned.problems)
                 holds.extend(planned.holds)
+                people = composed.get(pair_.mb_track["recording"]["id"])
+                if people:
+                    planned.target.update(composers.tags(people, track.family))
                 if planned.suggested_discsubtitle and disc_folder_name:
                     suggestions[disc_folder_name] = planned.suggested_discsubtitle
 
@@ -608,13 +627,5 @@ def state_from_plan(plan: Plan) -> check.AlbumState:
     )
 
 
-#: Extension -> tag family, `files._family` with no file to open: a planned
-#: destination's extension is always the source track's own (`plan_album`
-#: never changes it), so this is enough to tell `check_album` an MP3's
-#: ID3v2.4-no-v1 rule applies without reading anything off disk.
-_EXT_FAMILY = {".mp3": "id3", ".m4a": "mp4", ".mp4": "mp4", ".flac": "vorbis", ".ogg": "vorbis",
-              ".wma": "asf"}
-
-
 def _family_of(destination: str) -> str:
-    return _EXT_FAMILY.get(Path(destination).suffix.lower(), "vorbis")
+    return files.FAMILY_BY_EXTENSION.get(Path(destination).suffix.lower(), "vorbis")

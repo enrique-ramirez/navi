@@ -8,7 +8,9 @@
 #
 # This manages CONFIG only. It never touches /srv/fb2k/foobar2000 (binaries and
 # profile), the wine prefix, or /srv/music. Those are state; see
-# hyrule-castle/scripts/fb2k-backup.sh for what protects them.
+# hyrule-castle/scripts/fb2k-backup.sh for what protects them. The page build
+# writes only under the checkout's agitha/ui/node_modules and agitha/ui/dist,
+# and installs under /usr/local/lib/agitha.
 set -euo pipefail
 
 # One repo, two machines, two deploy scripts, and the paths differ by one
@@ -22,13 +24,18 @@ if [ "$(hostname)" != "$EXPECT_HOST" ]; then
     exit 1
 fi
 
+# Pinned so a new pnpm release cannot change what a deploy builds. Bump it on
+# purpose, with the lockfile.
+PNPM=pnpm@10.34.6
+
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 USER_NAME=${SUDO_USER:-enrique-ramirez}
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 echo "==> packages"
 apt-get update
-apt-get install -y --no-install-recommends python3-pil python3-mutagen libchromaprint-tools
+apt-get install -y --no-install-recommends python3-pil python3-mutagen libchromaprint-tools \
+    libarchive-tools nodejs npm
 
 # Wipe first so a module deleted from the package doesn't linger as a stale
 # .py file that nothing in git references anymore.
@@ -37,6 +44,28 @@ rm -rf /usr/local/lib/musiclib
 mkdir -p /usr/local/lib/musiclib
 cp -a "$REPO/hyrule-castle/music/musiclib" /usr/local/lib/musiclib/
 find /usr/local/lib/musiclib -depth -name __pycache__ -exec rm -rf {} +
+
+# The build runs as the checkout's owner so node_modules and dist do not turn
+# root-owned.
+echo "==> agitha page"
+UI_SRC="$REPO/hyrule-castle/music/agitha/ui"
+(cd "$UI_SRC" &&
+    sudo -u "$USER_NAME" -H npx --yes "$PNPM" install --frozen-lockfile &&
+    sudo -u "$USER_NAME" -H npx --yes "$PNPM" build)
+mkdir -p /usr/local/lib/agitha
+rm -rf /usr/local/lib/agitha/ui.new
+cp -a "$UI_SRC/dist" /usr/local/lib/agitha/ui.new
+rm -rf /usr/local/lib/agitha/ui
+mv /usr/local/lib/agitha/ui.new /usr/local/lib/agitha/ui
+
+# Wiped first, as the engine is.
+echo "==> agitha server"
+rm -rf /usr/local/lib/agitha/agitha
+mkdir /usr/local/lib/agitha/agitha
+for f in "$REPO"/hyrule-castle/music/agitha/*; do
+    [ "$(basename "$f")" = ui ] || cp -a "$f" /usr/local/lib/agitha/agitha/
+done
+find /usr/local/lib/agitha -depth -name __pycache__ -exec rm -rf {} +
 
 echo "==> scripts"
 install -m 700 "$REPO/hyrule-castle/scripts/fb2k-backup.sh" /usr/local/bin/fb2k-backup.sh
@@ -92,11 +121,15 @@ loginctl enable-linger "$USER_NAME"
 
 echo "==> systemd units"
 changed=0
+display=0
 for u in "$REPO"/hyrule-castle/systemd/*; do
     n=$(basename "$u")
     if ! cmp -s "$u" "/etc/systemd/system/$n"; then
         install -m 644 "$u" "/etc/systemd/system/$n"; changed=1
         echo "    updated $n"
+        case "$n" in
+            xvfb.service|openbox.service|foobar2000.service) display=1 ;;
+        esac
     fi
 done
 
@@ -104,7 +137,9 @@ if [ "$changed" = 1 ]; then
     systemctl daemon-reload
     systemctl enable xvfb.service openbox.service foobar2000.service fb2k-backup.timer >/dev/null
     systemctl start fb2k-backup.timer
+fi
 
+if [ "$display" = 1 ]; then
     # Order matters and is not obvious. foobar2000 is an X client of Xvfb, so
     # restarting Xvfb first kills it abnormally however the dependency graph
     # reads - and an abnormal exit makes foobar2000 open a modal "terminated
@@ -116,11 +151,15 @@ if [ "$changed" = 1 ]; then
     systemctl restart openbox.service
     systemctl start foobar2000.service
 else
-    echo "    no unit changes, nothing restarted"
+    echo "    display stack unchanged, not restarted"
 fi
 
+echo "==> agitha"
+systemctl enable agitha.service >/dev/null
+systemctl restart agitha.service
+
 echo "==> state"
-for s in xvfb openbox foobar2000; do
+for s in xvfb openbox foobar2000 agitha; do
     printf "    %-12s %s\n" "$s" "$(systemctl is-active $s.service)"
 done
 echo "==> done"

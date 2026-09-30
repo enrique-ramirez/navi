@@ -1,0 +1,76 @@
+.list {
+	display: grid;
+	gap: var(--space-3);
+	margin: 0 0 var(--space-4);
+	padding: 0;
+	list-style: none;
+}
+
+.item,
+.chosen {
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+	padding: var(--space-3);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+.chosen {
+	border-color: var(--accent);
+	background: var(--accent-quiet);
+}
+
+.list img {
+	flex: none;
+	border-radius: var(--radius-sm);
+	background: var(--surface-raised);
+	object-fit: cover;
+}
+
+.facts {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	gap: var(--space-1) var(--space-3);
+	min-width: 0;
+}
+
+.facts strong {
+	flex-basis: 100%;
+}
+
+.mark {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.button {
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+}
+
+.button:hover {
+	background: var(--accent-quiet);
+}
+
+.paste {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: center;
+}
+
+.paste input {
+	flex: 1;
+	min-width: 12rem;
+	padding: var(--space-1) var(--space-3);
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font: inherit;
+}

@@ -10,6 +10,7 @@ several cases.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Callable, NamedTuple
 
@@ -83,6 +84,12 @@ _FREEFORM: dict[str, str] = {
     "encodersettings": "encoder settings",
     # AccurateRip verification output the ripper wrote in.
     "accurateripresult": "accurateripresult",
+    # Download sites' own keys; the value is the site, whatever it says.
+    "uploader": "uploader",
+    "provider": "provider",
+    "website": "website",
+    "wwwaudiofile": "wwwaudiofile",
+    "wwwaudiosource": "wwwaudiosource",
 }
 
 # Denylist rows write "TXXX `name`" or "(TXXX and Vorbis)" for a name that
@@ -125,6 +132,8 @@ _ASF_NATIVE_WHOLE = {
     "wm/toolname": "software",
     "wm/toolversion": "software",
     "wm/encodingtime": "timestamps",
+    # Picard's ASF name for `website`.
+    "wm/authorurl": "website",
 }
 
 #: `MusicMatch_*`, `musicbrainz_*` and `Media Jukebox: *` in the COMM table
@@ -286,6 +295,56 @@ def _pattern_rule(value: str) -> str | None:
     return None
 
 
+#: Top-level labels a bare domain may end in: the generic ones sites use, and
+#: the country codes. A label outside both is a name (`St.Anger`, `AC.DC`).
+_GENERIC_TLDS = (
+    "com net org info biz app io fm tv me cc xyz club site online music example"
+).split()
+_COUNTRY_TLDS = (
+    "ac ad ae af ag ai al am ao aq ar as at au aw ax az ba bb bd be bf bg bh bi bj bm bn bo br bs "
+    "bt bw by bz ca cd cf cg ch ci ck cl cm cn co cr cu cv cw cx cy cz de dj dk dm do dz ec ee eg "
+    "er es et eu fi fj fk fo fr ga gd ge gf gg gh gi gl gm gn gp gq gr gs gt gu gw gy hk hm hn hr "
+    "ht hu id ie il im in iq ir is it je jm jo jp ke kg kh ki km kn kp kr kw ky kz la lb lc li lk "
+    "lr ls lt lu lv ly ma mc md mg mh mk ml mm mn mo mp mq mr ms mt mu mv mw mx my mz na nc ne nf "
+    "ng ni nl no np nr nu nz om pa pe pf pg ph pk pl pm pn pr ps pt pw py qa re ro rs ru rw sa sb "
+    "sc sd se sg sh si sk sl sm sn so sr ss st su sv sx sy sz tc td tf tg th tj tk tl tm tn to tr "
+    "tt tw tz ua ug uk us uy uz va vc ve vg vi vn vu wf ws ye yt za zm zw"
+).split()
+_TLDS = frozenset(_GENERIC_TLDS + _COUNTRY_TLDS)
+
+#: A value that is wholly a URL or a bare domain.
+_WHOLE_URL = re.compile(r"(?i)(https?://|www\.)\S+")
+_WHOLE_DOMAIN = re.compile(r"(?i)[a-z0-9-]+(\.[a-z0-9-]+)*\.([a-z]{2,})")
+
+
+def _link_match(value: str) -> str | None:
+    """The link rule for a value that is nothing but a URL or a bare domain."""
+    v = value.strip()
+    if _WHOLE_URL.fullmatch(v):
+        return "url"
+    m = _WHOLE_DOMAIN.fullmatch(v)
+    if m and m.group(2).lower() in _TLDS:
+        return "url"
+    return None
+
+
+@functools.cache
+def _planned_keys() -> dict[str, frozenset[str]]:
+    """Per family, the keys the engine plans from MusicBrainz.
+
+    Title, artist, album, album artist, their sort names and composer are
+    written from the matched release, and `check` runs residue on what was
+    written, so a value rule that read `will.i.am` as a site would hold the
+    album for good. Imported here because `mapping` imports this module.
+    """
+    from musiclib import mapping
+
+    rows = [mapping.PICARD[n] for n in (
+        "title", "artist", "album", "albumartist", "artistsort", "albumartistsort")]
+    rows += [mapping.READABLE["Composer"], mapping.READABLE["Composer sort order"]]
+    return {f: frozenset(r[f] for r in rows if r.get(f)) for f in ("id3", "vorbis", "mp4", "asf")}
+
+
 # --- "Removed by value in other fields" ----------------------------------
 
 _TCOP_VALUES = {
@@ -320,8 +379,6 @@ def _blank_lyrics_match(value: str) -> str | None:
 
 def _other_field_matcher(family: str, key: str) -> Callable[[str], str | None] | None:
     """A by-value matcher for a field that is otherwise kept, or `None`."""
-    if tagwrite.is_lyrics_field(family, key):
-        return _blank_lyrics_match
     if family == "id3":
         if key == "TCOP":
             return _tcop_match
@@ -356,6 +413,16 @@ def _other_field_matcher(family: str, key: str) -> Callable[[str], str | None] |
     return None
 
 
+def _value_matcher(family: str, key: str) -> Callable[[str], str | None]:
+    """The by-value rule for `key`. The link rule runs on every field but lyrics."""
+    if _is_free_text(family, key):
+        return lambda value: _pattern_rule(value) or _link_match(value)
+    if tagwrite.is_lyrics_field(family, key):
+        return _blank_lyrics_match
+    specific = _other_field_matcher(family, key)
+    return lambda value: (specific(value) if specific else None) or _link_match(value)
+
+
 def strip(family: str, tags: dict[str, list[str]]) -> tuple[dict[str, list[str]], list[Removal]]:
     """`tags` with every field and value in the residue denylist taken out.
 
@@ -375,10 +442,11 @@ def strip(family: str, tags: dict[str, list[str]]) -> tuple[dict[str, list[str]]
             removals.append(Removal(key, None, rule))
             continue
 
-        matcher = _pattern_rule if _is_free_text(family, key) else _other_field_matcher(family, key)
-        if matcher is None:
+        if key in _planned_keys().get(family, ()):
             kept[key] = values
             continue
+
+        matcher = _value_matcher(family, key)
 
         surviving = []
         for value in values:

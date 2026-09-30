@@ -1,0 +1,62 @@
+.area,
+.over {
+	display: grid;
+	gap: var(--space-3);
+	justify-items: center;
+	padding: var(--space-8) var(--space-4);
+	background: var(--surface);
+	border: 2px dashed var(--border);
+	border-radius: var(--radius);
+	text-align: center;
+}
+
+.over {
+	border-color: var(--accent);
+	background: var(--accent-quiet);
+}
+
+.hint {
+	margin: 0;
+	color: var(--muted);
+}
+
+.pickers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	justify-content: center;
+}
+
+.pick {
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	cursor: pointer;
+}
+
+.pick:hover,
+.pick:focus-within {
+	background: var(--accent-quiet);
+}
+
+.progress {
+	width: 100%;
+	max-width: 32rem;
+}
+
+.progress p {
+	margin: var(--space-1) 0 0;
+	font-family: var(--font-numeric);
+}
+
+.bar {
+	height: 8px;
+	overflow: hidden;
+	background: var(--border);
+	border-radius: var(--radius-pill);
+}
+
+.fill {
+	height: 100%;
+	background: var(--accent);
+}

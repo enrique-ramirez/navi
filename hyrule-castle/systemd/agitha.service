@@ -1,0 +1,30 @@
+[Unit]
+Description=agitha, the import page for the music library
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+After=network-online.target
+
+# The inbox, the jobs and the library are all under /srv/music. Same reason as
+# foobar2000.service: once that is the USB disk, this keeps agitha from
+# starting against an empty directory.
+RequiresMountsFor=/srv/music
+
+[Service]
+Type=simple
+User=enrique-ramirez
+Group=enrique-ramirez
+
+Environment=PYTHONPATH=/usr/local/lib/agitha:/usr/local/lib/musiclib
+
+ExecStart=/usr/bin/python3 -m agitha \
+    --port 8882 \
+    --inbox /srv/music/inbox \
+    --jobs /srv/music/.musiclib/jobs \
+    --library /srv/music/library \
+    --extras /srv/music/extras \
+    --musiclib /usr/local/bin/musiclib \
+    --static /usr/local/lib/agitha/ui
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

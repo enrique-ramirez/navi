@@ -1,0 +1,511 @@
+{
+ "albums": [
+  {
+   "candidates": [
+    {
+     "artist": "Genreless Band",
+     "country": "GB",
+     "date": "2010-05-24",
+     "duration_diff": 0.45599999999999974,
+     "format": "CD",
+     "matches_counts": true,
+     "release_id": "6f1a2b3c-0000-4000-8000-000100000002",
+     "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000002/front-250",
+     "title": "Bare Album",
+     "track_counts": [
+      3
+     ]
+    }
+   ],
+   "changes": [
+    "move: drop/album/Bare Album/01 one.mp3 -> G/Genreless Band/(2010) Bare Album/01. One.mp3",
+    "tags: drop/album/Bare Album/01 one.mp3: does not match its planned target",
+    "cover: drop/album/Bare Album/01 one.mp3: embedded picture does not match the plan",
+    "move: drop/album/Bare Album/02 two.mp3 -> G/Genreless Band/(2010) Bare Album/02. Two.mp3",
+    "tags: drop/album/Bare Album/02 two.mp3: does not match its planned target",
+    "cover: drop/album/Bare Album/02 two.mp3: embedded picture does not match the plan",
+    "move: drop/album/Bare Album/03 three.mp3 -> G/Genreless Band/(2010) Bare Album/03. Three.mp3",
+    "tags: drop/album/Bare Album/03 three.mp3: does not match its planned target",
+    "cover: drop/album/Bare Album/03 three.mp3: embedded picture does not match the plan",
+    "delete: drop/album/Bare Album/cover.jpg"
+   ],
+   "decision": "accept",
+   "deletions": [
+    "drop/album/Bare Album/cover.jpg"
+   ],
+   "destination": "G/Genreless Band/(2010) Bare Album",
+   "extras": [],
+   "fields": {
+    "1-1": {
+     "album": [
+      "Bare Album"
+     ],
+     "albumartist": [
+      "Genreless Band"
+     ],
+     "albumartistsort": [
+      "Genreless Band"
+     ],
+     "artist": [
+      "Genreless Band"
+     ],
+     "artistsort": [
+      "Genreless Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "One"
+     ]
+    },
+    "1-2": {
+     "album": [
+      "Bare Album"
+     ],
+     "albumartist": [
+      "Genreless Band"
+     ],
+     "albumartistsort": [
+      "Genreless Band"
+     ],
+     "artist": [
+      "Genreless Band"
+     ],
+     "artistsort": [
+      "Genreless Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Two"
+     ]
+    },
+    "1-3": {
+     "album": [
+      "Bare Album"
+     ],
+     "albumartist": [
+      "Genreless Band"
+     ],
+     "albumartistsort": [
+      "Genreless Band"
+     ],
+     "artist": [
+      "Genreless Band"
+     ],
+     "artistsort": [
+      "Genreless Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Three"
+     ]
+    }
+   },
+   "files": [
+    {
+     "after": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "One"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPE2": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TSO2": [
+       "Genreless Band"
+      ],
+      "TSOP": [
+       "Genreless Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000002"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100010001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100010002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "one"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ]
+     },
+     "destination": "G/Genreless Band/(2010) Bare Album/01. One.mp3",
+     "position": "1-1",
+     "source": "drop/album/Bare Album/01 one.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Two"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPE2": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TSO2": [
+       "Genreless Band"
+      ],
+      "TSOP": [
+       "Genreless Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000002"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100020001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100020002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "two"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ]
+     },
+     "destination": "G/Genreless Band/(2010) Bare Album/02. Two.mp3",
+     "position": "1-2",
+     "source": "drop/album/Bare Album/02 two.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Three"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPE2": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TSO2": [
+       "Genreless Band"
+      ],
+      "TSOP": [
+       "Genreless Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000002"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000002"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100030001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100030002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Bare Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "three"
+      ],
+      "TPE1": [
+       "Genreless Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000002"
+      ]
+     },
+     "destination": "G/Genreless Band/(2010) Bare Album/03. Three.mp3",
+     "position": "1-3",
+     "source": "drop/album/Bare Album/03 three.mp3"
+    }
+   ],
+   "game": null,
+   "game_choice": false,
+   "holds": [
+    {
+     "detail": "no genre: 01. One.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again",
+     "kind": "validation"
+    },
+    {
+     "detail": "no genre: 02. Two.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again",
+     "kind": "validation"
+    },
+    {
+     "detail": "no genre: 03. Three.mp3 carries no genre on the official list; tag one into the files or add genres on MusicBrainz, then plan again",
+     "kind": "validation"
+    },
+    {
+     "detail": "",
+     "kind": "decision"
+    }
+   ],
+   "images": {
+    "cover.jpg": {
+     "length": 25535,
+     "sha256": "8b791ddbb1e1889ea07a4e3b49046d9134e824a242422febcd74841770dd782e"
+    }
+   },
+   "inputs": {
+    "chosen": false,
+    "composer": true,
+    "edits": {},
+    "owner_input": {
+     "soundtracks": {}
+    },
+    "release_id": "6f1a2b3c-0000-4000-8000-000100000002",
+    "status": "certain"
+   },
+   "kept": [],
+   "owner_edits": {},
+   "plan_digest": "b89fb1bb42952eafdb1e43793089c67309faffc1fa65e4c72528a6ad718dceeb",
+   "release_id": "6f1a2b3c-0000-4000-8000-000100000002",
+   "residue": [],
+   "source": "drop/album/Bare Album",
+   "state": "held",
+   "status": "certain"
+  }
+ ],
+ "decisions_sha256": "5bc244a41b9755630b9919915ca19f8087c64b554251d62c6d8f1bf157982afc",
+ "job": "agitha-20260929-210000-01",
+ "root": "/srv/music/inbox/20260929-210000/01"
+}

@@ -83,6 +83,8 @@ Functions get names so dull you can guess them at 2am with a dead network: `help
 
 Both resolve. `music.lan` and `ocarina.lan` reach the same place.
 
+`import.music.lan` is the dull name for agitha, the music library's import page, and `agitha.lan` is the same page under its own. Pi-hole answers both with navi's address (`PIHOLE_HOSTS`), and Caddy proxies them to `AGITHA_BACKEND`, hyrule-castle's port 8882. Both answer on HTTP and on HTTPS and redirect neither to the other.
+
 `ocarina` is the one name that sits on the function side rather than the machine side. It was originally meant to be the mini PC, and stopped fitting once that box grew a film library and a photo library - a castle holds things, an ocarina plays music. So the machine is `hyrule-castle` and `ocarina.lan` survives as an alias of `music.lan`, which is what it always described anyway. Nothing pointing at `ocarina.lan` had to change.
 
 The local domain is `.lan`. ICANN reserved `.internal` for private use in 2024 and it's arguably more correct, but it's longer and buys nothing here.

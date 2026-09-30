@@ -147,7 +147,7 @@ def run(job: Job, memory_path: Path, *, limit: int | None = None,
                 continue
 
             try:
-                plan = identify.rebuild(unit, root, built_clients, inputs)
+                plan = identify.rebuild(unit, root, built_clients, inputs, job.path)
             except Exception as exc:
                 fail(key, f"could not rebuild its plan: {exc}")
                 continue

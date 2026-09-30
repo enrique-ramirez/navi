@@ -84,6 +84,67 @@ PICARD: dict[str, dict[str, str | None]] = {
     "media": {"id3": "TMED", "vorbis": "media", "mp4": "----:com.apple.iTunes:MEDIA", "asf": "WM/Media"},
 }
 
+_ITUNES_FREEFORM = "----:com.apple.iTunes:"
+
+#: Readable name -> `{family: real key}`, for showing a tag by name. The rows
+#: after `PICARD`'s are tags the engine never plans, in Picard's keys. The ASF
+#: comment is `Description`, the key `files.read` reports for it.
+READABLE: dict[str, dict[str, str | None]] = {
+    "Title": PICARD["title"],
+    "Artist": PICARD["artist"],
+    "Album": PICARD["album"],
+    "Album artist": PICARD["albumartist"],
+    "Date": PICARD["date"],
+    "Original release date": PICARD["originaldate"],
+    "Artist sort order": PICARD["artistsort"],
+    "Album artist sort order": PICARD["albumartistsort"],
+    "Disc subtitle": PICARD["discsubtitle"],
+    "Genre": PICARD["genre"],
+    "MusicBrainz release id": PICARD["release id"],
+    "MusicBrainz release group id": PICARD["release group id"],
+    "MusicBrainz recording id": PICARD["recording id"],
+    "MusicBrainz track id": PICARD["release track id"],
+    "MusicBrainz artist id": PICARD["artist id"],
+    "MusicBrainz album artist id": PICARD["album artist id"],
+    "Label": PICARD["label"],
+    "Catalogue number": PICARD["catalognumber"],
+    "Barcode": PICARD["barcode"],
+    "ASIN": PICARD["asin"],
+    "Release country": PICARD["releasecountry"],
+    "Media": PICARD["media"],
+    "Track number": {"id3": "TRCK", "vorbis": "tracknumber", "mp4": "trkn", "asf": "WM/TrackNumber"},
+    "Disc number": {"id3": "TPOS", "vorbis": "discnumber", "mp4": "disk", "asf": "WM/PartOfSet"},
+    "Composer": {"id3": "TCOM", "vorbis": "composer", "mp4": "\xa9wrt", "asf": "WM/Composer"},
+    "Composer sort order": {"id3": "TSOC", "vorbis": "composersort", "mp4": "soco",
+                            "asf": "WM/ComposerSortOrder"},
+    "Lyricist": {"id3": "TEXT", "vorbis": "lyricist", "mp4": _ITUNES_FREEFORM + "LYRICIST", "asf": "WM/Writer"},
+    "Conductor": {"id3": "TPE3", "vorbis": "conductor", "mp4": _ITUNES_FREEFORM + "CONDUCTOR",
+                  "asf": "WM/Conductor"},
+    "Comment": {"id3": "COMM::eng", "vorbis": "comment", "mp4": "\xa9cmt", "asf": "Description"},
+    "Lyrics": {"id3": "USLT::eng", "vorbis": "lyrics", "mp4": "\xa9lyr", "asf": "WM/Lyrics"},
+    "BPM": {"id3": "TBPM", "vorbis": "bpm", "mp4": "tmpo", "asf": "WM/BeatsPerMinute"},
+    "ReplayGain track gain": {"id3": "TXXX:REPLAYGAIN_TRACK_GAIN", "vorbis": "replaygain_track_gain",
+                              "mp4": _ITUNES_FREEFORM + "REPLAYGAIN_TRACK_GAIN", "asf": "ReplayGain/Track Gain"},
+    "ReplayGain track peak": {"id3": "TXXX:REPLAYGAIN_TRACK_PEAK", "vorbis": "replaygain_track_peak",
+                              "mp4": _ITUNES_FREEFORM + "REPLAYGAIN_TRACK_PEAK", "asf": "ReplayGain/Track Peak"},
+    "ReplayGain album gain": {"id3": "TXXX:REPLAYGAIN_ALBUM_GAIN", "vorbis": "replaygain_album_gain",
+                              "mp4": _ITUNES_FREEFORM + "REPLAYGAIN_ALBUM_GAIN", "asf": "ReplayGain/Album Gain"},
+    "ReplayGain album peak": {"id3": "TXXX:REPLAYGAIN_ALBUM_PEAK", "vorbis": "replaygain_album_peak",
+                              "mp4": _ITUNES_FREEFORM + "REPLAYGAIN_ALBUM_PEAK", "asf": "ReplayGain/Album Peak"},
+    "Compilation": {"id3": "TCMP", "vorbis": "compilation", "mp4": "cpil", "asf": "WM/IsCompilation"},
+}
+
+_BY_KEY: dict[str, dict[str, str]] = {
+    family: {key: name for name, row in READABLE.items() if (key := row.get(family)) is not None}
+    for family in ("id3", "vorbis", "mp4", "asf")
+}
+
+
+def readable_name(family: str, key: str) -> str | None:
+    """The readable name of `key` as `files.read` reports it in `family`, or `None` if it has none."""
+    return _BY_KEY.get(family, {}).get(key)
+
+
 #: The release-specific fields (docs *Tags*): the six named there, and the
 #: MusicBrainz release-level IDs (the release, release group and album
 #: artist always carry one on a real release, so in practice only the six

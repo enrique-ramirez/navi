@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Sequence
 
 from musiclib import ascii as ascii_
-from musiclib import check, mapping, names
+from musiclib import check, files, mapping, names
 from musiclib.batch import job as job_module
 from musiclib.genres import SOUNDTRACK
 from musiclib.plan import Plan, is_compilation, sort_others, state_from_plan
@@ -148,6 +148,9 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
              artist_name: str | None, created: Sequence[str] = ()) -> Plan:
     """`plan`, with `edits` laid over it, mutated and returned.
 
+    A key not in `mapping.PICARD` is a raw key of the file's own format,
+    laid after the neutral fields as given, or removed for `null`.
+
     Each edited neutral field replaces the real key `mapping.PICARD` maps it
     to, run through `ascii.convert` the way `mapping.plan_tags` does and then
     composed to NFC. A field the destination is built from re-derives it, and the whole plan is
@@ -182,14 +185,26 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
         if file_plan is None:
             continue
         family = family_by_source[file_plan.source]
+        if family == "vorbis":
+            # A Vorbis name has no case; written lower-case it lands on the
+            # tag the engine plans, not beside it.
+            fields = {field.lower(): values for field, values in fields.items()}
+        neutral = {field: values for field, values in fields.items() if field in mapping.PICARD}
         converted = {field: [ascii_.nfc(value) for value in values]
-                     for field, values in ascii_.convert(fields).items()}
+                     for field, values in ascii_.convert(neutral).items()}
         target = dict(file_plan.target)
         for field, values in converted.items():
             tag = mapping.PICARD[field][family]
             target[tag] = list(values)
             if field in _PATH_FIELDS:
                 touched.add(field)
+        for tag, values in fields.items():
+            if tag in mapping.PICARD:
+                continue
+            if values is None:
+                target.pop(tag, None)
+            else:
+                target[tag] = list(values)
         file_plan.target = target
 
     if touched:
@@ -200,6 +215,23 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
 
     plan.problems = _dedupe(kept_problems + _check_problems(plan, edition))
     return plan
+
+
+def remembered_edits(memory: dict, release_id: str, family_by_position: dict[str, str]) -> dict:
+    """`release_id`'s remembered edits that fit the files at hand.
+
+    A raw key is laid only at a position whose file is of the family the key
+    was remembered for: `composer` from a FLAC job is no key of an MP3 of
+    the same release. Neutral fields are laid whatever the format.
+    """
+    kept: dict[str, dict] = {}
+    families = (memory.get("families") or {}).get(release_id, {})
+    for position, fields in ((memory.get("edits") or {}).get(release_id) or {}).items():
+        fits = families.get(position) == family_by_position.get(position)
+        chosen = {key: values for key, values in fields.items() if key in mapping.PICARD or fits}
+        if chosen:
+            kept[position] = chosen
+    return kept
 
 
 def remember(memory: dict, entry: dict) -> None:
@@ -215,6 +247,16 @@ def remember(memory: dict, entry: dict) -> None:
     edits = inputs.get("edits") or {}
     if release_id and edits:
         memory.setdefault("edits", {})[release_id] = edits
+        # The family of each position that carries a raw key, which
+        # `remembered_edits` checks a later job's files against.
+        by_position = {f["position"]: files.FAMILY_BY_EXTENSION.get(Path(f["source"]).suffix.lower())
+                       for f in entry.get("files") or []}
+        families = {position: by_position[position] for position, fields in edits.items()
+                    if position in by_position and any(key not in mapping.PICARD for key in fields)}
+        if families:
+            memory.setdefault("families", {})[release_id] = families
+        else:
+            (memory.get("families") or {}).pop(release_id, None)
 
     choice = (inputs.get("owner_input") or {}).get("soundtracks", {}).get(release_id)
     if release_id and choice is not None:

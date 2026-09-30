@@ -70,7 +70,11 @@ Where a release's titles are not in the Latin script, the album and track titles
 
 **No duplicate fields.** One album artist field (`TPE2`, `ALBUMARTIST`), never `TXXX:ALBUM ARTIST` or `ALBUM ARTIST` beside it. One total, never both inside `TRCK`/`TPOS` and in a `TXXX`.
 
-No field credits whoever ripped, encoded or uploaded the file, or links to where it came from.
+No field credits whoever ripped, encoded or uploaded the file, or links to where it came from. `uploader`, `provider`, `website`, `wwwaudiofile` and `wwwaudiosource` are removed, with their forms in the other formats, and so is any value that is wholly a URL or a bare domain (a generic top-level label such as `.com` or `.xyz`, or a country code), in any text tag but lyrics and the fields the engine plans from MusicBrainz: title, artist, album, album artist, their sort names and composer. `will.i.am` is a name there, not a site.
+
+**Composers.** For every release the engine makes one more MusicBrainz lookup, of its recordings with their work and artist relations, cached under its own URL. A track's composers are the artists of every `composer` relationship on each work its recording performs, in the order MusicBrainz lists them, each once. `writer`, `lyricist`, `arranger` and the other types do not count. They are written as separate values of the composer tag and, in the same order, of the composer sort tag, replacing what the file had: `TCOM` and `TSOC` on MP3, `composer` and `composersort` on FLAC and Ogg, `©wrt` and `soco` on M4A, `WM/Composer` and `WM/ComposerSortOrder` on WMA. A name not in the Latin script takes the artist's primary English alias, as artist names do, and the sort name stays as MusicBrainz gives it. A track MusicBrainz gives no composer keeps the composer tags its file carries. `batch identify --no-composer` skips the lookup for a job, and `apply` follows.
+
+**Raw edits.** In the import review, an accept's edits may name a tag key of the file's own format, with a list of values or `null` to remove it. MusicBrainz IDs, ratings, binary frames and keys the format cannot hold are refused. Raw edits are remembered per release, like the other edits.
 
 **Genres.** Only names on MusicBrainz's official genre list, spelled the way MusicBrainz spells them (lowercase, `post-rock`, `hip hop`), stored as separate values rather than one delimited string. Two custom genres exist because MusicBrainz models soundtracks as a release type rather than a genre: `soundtrack` and `video game music`. An album MusicBrainz types as a soundtrack is held until one of these settles it: a game tag on the release group, `video game music` on the files, an incoming game genre, or the owner's choice in the import review of `video game music`, `soundtrack` or neither. `soundtrack` on the files does not settle it. The choice is remembered for that release. Of a release's MusicBrainz genres, only those whose vote count is at least a quarter of the top genre's are kept, ties included. A release with no MusicBrainz genres keeps the genres its files carry that are on the list, lowercased. Every track has at least one genre, and a track with none is an error.
 
@@ -90,6 +94,8 @@ Everything else the Cover Art Archive has for the release is kept beside it: `ba
 
 A PDF from the Cover Art Archive is kept in the album folder as `booklet.pdf` (`booklet-1.pdf`, `booklet-2.pdf` when there are several) and is never embedded.
 
+The owner can supply the cover. An accept in `decisions.json` may name an image inside the job. That image becomes `cover.jpg`, converted to JPEG where it is not one, and the embedded picture, whatever the Cover Art Archive has and whether or not it passes the cover test. The archive's other images are still saved. A local `cover`, `folder`, `album` or `art` image it replaces is removed, and `front.*` stays. `apply` refuses the album as changed if that image changed or is gone.
+
 ## What an album folder may contain
 
 Audio, images, PDF booklets, `.log` files (a rip log proves how the audio was made) and `.txt` notes. All of them sit in the album folder itself, never in a subfolder other than a `CDn`.
@@ -101,3 +107,5 @@ Videos, disc images and CD-ROM software are kept, but outside the library, in `/
 ## How new music gets in
 
 Through one funnel, `/srv/music/inbox`, and never by copying straight into the library. Every album is identified against MusicBrainz, tagged, named and checked against this file, and shown for review before anything moves. Nothing lands without a person saying yes.
+
+The funnel is agitha, at `agitha.lan` (also `import.music.lan`). Albums are dropped on the page, one drop at a time, and each is reviewed there and approved or left. Its folders and unit are in [hyrule-castle.md](hyrule-castle.md).

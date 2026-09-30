@@ -1,0 +1,10 @@
+.alert {
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border-left: 3px solid var(--danger);
+	background: var(--surface);
+}
+
+.alert p {
+	margin: 0;
+}

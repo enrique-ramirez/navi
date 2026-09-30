@@ -1,0 +1,559 @@
+{
+ "albums": [
+  {
+   "candidates": [
+    {
+     "artist": "Edited Band",
+     "country": "GB",
+     "date": "2010-05-24",
+     "duration_diff": 0.45599999999999974,
+     "format": "CD",
+     "matches_counts": true,
+     "release_id": "6f1a2b3c-0000-4000-8000-000100000004",
+     "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000004/front-250",
+     "title": "Edited Album",
+     "track_counts": [
+      3
+     ]
+    }
+   ],
+   "changes": [
+    "move: drop/album/Edited Album/01 one.mp3 -> E/Edited Band/(2010) Edited Album/01. One.mp3",
+    "tags: drop/album/Edited Album/01 one.mp3: does not match its planned target",
+    "cover: drop/album/Edited Album/01 one.mp3: embedded picture does not match the plan",
+    "move: drop/album/Edited Album/02 two.mp3 -> E/Edited Band/(2010) Edited Album/02. Two, Edited.mp3",
+    "tags: drop/album/Edited Album/02 two.mp3: does not match its planned target",
+    "cover: drop/album/Edited Album/02 two.mp3: embedded picture does not match the plan",
+    "move: drop/album/Edited Album/03 three.mp3 -> E/Edited Band/(2010) Edited Album/03. Three.mp3",
+    "tags: drop/album/Edited Album/03 three.mp3: does not match its planned target",
+    "cover: drop/album/Edited Album/03 three.mp3: embedded picture does not match the plan",
+    "image: drop/album/Edited Album/cover.jpg: does not match the plan",
+    "delete: drop/album/Edited Album/cover.jpg"
+   ],
+   "decision": "accept",
+   "deletions": [
+    "drop/album/Edited Album/cover.jpg"
+   ],
+   "destination": "E/Edited Band/(2010) Edited Album",
+   "extras": [],
+   "fields": {
+    "1-1": {
+     "album": [
+      "Edited Album"
+     ],
+     "albumartist": [
+      "Edited Band"
+     ],
+     "albumartistsort": [
+      "Edited Band"
+     ],
+     "artist": [
+      "Edited Band"
+     ],
+     "artistsort": [
+      "Edited Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "One"
+     ]
+    },
+    "1-2": {
+     "album": [
+      "Edited Album"
+     ],
+     "albumartist": [
+      "Edited Band"
+     ],
+     "albumartistsort": [
+      "Edited Band"
+     ],
+     "artist": [
+      "Edited Band"
+     ],
+     "artistsort": [
+      "Edited Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Two, Edited"
+     ]
+    },
+    "1-3": {
+     "album": [
+      "Edited Album"
+     ],
+     "albumartist": [
+      "Edited Band"
+     ],
+     "albumartistsort": [
+      "Edited Band"
+     ],
+     "artist": [
+      "Edited Band"
+     ],
+     "artistsort": [
+      "Edited Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Three"
+     ]
+    }
+   },
+   "files": [
+    {
+     "after": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TCOM": [
+       "Someone"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "One"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPE2": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TSO2": [
+       "Edited Band"
+      ],
+      "TSOP": [
+       "Edited Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000004"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100010001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100010002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "one"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TXXX:MOOD": [
+       "Calm"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ]
+     },
+     "destination": "E/Edited Band/(2010) Edited Album/01. One.mp3",
+     "position": "1-1",
+     "source": "drop/album/Edited Album/01 one.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Two, Edited"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPE2": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TSO2": [
+       "Edited Band"
+      ],
+      "TSOP": [
+       "Edited Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MOOD": [
+       "Calm"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000004"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100020001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100020002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "two"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TXXX:MOOD": [
+       "Calm"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ]
+     },
+     "destination": "E/Edited Band/(2010) Edited Album/02. Two, Edited.mp3",
+     "position": "1-2",
+     "source": "drop/album/Edited Album/02 two.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Three"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPE2": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TSO2": [
+       "Edited Band"
+      ],
+      "TSOP": [
+       "Edited Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MOOD": [
+       "Calm"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000004"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000004"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100030001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100030002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Edited Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "three"
+      ],
+      "TPE1": [
+       "Edited Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TXXX:MOOD": [
+       "Calm"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000004"
+      ]
+     },
+     "destination": "E/Edited Band/(2010) Edited Album/03. Three.mp3",
+     "position": "1-3",
+     "source": "drop/album/Edited Album/03 three.mp3"
+    }
+   ],
+   "game": null,
+   "game_choice": false,
+   "holds": [],
+   "images": {
+    "cover.jpg": {
+     "length": 6406,
+     "sha256": "9a0b42f6ab5bd7ce198c667475247ec72567648a14b862fcf57ed1d23390fb56"
+    }
+   },
+   "inputs": {
+    "chosen": false,
+    "composer": true,
+    "edits": {
+     "1-1": {
+      "TCOM": [
+       "Someone"
+      ],
+      "TXXX:MOOD": null
+     },
+     "1-2": {
+      "title": [
+       "Two, Edited"
+      ]
+     }
+    },
+    "owner_cover": {
+     "path": "owner/cover.png",
+     "sha256": "48d71af5af018114f6eaa54c396180f8411acf9931594498c5c483d8dba9f311"
+    },
+    "owner_input": {
+     "soundtracks": {}
+    },
+    "release_id": "6f1a2b3c-0000-4000-8000-000100000004",
+    "status": "certain"
+   },
+   "kept": [],
+   "owner_edits": {
+    "1-1": {
+     "TCOM": [
+      "Someone"
+     ],
+     "TXXX:MOOD": null
+    },
+    "1-2": {
+     "title": [
+      "Two, Edited"
+     ]
+    }
+   },
+   "plan_digest": "1daf94f29cb7e2654cbf2a5f4ed535495667fd6ac88ee136ac072413ee1778b6",
+   "release_id": "6f1a2b3c-0000-4000-8000-000100000004",
+   "residue": [],
+   "source": "drop/album/Edited Album",
+   "state": "auto",
+   "status": "certain"
+  }
+ ],
+ "decisions_sha256": "7bff358f995fb82446f8d95540ca6fb1effdc822b7dee1d86b33560b9a3aecbf",
+ "job": "agitha-20260929-210000-01",
+ "root": "/srv/music/inbox/20260929-210000/01"
+}

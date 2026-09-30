@@ -203,6 +203,14 @@ def _rejudged(unit: Unit, root: Path, clients: Clients, owner_input: dict, rejud
     return found
 
 
+def _read_owner_cover(job_path: Path, rel: str) -> bytes | None:
+    """The bytes of the owner's cover at `rel` under the job, or `None` where the file is not there."""
+    try:
+        return (job_path / rel).read_bytes()
+    except OSError:
+        return None
+
+
 def _blank_entry(source: str, status: str) -> dict:
     """The fields every entry has, before anything a plan or a hold adds."""
     return {
@@ -222,7 +230,8 @@ def _entry_pairs(unit: Unit, root: Path, release: dict, plan: Plan) -> tuple[lis
 def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision: dict | None,
                reopened: bool, *, edition: str | None = None, env: Mapping[str, str] = os.environ,
                which: Callable[[str], str | None] = shutil.which,
-               rejudge: Rejudge | None = None) -> tuple[dict, Plan | None]:
+               rejudge: Rejudge | None = None, job_path: Path | None = None,
+               composer: bool = True) -> tuple[dict, Plan | None]:
     """One album's entry, and its `Plan` if it has one. Collision holds and `state` are not this function's to add.
 
     `decision` folds the owner's `decisions.json` answer for this album in:
@@ -245,6 +254,15 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         # The owner's choice is read like a remembered one, so this job, the
         # apply that replays it and the next job all see the same thing.
         owner_input["soundtracks"][decision["release_id"]] = game
+
+    owner_cover: bytes | None = None
+    owner_cover_error: str | None = None
+    if action == "accept" and decision.get("cover") and job_path is not None:
+        owner_cover = _read_owner_cover(job_path, decision["cover"])
+        if owner_cover is None:
+            owner_cover_error = f"owner cover {decision['cover']} is not a file"
+        elif images.average_hash_or_none(owner_cover) is None:
+            owner_cover, owner_cover_error = None, f"owner cover {decision['cover']} is not an image"
 
     original_folder = rejudge.folder(unit.rel) if rejudge is not None else None
     found_original = original_folder is not None and original_folder.is_dir()
@@ -280,6 +298,8 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     # ends up (even with no plan at all): apply and a later fold both read
     # this off the entry, never back off the raw decision.
     entry["game"] = game
+    if owner_cover_error is not None:
+        entry["holds"].append({"kind": "error", "detail": owner_cover_error})
     if identification.status not in ("certain", "auto"):
         entry["holds"].append({"kind": "status", "detail": _status_detail(
             identification.status, identification.reason)})
@@ -294,12 +314,14 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=owner_input,
                           incoming=None, status=identification.status,
                           pairs=None if rejudged is not None else top.pairs, edition=edition,
-                          local=local, created=created)
+                          local=local, created=created, owner_cover=owner_cover, composer=composer)
 
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         positions = [position_key(p) for p in pairs]
         release_group = clients.mb.release_group(release["release-group"]["id"])
-        memory_edits = (memory.get("edits") or {}).get(top.release_id, {})
+        memory_edits = memory_module.remembered_edits(
+            memory, top.release_id,
+            {position_key(p): family_by_source[f.source] for p, f in zip(pairs, plan.files)})
         decision_edits = decision.get("edits", {}) if action == "accept" else {}
         edits = memory_module.merge_edits(memory_edits, decision_edits)
 
@@ -339,6 +361,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         entry["inputs"] = {
             "release_id": top.release_id, "chosen": forced_choice, "status": identification.status,
             "owner_input": {"soundtracks": {top.release_id: choice} if choice else {}}, "edits": edits,
+            "composer": composer,
         }
         if edition is not None:
             entry["inputs"]["edition"] = edition
@@ -346,6 +369,9 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
             entry["inputs"]["original"] = {"folder": str(original_folder), "found": found_original}
         if created:
             entry["inputs"]["created"] = created
+        if owner_cover is not None:
+            entry["inputs"]["owner_cover"] = {
+                "path": decision["cover"], "sha256": hashlib.sha256(owner_cover).hexdigest()}
         entry["plan_digest"] = hashlib.sha256(plan.to_json()).hexdigest()
 
         if action == "repoint":
@@ -359,7 +385,7 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
     return entry, plan
 
 
-def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict) -> Plan:
+def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Path | None = None) -> Plan:
     """The `Plan` an entry's `inputs` describes, rebuilt from the warm cache for `batch apply`.
 
     `inputs["status"]` is the status `plan_entry` passed to `plan_album`;
@@ -370,15 +396,26 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict) -> Plan:
     give the same digest. The original folder's covers and the images an
     earlier job created are planned the same way too; `inputs` carries the
     folder and the list so no log is read again.
+
+    The owner's cover is read again from `job_path`. A file that is gone or
+    no longer the bytes identify hashed is left out, so the plan differs and
+    apply refuses the album as changed.
     """
     release = clients.mb.release(inputs["release_id"])
     original = inputs.get("original")
     # An original folder that was there at identify and is gone now leaves the
     # album with no local cover, so the plan differs and apply refuses it.
     local = _covers_of(Path(original["folder"])) if original and original["found"] else None
+    owner_cover = None
+    recorded = inputs.get("owner_cover")
+    if recorded and job_path is not None:
+        owner_cover = _read_owner_cover(job_path, recorded["path"])
+        if owner_cover is not None and hashlib.sha256(owner_cover).hexdigest() != recorded["sha256"]:
+            owner_cover = None
     plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=inputs["owner_input"],
                       status=inputs["status"], edition=inputs.get("edition"),
-                      local=local, created=inputs.get("created", []))
+                      local=local, created=inputs.get("created", []), owner_cover=owner_cover,
+                      composer=inputs.get("composer", True))
     edits = inputs.get("edits") or {}
     if edits:
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
@@ -557,7 +594,7 @@ def _print_counts(entries: list[dict], out) -> None:
 
 def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, transport=None,
         env: Mapping[str, str] = os.environ, which: Callable[[str], str | None] = shutil.which,
-        out=None, err=None, rejudge: Path | None = None) -> int:
+        out=None, err=None, rejudge: Path | None = None, composer: bool = True) -> int:
     # `sys.stdout`/`sys.stderr` resolved here, not as the default value: a
     # default is bound once at import time, before a caller's redirect (a
     # test capturing output, or a later reassignment of `sys.stdout`) exists.
@@ -617,7 +654,8 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
         decision = resolved_decisions.get(unit.rel, (None, None))[1]
         try:
             entry, plan = plan_entry(unit, root, built_clients, memory, decision,
-                                     unit.rel in reopened_keys, env=env, which=which, rejudge=judging)
+                                     unit.rel in reopened_keys, env=env, which=which, rejudge=judging,
+                                     job_path=job.path, composer=composer)
         except Exception as exc:
             entry, plan = _error_entry(unit, exc, decision), None
         entries.append(entry)
@@ -638,7 +676,8 @@ def run(root: Path, job: Job, memory_path: Path, reopen: list[str] = (), *, tran
 
     def replan(key: str, edition: str) -> tuple[dict, Plan]:
         return plan_entry(units_by_rel[key], root, built_clients, memory, resolved_decisions.get(key, (None, None))[1],
-                          key in reopened_keys, edition=edition, env=env, which=which, rejudge=judging)
+                          key in reopened_keys, edition=edition, env=env, which=which, rejudge=judging,
+                          job_path=job.path, composer=composer)
 
     _separate_editions(entries, plans, lambda e: edition_fields(built_clients.mb.release(e["release_id"])),
                        replan, err)

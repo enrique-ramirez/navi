@@ -1,0 +1,513 @@
+[
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000001",
+            "name": "Clean Band",
+            "sort-name": "Clean Band"
+          },
+          "joinphrase": "",
+          "name": "Clean Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000001",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000001",
+                    "name": "Clean Band",
+                    "sort-name": "Clean Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Clean Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000001",
+                    "name": "Clean Band",
+                    "sort-name": "Clean Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Clean Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000001",
+                    "name": "Clean Band",
+                    "sort-name": "Clean Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Clean Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000001",
+        "primary-type": "Album",
+        "secondary-types": [],
+        "title": "Clean Album"
+      },
+      "status": "Official",
+      "title": "Clean Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [
+        {
+          "count": 1,
+          "name": "rock"
+        }
+      ],
+      "id": "6f1a2b3c-0000-4000-8000-000200000001",
+      "primary-type": "Album",
+      "secondary-types": [],
+      "tags": [],
+      "title": "Clean Album"
+    }
+  ],
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000002",
+            "name": "Genreless Band",
+            "sort-name": "Genreless Band"
+          },
+          "joinphrase": "",
+          "name": "Genreless Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000002",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000002",
+                    "name": "Genreless Band",
+                    "sort-name": "Genreless Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Genreless Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000002",
+                    "name": "Genreless Band",
+                    "sort-name": "Genreless Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Genreless Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000002",
+                    "name": "Genreless Band",
+                    "sort-name": "Genreless Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Genreless Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000002",
+        "primary-type": "Album",
+        "secondary-types": [],
+        "title": "Bare Album"
+      },
+      "status": "Official",
+      "title": "Bare Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [],
+      "id": "6f1a2b3c-0000-4000-8000-000200000002",
+      "primary-type": "Album",
+      "secondary-types": [],
+      "tags": [],
+      "title": "Bare Album"
+    }
+  ],
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000003",
+            "name": "Score Band",
+            "sort-name": "Score Band"
+          },
+          "joinphrase": "",
+          "name": "Score Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000003",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000003",
+                    "name": "Score Band",
+                    "sort-name": "Score Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Score Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000003",
+                    "name": "Score Band",
+                    "sort-name": "Score Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Score Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000003",
+                    "name": "Score Band",
+                    "sort-name": "Score Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Score Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000003",
+        "primary-type": "Album",
+        "secondary-types": [
+          "Soundtrack"
+        ],
+        "title": "Score Album"
+      },
+      "status": "Official",
+      "title": "Score Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [
+        {
+          "count": 1,
+          "name": "rock"
+        }
+      ],
+      "id": "6f1a2b3c-0000-4000-8000-000200000003",
+      "primary-type": "Album",
+      "secondary-types": [
+        "Soundtrack"
+      ],
+      "tags": [],
+      "title": "Score Album"
+    }
+  ],
+  [
+    {
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "6f1a2b3c-0000-4000-8000-000300000004",
+            "name": "Edited Band",
+            "sort-name": "Edited Band"
+          },
+          "joinphrase": "",
+          "name": "Edited Band"
+        }
+      ],
+      "asin": "B003FMTHVS",
+      "barcode": "600753279578",
+      "country": "GB",
+      "date": "2010-05-24",
+      "id": "6f1a2b3c-0000-4000-8000-000100000004",
+      "label-info": [
+        {
+          "catalog-number": "FIXH 14",
+          "label": {
+            "id": "4d0e0f10-0000-4000-8000-0000000000b1",
+            "name": "Fiction Records"
+          }
+        }
+      ],
+      "media": [
+        {
+          "format": "CD",
+          "position": 1,
+          "title": "",
+          "track-count": 3,
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000004",
+                    "name": "Edited Band",
+                    "sort-name": "Edited Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Edited Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100010001",
+              "length": 1000,
+              "number": "1",
+              "position": 1,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100010002",
+                "length": 1000
+              },
+              "title": "One"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000004",
+                    "name": "Edited Band",
+                    "sort-name": "Edited Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Edited Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100020001",
+              "length": 1000,
+              "number": "2",
+              "position": 2,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100020002",
+                "length": 1000
+              },
+              "title": "Two"
+            },
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "6f1a2b3c-0000-4000-8000-000300000004",
+                    "name": "Edited Band",
+                    "sort-name": "Edited Band"
+                  },
+                  "joinphrase": "",
+                  "name": "Edited Band"
+                }
+              ],
+              "id": "2b0c0d0e-0000-4000-8000-000100030001",
+              "length": 1000,
+              "number": "3",
+              "position": 3,
+              "recording": {
+                "id": "3c0d0e0f-0000-4000-8000-000100030002",
+                "length": 1000
+              },
+              "title": "Three"
+            }
+          ]
+        }
+      ],
+      "release-group": {
+        "first-release-date": "1989-05-02",
+        "id": "6f1a2b3c-0000-4000-8000-000200000004",
+        "primary-type": "Album",
+        "secondary-types": [],
+        "title": "Edited Album"
+      },
+      "status": "Official",
+      "title": "Edited Album"
+    },
+    {
+      "first-release-date": "1989-05-02",
+      "genres": [
+        {
+          "count": 1,
+          "name": "rock"
+        }
+      ],
+      "id": "6f1a2b3c-0000-4000-8000-000200000004",
+      "primary-type": "Album",
+      "secondary-types": [],
+      "tags": [],
+      "title": "Edited Album"
+    }
+  ]
+]

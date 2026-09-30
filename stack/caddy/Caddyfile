@@ -155,3 +155,16 @@ https://music.lan, https://ocarina.lan {
 		flush_interval -1
 	}
 }
+
+# agitha, the import page. `auto_https
+# disable_redirects` above already stops Caddy redirecting HTTP to HTTPS, so
+# both blocks proxy. Nothing on the page needs a secure context, and a device
+# without the internal CA still gets in over HTTP.
+https://agitha.lan, https://import.music.lan {
+	tls internal
+	reverse_proxy {$AGITHA_BACKEND}
+}
+
+http://agitha.lan, http://import.music.lan {
+	reverse_proxy {$AGITHA_BACKEND}
+}

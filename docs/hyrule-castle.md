@@ -2,7 +2,7 @@
 
 The mini PC. It holds the services.
 
-navi runs the network; this box runs everything you actually use. Right now that is nothing at all - it was installed on 2026-09-20 and has no services on it yet. foobar2000 under Wine is first, then Jellyfin, then Immich, then file sync, in that order and no faster. [future-plans.md](future-plans.md) has the reasoning.
+navi runs the network; this box runs everything you actually use. Right now that is foobar2000 under Wine and agitha, the music import page. Jellyfin comes next, then Immich, then file sync, in that order and no faster. [future-plans.md](future-plans.md) has the reasoning.
 
 ## The name
 
@@ -205,7 +205,7 @@ A recent `StartedAt` plus the expected value in that env line. This is the same 
 
 `/srv/music/library` holds the sorted library - 349 GB, 37,091 files, copied 2026-09-21 from the old Toshiba over USB rather than over the network, which kept filename encoding a single conversion done once by the kernel's vfat driver rather than a chain of translations through Windows and SMB. A Spanish-language library is full of accents; mojibake across 37,000 names is not something you want to discover later.
 
-`/srv/music/inbox` exists and is empty. The 79 GB of unsorted material stayed on the Toshiba pending a Mac-side sorting workflow, and is knowingly single-copy until that happens.
+`/srv/music/inbox` holds the drops agitha is working on. The 79 GB of unsorted material stayed on the Toshiba pending a Mac-side sorting workflow, and is knowingly single-copy until that happens.
 
 **This path does not move.** In October the 16 TB USB disk mounts at `/srv/music` and the contents move onto it; the path stays. See [future-plans.md](future-plans.md) for the ordering, which never drops below two copies.
 
@@ -219,6 +219,28 @@ Not a drive letter. foobar2000's library index holds `file-relative://` paths, s
 ```
 
 The symlink is what decouples the two. October's remount changes the contents of `/srv/music/library` and the symlink keeps pointing at it, so nothing in foobar2000's config ever learns the disk changed. Keep the install out of `/srv/music` itself or it vanishes with that mount.
+
+## agitha
+
+agitha is the import page for the music library: albums are dropped on it, identified against MusicBrainz, reviewed, and approved into `/srv/music/library`. What the engine checks is in [music-library.md](music-library.md), and the address it answers on is in [network.md](network.md).
+
+Its unit is `agitha.service`, which runs `python3 -m agitha` as `enrique-ramirez` on port 8882, on every interface, with `Restart=on-failure`. It requires `/srv/music` to be mounted. It has no login.
+
+The unit of work is a drop: one upload, named `YYYYMMDD-HHMMSS`, which can hold several albums. The folders it uses:
+
+| path | holds |
+|---|---|
+| `/srv/music/inbox/<drop>/` | `raw/` while the upload runs, then `drop.json` and one `<n>/` per album with `album.json` and `drop/album/<name>/` |
+| `/srv/music/.musiclib/jobs/agitha-<drop>-<n>/` | the engine's job for that album. Kept after the album is approved |
+| `/srv/music/library` | the library. An approved album arrives by one rename |
+| `/srv/music/extras` | videos, disc images and software, as in music-library.md |
+| `/usr/local/lib/agitha/agitha` | the server |
+| `/usr/local/lib/agitha/ui` | the built page |
+| `/usr/local/lib/musiclib` | the engine the server runs |
+
+It runs one `musiclib batch identify` per album, one process at a time, and `batch apply` when the album is approved, both rooted in the inbox. Then the inbox folder is deleted. An album whose artist folder already holds the same album is compared with it, and the replaced copy is deleted only after a checksum-verified move.
+
+agitha never stops or restarts foobar2000. A new album reaches foobar2000's index through library-folder monitoring, or at its next start.
 
 ## The music player
 
@@ -323,7 +345,7 @@ Then `vnc://localhost:5900` from the Mac. Bound to localhost and tunnelled, so n
 
 ## What is in git, and what is not
 
-Config is in the repo at [../hyrule-castle/](../hyrule-castle/) - units, a deploy script, and the profile backup. A few KB, no secrets. Applied the same way navi is, by a human:
+Config is in the repo at [../hyrule-castle/](../hyrule-castle/) - units, a deploy script, the profile backup, and the engine and page source. No secrets. Applied the same way navi is, by a human:
 
 ```sh
 cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh

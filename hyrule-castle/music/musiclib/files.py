@@ -32,6 +32,11 @@ class Track:
 #: each would let a format one of them missed come out planned and never
 #: written, or written and never checked.
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".ogg", ".m4a", ".mp4", ".wma"}
+#: Extension -> tag family, `_family` with no file to open. A planned
+#: destination keeps its source's extension, so this tells `plan` and the
+#: decisions which family a file is without reading anything off disk.
+FAMILY_BY_EXTENSION = {".mp3": "id3", ".flac": "vorbis", ".ogg": "vorbis", ".m4a": "mp4", ".mp4": "mp4",
+                       ".wma": "asf"}
 
 #: MP4 box types a video's `trak/mdia/hdlr` can be nested under. `hdlr` sits
 #: directly inside `mdia` (ISO/IEC 14496-12), so these three are the only

@@ -643,5 +643,87 @@ class UnicodeNormalisedNames(_Planning):
         self.assertEqual(shown(file_plan.target["title"]), shown([CAFE]))
 
 
+FAMILIES = ("id3", "vorbis", "mp4", "asf")
+
+#: The page's name for each `PICARD` field.
+PICARD_NAMES = {
+    "title": "Title", "artist": "Artist", "album": "Album", "albumartist": "Album artist",
+    "date": "Date", "originaldate": "Original release date", "artistsort": "Artist sort order",
+    "albumartistsort": "Album artist sort order", "discsubtitle": "Disc subtitle", "genre": "Genre",
+    "release id": "MusicBrainz release id", "release group id": "MusicBrainz release group id",
+    "recording id": "MusicBrainz recording id", "release track id": "MusicBrainz track id",
+    "artist id": "MusicBrainz artist id", "album artist id": "MusicBrainz album artist id",
+    "label": "Label", "catalognumber": "Catalogue number", "barcode": "Barcode", "asin": "ASIN",
+    "releasecountry": "Release country", "media": "Media",
+}
+
+#: Named on the page although the engine never plans them.
+UNPLANNED_NAMES = ("Composer", "Composer sort order", "Lyricist", "Conductor", "Comment", "Lyrics",
+                   "BPM", "ReplayGain track gain", "ReplayGain track peak", "ReplayGain album gain",
+                   "ReplayGain album peak", "Compilation")
+
+
+class ReadableNames(unittest.TestCase):
+    """A known tag is shown by name, anything else by its raw key."""
+
+    def test_album_artist_composer_and_composer_sort_order_are_named_in_every_family(self):
+        cases = {
+            "id3": {"TPE2": "Album artist", "TCOM": "Composer", "TSOC": "Composer sort order",
+                    "TIT2": "Title"},
+            "vorbis": {"albumartist": "Album artist", "composer": "Composer",
+                       "composersort": "Composer sort order", "title": "Title"},
+            "mp4": {"aART": "Album artist", "\xa9wrt": "Composer", "soco": "Composer sort order",
+                    "\xa9nam": "Title"},
+            "asf": {"WM/AlbumArtist": "Album artist", "WM/Composer": "Composer",
+                    "WM/ComposerSortOrder": "Composer sort order", "Title": "Title"},
+        }
+        for family, names in cases.items():
+            for raw, name in names.items():
+                with self.subTest(family=family, key=raw):
+                    self.assertEqual(mapping.readable_name(family, raw), name)
+
+    def test_a_key_outside_the_table_has_no_readable_name(self):
+        # The page then shows the raw key. `TCOM` is known, but only to
+        # ID3: a lookup that ignores the family names a Vorbis `TCOM`.
+        for family, raw in (("id3", "TXXX:MOOD"), ("vorbis", "uploader"), ("mp4", "----:com.apple.iTunes:MOOD"),
+                            ("asf", "WM/Mood"), ("vorbis", "TCOM"), ("id3", "composer"),
+                            ("mp4", "WM/Composer"), ("asf", "\xa9wrt")):
+            with self.subTest(family=family, key=raw):
+                self.assertIsNone(mapping.readable_name(family, raw))
+
+    def test_every_picard_field_has_its_name_and_exactly_picards_keys(self):
+        # Equal to `PICARD` row for row, so correcting a key in one table
+        # and not the other fails here.
+        for neutral, keys in mapping.PICARD.items():
+            with self.subTest(neutral):
+                name = PICARD_NAMES[neutral]
+                self.assertIn(name, mapping.READABLE)
+                self.assertEqual(mapping.READABLE[name], keys)
+        self.assertEqual(set(PICARD_NAMES), set(mapping.PICARD))
+
+    def test_composer_lyricist_conductor_comment_lyrics_bpm_replaygain_and_compilation_have_rows(self):
+        for name in UNPLANNED_NAMES:
+            with self.subTest(name):
+                self.assertIn(name, mapping.READABLE)
+                self.assertEqual(set(mapping.READABLE[name]), set(FAMILIES))
+                self.assertTrue(any(mapping.READABLE[name].values()), "a row with no key in any family")
+
+    def test_every_key_in_the_table_reads_back_as_its_own_name(self):
+        for name, keys in mapping.READABLE.items():
+            for family, raw in keys.items():
+                if raw is None:
+                    continue
+                with self.subTest(name=name, family=family):
+                    self.assertEqual(mapping.readable_name(family, raw), name)
+
+    def test_no_two_names_share_a_key_within_a_family(self):
+        # Two names on one key and the page shows whichever the lookup
+        # finds first.
+        for family in FAMILIES:
+            with self.subTest(family):
+                keys = [row[family] for row in mapping.READABLE.values() if row.get(family) is not None]
+                self.assertEqual(sorted(k for k in keys if keys.count(k) > 1), [])
+
+
 if __name__ == "__main__":
     unittest.main()

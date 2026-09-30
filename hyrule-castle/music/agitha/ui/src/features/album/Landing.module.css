@@ -1,0 +1,46 @@
+.landing h2 {
+	margin: 0 0 var(--space-3);
+}
+
+.landing h3 {
+	margin: var(--space-4) 0 var(--space-1);
+	color: var(--muted);
+	font-size: 0.8125rem;
+	font-weight: 500;
+}
+
+.landing p {
+	margin: 0;
+}
+
+.path {
+	font-family: var(--font-numeric);
+	overflow-wrap: anywhere;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.tree,
+.plain {
+	margin: 0;
+	padding-left: var(--space-4);
+}
+
+.plain {
+	list-style: none;
+	padding-left: 0;
+	overflow-wrap: anywhere;
+}
+
+.facts {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: var(--space-1) var(--space-3);
+	margin: 0;
+}
+
+.facts dd {
+	margin: 0;
+}

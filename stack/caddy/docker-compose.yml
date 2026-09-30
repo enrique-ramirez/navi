@@ -16,4 +16,5 @@ services:
     environment:
       TZ: ${TZ}
       MUSIC_BACKEND: ${MUSIC_BACKEND}
+      AGITHA_BACKEND: ${AGITHA_BACKEND}
     mem_limit: 128m

@@ -1,0 +1,91 @@
+.drops {
+	display: grid;
+	gap: var(--space-6);
+	margin-top: var(--space-6);
+}
+
+.drop {
+	display: grid;
+	gap: var(--space-3);
+}
+
+.dropHead {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	align-items: center;
+}
+
+.dropHead h2 {
+	margin: 0;
+	font-family: var(--font-numeric);
+	font-size: 1rem;
+}
+
+.albums,
+.plain {
+	display: grid;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.album {
+	padding: var(--space-3);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+.head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	align-items: baseline;
+}
+
+.name {
+	font-weight: 600;
+}
+
+.state {
+	color: var(--accent);
+}
+
+.note {
+	margin: var(--space-1) 0 0;
+	color: var(--muted);
+}
+
+.stderr {
+	margin: var(--space-2) 0 0;
+	padding: var(--space-2);
+	overflow-x: auto;
+	background: var(--bg);
+	border-left: 3px solid var(--danger);
+	font-family: var(--font-numeric);
+	font-size: 0.8125rem;
+}
+
+.buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-top: var(--space-2);
+}
+
+.button,
+.link {
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	color: inherit;
+	text-decoration: none;
+}
+
+.button:hover,
+.link:hover {
+	background: var(--accent-quiet);
+}

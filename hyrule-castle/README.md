@@ -5,10 +5,11 @@ Config for the mini PC. The machine itself is described in [../docs/hyrule-castl
 ## What's here
 
 ```
-systemd/   xvfb, openbox, foobar2000, and the profile backup timer
+systemd/   xvfb, openbox, foobar2000, agitha, and the profile backup timer
 scripts/   deploy.sh, fb2k-backup.sh
 sudoers/   passwordless systemctl stop/start/restart foobar2000, for foo_jean deploys
 music/     musiclib, the engine that identifies, tags and names releases against docs/music-library.md
+           agitha/, the import page in front of it: a Python server and a React page (agitha/ui/)
 ```
 
 ## Applying it
@@ -43,7 +44,9 @@ cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 
 **Both deploy scripts check `hostname` and refuse to run on the wrong machine.** That guard exists because this one was run on navi by mistake, which installed a Wine and Xvfb stack on the flat's DNS server.
 
-`deploy.sh` installs the units and the sudoers drop-in, which it checks with `visudo` first. It creates `/srv/fb2k`, the `Musica` symlink, and the empty `foo_jean-test/` tree if any of them are missing, and restarts the display stack **only when a unit actually changed**. When it does restart, it stops foobar2000 before touching Xvfb - the order is load-bearing and the script says why.
+`deploy.sh` installs the units and the sudoers drop-in, which it checks with `visudo` first. It creates `/srv/fb2k`, the `Musica` symlink, and the empty `foo_jean-test/` tree if any of them are missing, and restarts the display stack **only when one of its own three units changed**. When it does restart, it stops foobar2000 before touching Xvfb - the order is load-bearing and the script says why.
+
+For agitha it also installs Debian's `nodejs`, `npm` and `libarchive-tools`, builds the page with a pinned pnpm run through `npx`, and copies the server, `musiclib` and the built page into `/usr/local/lib/agitha` and `/usr/local/lib/musiclib`. The page is installed only after a good build. `agitha.service` is enabled and restarted on every run.
 
 ## Config vs. state, and why almost nothing is in git
 
@@ -58,7 +61,7 @@ The same split the top-level README makes for navi. Config lives here; state liv
 | `~/fb2k-wine/` | the Wine prefix, disposable by design |
 | `/srv/music/` | the library |
 
-So this directory is a few KB of units and shell, and holds no secret.
+So this directory is units, shell, the engine and the page source, and holds no secret.
 
 **That split leaves a hole, and `fb2k-backup.sh` fills it.** `metadb.sqlite` is where every play count, rating and date-added lives, and it is in neither git nor anything else. The backup runs daily, keeps fifteen, and is mode 600 because `config.sqlite` carries a credential.
 

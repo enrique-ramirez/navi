@@ -1,0 +1,615 @@
+{
+  "id": "c1c1c1c1-0000-4000-8000-000000000001",
+  "title": "Works",
+  "status": "Official",
+  "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+  "quality": "normal",
+  "date": "1999-12-18",
+  "country": "JP",
+  "barcode": "",
+  "asin": null,
+  "disambiguation": "",
+  "packaging": null,
+  "packaging-id": null,
+  "text-representation": {
+    "language": "jpn",
+    "script": "Latn"
+  },
+  "cover-art-archive": {
+    "artwork": false,
+    "count": 0,
+    "front": false,
+    "back": false,
+    "darkened": false
+  },
+  "release-events": [],
+  "relations": [
+    {
+      "type": "composer",
+      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": [],
+      "attribute-ids": {},
+      "attribute-values": {},
+      "begin": null,
+      "end": null,
+      "ended": false,
+      "source-credit": "",
+      "target-credit": "",
+      "artist": {
+        "id": "c5c5c5c5-0000-4000-8000-000000000008",
+        "name": "Rhea Release",
+        "sort-name": "Release, Rhea",
+        "type": "Person",
+        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+        "country": "JP",
+        "disambiguation": ""
+      }
+    }
+  ],
+  "media": [
+    {
+      "position": 1,
+      "format": "CD",
+      "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+      "title": "",
+      "track-count": 4,
+      "track-offset": 0,
+      "tracks": [
+        {
+          "id": "c2c2c2c2-0000-4000-8000-000000000001",
+          "number": "1",
+          "position": 1,
+          "title": "Scars of Time",
+          "length": 1000,
+          "recording": {
+            "id": "c4c4c4c4-0000-4000-8000-000000000001",
+            "title": "Scars of Time",
+            "length": 1000,
+            "video": false,
+            "disambiguation": "",
+            "relations": [
+              {
+                "type": "arranger",
+                "type-id": "22661fb8-cdb7-4f67-8385-b2a8be6c9f0d",
+                "target-type": "artist",
+                "direction": "backward",
+                "attributes": [],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "artist": {
+                  "id": "118bf512-9ce9-42a5-95e0-10359bb3e3ea",
+                  "name": "光田康典",
+                  "sort-name": "Mitsuda, Yasunori",
+                  "type": "Person",
+                  "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                  "country": "JP",
+                  "disambiguation": "Japanese composer, musician & sound producer"
+                }
+              },
+              {
+                "type": "performance",
+                "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                "target-type": "work",
+                "direction": "forward",
+                "attributes": [],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "work": {
+                  "id": "c3c3c3c3-0000-4000-8000-000000000001",
+                  "title": "CHRONO CROSS～時の傷痕～",
+                  "type": "Song",
+                  "type-id": "f061270a-2fd6-32f1-a641-f0f8676d14e6",
+                  "language": null,
+                  "languages": [],
+                  "iswcs": [],
+                  "attributes": [],
+                  "disambiguation": "",
+                  "relations": [
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "118bf512-9ce9-42a5-95e0-10359bb3e3ea",
+                        "name": "光田康典",
+                        "sort-name": "Mitsuda, Yasunori",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": "Japanese composer, musician & sound producer"
+                      }
+                    },
+                    {
+                      "type": "arrangement",
+                      "type-id": "51975ed8-bbfa-486b-9f28-5947f4370299",
+                      "target-type": "work",
+                      "direction": "forward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "work": {
+                        "id": "c3c3c3c3-0000-4000-8000-0000000000ff",
+                        "title": "Time's Scar (arrangement)",
+                        "type": "Song",
+                        "type-id": "f061270a-2fd6-32f1-a641-f0f8676d14e6",
+                        "language": null,
+                        "languages": [],
+                        "iswcs": [],
+                        "attributes": [],
+                        "disambiguation": ""
+                      }
+                    },
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000002",
+                        "name": "下村陽子",
+                        "sort-name": "Shimomura, Yoko",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    },
+                    {
+                      "type": "lyricist",
+                      "type-id": "3e48faba-ec01-47fd-8e89-30e81161661c",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "118bf512-9ce9-42a5-95e0-10359bb3e3ea",
+                        "name": "光田康典",
+                        "sort-name": "Mitsuda, Yasunori",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": "Japanese composer, musician & sound producer"
+                      }
+                    },
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [
+                        "additional"
+                      ],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "118bf512-9ce9-42a5-95e0-10359bb3e3ea",
+                        "name": "光田康典",
+                        "sort-name": "Mitsuda, Yasunori",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": "Japanese composer, musician & sound producer"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "instrument",
+                "type-id": "59054b12-01ac-43ee-a618-285fd397e461",
+                "target-type": "artist",
+                "direction": "backward",
+                "attributes": [
+                  "percussion"
+                ],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "artist": {
+                  "id": "c5c5c5c5-0000-4000-8000-000000000007",
+                  "name": "藤井珠緒",
+                  "sort-name": "Fujii, Tamao",
+                  "type": "Person",
+                  "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                  "country": "JP",
+                  "disambiguation": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c2c2c2c2-0000-4000-8000-000000000002",
+          "number": "2",
+          "position": 2,
+          "title": "Medley",
+          "length": 1000,
+          "recording": {
+            "id": "c4c4c4c4-0000-4000-8000-000000000002",
+            "title": "Medley",
+            "length": 1000,
+            "video": false,
+            "disambiguation": "",
+            "relations": [
+              {
+                "type": "performance",
+                "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                "target-type": "work",
+                "direction": "forward",
+                "attributes": [
+                  "medley"
+                ],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "work": {
+                  "id": "c3c3c3c3-0000-4000-8000-000000000002",
+                  "title": "Medley Part One",
+                  "type": "Song",
+                  "type-id": "f061270a-2fd6-32f1-a641-f0f8676d14e6",
+                  "language": null,
+                  "languages": [],
+                  "iswcs": [],
+                  "attributes": [],
+                  "disambiguation": "",
+                  "relations": [
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000003",
+                        "name": "Kenji Ito",
+                        "sort-name": "Ito, Kenji",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "performance",
+                "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                "target-type": "work",
+                "direction": "forward",
+                "attributes": [
+                  "medley"
+                ],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "work": {
+                  "id": "c3c3c3c3-0000-4000-8000-000000000003",
+                  "title": "Medley Part Two",
+                  "type": "Song",
+                  "type-id": "f061270a-2fd6-32f1-a641-f0f8676d14e6",
+                  "language": null,
+                  "languages": [],
+                  "iswcs": [],
+                  "attributes": [],
+                  "disambiguation": "",
+                  "relations": [
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000004",
+                        "name": "Hiroki Kikuta",
+                        "sort-name": "Kikuta, Hiroki",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    },
+                    {
+                      "type": "writer",
+                      "type-id": "a255bca1-b157-4518-9108-7b147dc3fc68",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000005",
+                        "name": "Wanda Writer",
+                        "sort-name": "Writer, Wanda",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    },
+                    {
+                      "type": "composer",
+                      "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000003",
+                        "name": "Kenji Ito",
+                        "sort-name": "Ito, Kenji",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c2c2c2c2-0000-4000-8000-000000000003",
+          "number": "3",
+          "position": 3,
+          "title": "Written",
+          "length": 1000,
+          "recording": {
+            "id": "c4c4c4c4-0000-4000-8000-000000000003",
+            "title": "Written",
+            "length": 1000,
+            "video": false,
+            "disambiguation": "",
+            "relations": [
+              {
+                "type": "performance",
+                "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+                "target-type": "work",
+                "direction": "forward",
+                "attributes": [],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "work": {
+                  "id": "c3c3c3c3-0000-4000-8000-000000000004",
+                  "title": "Written, Not Composed",
+                  "type": "Song",
+                  "type-id": "f061270a-2fd6-32f1-a641-f0f8676d14e6",
+                  "language": null,
+                  "languages": [],
+                  "iswcs": [],
+                  "attributes": [],
+                  "disambiguation": "",
+                  "relations": [
+                    {
+                      "type": "writer",
+                      "type-id": "a255bca1-b157-4518-9108-7b147dc3fc68",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000005",
+                        "name": "Wanda Writer",
+                        "sort-name": "Writer, Wanda",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    },
+                    {
+                      "type": "lyricist",
+                      "type-id": "3e48faba-ec01-47fd-8e89-30e81161661c",
+                      "target-type": "artist",
+                      "direction": "backward",
+                      "attributes": [],
+                      "attribute-ids": {},
+                      "attribute-values": {},
+                      "begin": null,
+                      "end": null,
+                      "ended": false,
+                      "source-credit": "",
+                      "target-credit": "",
+                      "artist": {
+                        "id": "c5c5c5c5-0000-4000-8000-000000000006",
+                        "name": "Lyle Lyricist",
+                        "sort-name": "Lyricist, Lyle",
+                        "type": "Person",
+                        "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                        "country": "JP",
+                        "disambiguation": ""
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "arranger",
+                "type-id": "22661fb8-cdb7-4f67-8385-b2a8be6c9f0d",
+                "target-type": "artist",
+                "direction": "backward",
+                "attributes": [],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "artist": {
+                  "id": "c5c5c5c5-0000-4000-8000-000000000004",
+                  "name": "Hiroki Kikuta",
+                  "sort-name": "Kikuta, Hiroki",
+                  "type": "Person",
+                  "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                  "country": "JP",
+                  "disambiguation": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c2c2c2c2-0000-4000-8000-000000000004",
+          "number": "4",
+          "position": 4,
+          "title": "Unlinked",
+          "length": 1000,
+          "recording": {
+            "id": "c4c4c4c4-0000-4000-8000-000000000004",
+            "title": "Unlinked",
+            "length": 1000,
+            "video": false,
+            "disambiguation": "",
+            "relations": [
+              {
+                "type": "arranger",
+                "type-id": "22661fb8-cdb7-4f67-8385-b2a8be6c9f0d",
+                "target-type": "artist",
+                "direction": "backward",
+                "attributes": [],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "artist": {
+                  "id": "c5c5c5c5-0000-4000-8000-000000000003",
+                  "name": "Kenji Ito",
+                  "sort-name": "Ito, Kenji",
+                  "type": "Person",
+                  "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                  "country": "JP",
+                  "disambiguation": ""
+                }
+              },
+              {
+                "type": "instrument",
+                "type-id": "59054b12-01ac-43ee-a618-285fd397e461",
+                "target-type": "artist",
+                "direction": "backward",
+                "attributes": [
+                  "percussion"
+                ],
+                "attribute-ids": {},
+                "attribute-values": {},
+                "begin": null,
+                "end": null,
+                "ended": false,
+                "source-credit": "",
+                "target-credit": "",
+                "artist": {
+                  "id": "c5c5c5c5-0000-4000-8000-000000000007",
+                  "name": "藤井珠緒",
+                  "sort-name": "Fujii, Tamao",
+                  "type": "Person",
+                  "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+                  "country": "JP",
+                  "disambiguation": ""
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+:root {
+	--bg: oklch(0.18 0.012 60);
+	--surface: oklch(0.22 0.014 60);
+	--surface-raised: oklch(0.26 0.016 60);
+	--border: oklch(0.31 0.018 60);
+	--text: oklch(0.94 0.008 80);
+	--muted: oklch(0.7 0.02 70);
+	--faint: oklch(0.54 0.018 65);
+
+	--accent: oklch(0.75 0.15 48);
+	--accent-quiet: oklch(0.75 0.15 48 / 0.16);
+	--on-accent: oklch(0.2 0.02 50);
+	--danger: oklch(0.68 0.17 26);
+	--caution: oklch(0.8 0.15 85);
+	--positive: oklch(0.74 0.13 155);
+	--shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-6: 24px;
+	--space-8: 32px;
+
+	--radius: 14px;
+	--radius-sm: 8px;
+	--radius-pill: 999px;
+
+	--topbar-height: 56px;
+
+	--font:
+		"Rethink Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-numeric: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+	color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+	--bg: oklch(0.985 0.005 90);
+	--surface: oklch(0.965 0.008 85);
+	--surface-raised: oklch(0.99 0.004 90);
+	--border: oklch(0.9 0.01 80);
+	--text: oklch(0.26 0.02 60);
+	--muted: oklch(0.5 0.02 65);
+	--faint: oklch(0.62 0.018 65);
+
+	--accent: oklch(0.56 0.16 45);
+	--accent-quiet: oklch(0.56 0.16 45 / 0.12);
+	--on-accent: oklch(0.985 0.005 90);
+	--danger: oklch(0.53 0.2 27);
+	--caution: oklch(0.6 0.15 70);
+	--positive: oklch(0.5 0.13 155);
+	--shadow:
+		0 1px 2px oklch(0.4 0.03 60 / 0.1), 0 8px 24px oklch(0.4 0.03 60 / 0.1);
+
+	color-scheme: light;
+}

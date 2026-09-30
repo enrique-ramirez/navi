@@ -33,7 +33,7 @@ DISC_NUMBER_KEY = {"id3": "TPOS", "vorbis": "discnumber", "mp4": "disk", "asf": 
 TRACK_TOTAL_KEY = {"vorbis": "tracktotal"}
 DISC_TOTAL_KEY = {"vorbis": "disctotal"}
 
-_DISC_FOLDER = re.compile(r"^(?:cd|disc|disk)\s*(\d+)(?:[\s_.:-].*)?$", re.IGNORECASE)
+DISC_FOLDER = re.compile(r"^(?:cd|disc|disk)\s*(\d+)(?:[\s_.:-].*)?$", re.IGNORECASE)
 _LEADING_NUMBER = re.compile(r"\d+")
 
 
@@ -88,7 +88,7 @@ def _leading_number(track: files.Track, key_map: dict[str, str]) -> int | None:
 def _folder_medium(track: files.Track, album_path: Path) -> int | None:
     rel = Path(track.path).relative_to(album_path)
     if len(rel.parts) == 2:
-        match = _DISC_FOLDER.match(rel.parts[0])
+        match = DISC_FOLDER.match(rel.parts[0])
         if match:
             return int(match.group(1))
     return None

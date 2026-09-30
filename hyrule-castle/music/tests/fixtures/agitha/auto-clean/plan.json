@@ -1,0 +1,511 @@
+{
+ "albums": [
+  {
+   "candidates": [
+    {
+     "artist": "Clean Band",
+     "country": "GB",
+     "date": "2010-05-24",
+     "duration_diff": 0.45599999999999974,
+     "format": "CD",
+     "matches_counts": true,
+     "release_id": "6f1a2b3c-0000-4000-8000-000100000001",
+     "thumbnail": "https://coverartarchive.org/release/6f1a2b3c-0000-4000-8000-000100000001/front-250",
+     "title": "Clean Album",
+     "track_counts": [
+      3
+     ]
+    }
+   ],
+   "changes": [
+    "move: drop/album/Clean Album/01 one.mp3 -> C/Clean Band/(2010) Clean Album/01. One.mp3",
+    "tags: drop/album/Clean Album/01 one.mp3: does not match its planned target",
+    "cover: drop/album/Clean Album/01 one.mp3: embedded picture does not match the plan",
+    "move: drop/album/Clean Album/02 two.mp3 -> C/Clean Band/(2010) Clean Album/02. Two.mp3",
+    "tags: drop/album/Clean Album/02 two.mp3: does not match its planned target",
+    "cover: drop/album/Clean Album/02 two.mp3: embedded picture does not match the plan",
+    "move: drop/album/Clean Album/03 three.mp3 -> C/Clean Band/(2010) Clean Album/03. Three.mp3",
+    "tags: drop/album/Clean Album/03 three.mp3: does not match its planned target",
+    "cover: drop/album/Clean Album/03 three.mp3: embedded picture does not match the plan",
+    "delete: drop/album/Clean Album/cover.jpg"
+   ],
+   "decision": null,
+   "deletions": [
+    "drop/album/Clean Album/cover.jpg"
+   ],
+   "destination": "C/Clean Band/(2010) Clean Album",
+   "extras": [],
+   "fields": {
+    "1-1": {
+     "album": [
+      "Clean Album"
+     ],
+     "albumartist": [
+      "Clean Band"
+     ],
+     "albumartistsort": [
+      "Clean Band"
+     ],
+     "artist": [
+      "Clean Band"
+     ],
+     "artistsort": [
+      "Clean Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "One"
+     ]
+    },
+    "1-2": {
+     "album": [
+      "Clean Album"
+     ],
+     "albumartist": [
+      "Clean Band"
+     ],
+     "albumartistsort": [
+      "Clean Band"
+     ],
+     "artist": [
+      "Clean Band"
+     ],
+     "artistsort": [
+      "Clean Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Two"
+     ]
+    },
+    "1-3": {
+     "album": [
+      "Clean Album"
+     ],
+     "albumartist": [
+      "Clean Band"
+     ],
+     "albumartistsort": [
+      "Clean Band"
+     ],
+     "artist": [
+      "Clean Band"
+     ],
+     "artistsort": [
+      "Clean Band"
+     ],
+     "asin": [
+      "B003FMTHVS"
+     ],
+     "barcode": [
+      "600753279578"
+     ],
+     "catalognumber": [
+      "FIXH 14"
+     ],
+     "date": [
+      "2010-05-24"
+     ],
+     "genre": [
+      "rock"
+     ],
+     "label": [
+      "Fiction Records"
+     ],
+     "media": [
+      "CD"
+     ],
+     "originaldate": [
+      "1989-05-02"
+     ],
+     "releasecountry": [
+      "GB"
+     ],
+     "title": [
+      "Three"
+     ]
+    }
+   },
+   "files": [
+    {
+     "after": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "One"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPE2": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TSO2": [
+       "Clean Band"
+      ],
+      "TSOP": [
+       "Clean Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000001"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100010001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100010002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "one"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "1/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ]
+     },
+     "destination": "C/Clean Band/(2010) Clean Album/01. One.mp3",
+     "position": "1-1",
+     "source": "drop/album/Clean Album/01 one.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Two"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPE2": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TSO2": [
+       "Clean Band"
+      ],
+      "TSOP": [
+       "Clean Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000001"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100020001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100020002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "two"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "2/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ]
+     },
+     "destination": "C/Clean Band/(2010) Clean Album/02. Two.mp3",
+     "position": "1-2",
+     "source": "drop/album/Clean Album/02 two.mp3"
+    },
+    {
+     "after": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TCON": [
+       "rock"
+      ],
+      "TDOR": [
+       "1989-05-02"
+      ],
+      "TDRC": [
+       "2010-05-24"
+      ],
+      "TIT2": [
+       "Three"
+      ],
+      "TMED": [
+       "CD"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPE2": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TPUB": [
+       "Fiction Records"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TSO2": [
+       "Clean Band"
+      ],
+      "TSOP": [
+       "Clean Band"
+      ],
+      "TXXX:ASIN": [
+       "B003FMTHVS"
+      ],
+      "TXXX:BARCODE": [
+       "600753279578"
+      ],
+      "TXXX:CATALOGNUMBER": [
+       "FIXH 14"
+      ],
+      "TXXX:MusicBrainz Album Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ],
+      "TXXX:MusicBrainz Album Release Country": [
+       "GB"
+      ],
+      "TXXX:MusicBrainz Artist Id": [
+       "6f1a2b3c-0000-4000-8000-000300000001"
+      ],
+      "TXXX:MusicBrainz Release Group Id": [
+       "6f1a2b3c-0000-4000-8000-000200000001"
+      ],
+      "TXXX:MusicBrainz Release Track Id": [
+       "2b0c0d0e-0000-4000-8000-000100030001"
+      ],
+      "UFID:http://musicbrainz.org": [
+       "3c0d0e0f-0000-4000-8000-000100030002"
+      ]
+     },
+     "before": {
+      "TALB": [
+       "Clean Album"
+      ],
+      "TDRC": [
+       "1989"
+      ],
+      "TIT2": [
+       "three"
+      ],
+      "TPE1": [
+       "Clean Band"
+      ],
+      "TPOS": [
+       "1/1"
+      ],
+      "TRCK": [
+       "3/3"
+      ],
+      "TXXX:MusicBrainz Album Id": [
+       "6f1a2b3c-0000-4000-8000-000100000001"
+      ]
+     },
+     "destination": "C/Clean Band/(2010) Clean Album/03. Three.mp3",
+     "position": "1-3",
+     "source": "drop/album/Clean Album/03 three.mp3"
+    }
+   ],
+   "game": null,
+   "game_choice": false,
+   "holds": [],
+   "images": {
+    "cover.jpg": {
+     "length": 25535,
+     "sha256": "8b791ddbb1e1889ea07a4e3b49046d9134e824a242422febcd74841770dd782e"
+    }
+   },
+   "inputs": {
+    "chosen": false,
+    "composer": true,
+    "edits": {},
+    "owner_input": {
+     "soundtracks": {}
+    },
+    "release_id": "6f1a2b3c-0000-4000-8000-000100000001",
+    "status": "certain"
+   },
+   "kept": [],
+   "owner_edits": {},
+   "plan_digest": "0f9191a24aa3b17b34249e5df8b367c681c8ac19be2594bdf0cb0ffc902f135e",
+   "release_id": "6f1a2b3c-0000-4000-8000-000100000001",
+   "residue": [],
+   "source": "drop/album/Clean Album",
+   "state": "auto",
+   "status": "certain"
+  }
+ ],
+ "job": "agitha-20260929-210000-01",
+ "root": "/srv/music/inbox/20260929-210000/01"
+}

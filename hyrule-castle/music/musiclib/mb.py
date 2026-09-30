@@ -70,6 +70,10 @@ class MusicBrainzError(Exception):
     """MusicBrainz answered, but not with something usable."""
 
 
+class MusicBrainzNotFound(MusicBrainzError):
+    """MusicBrainz answered 404: it has no such record."""
+
+
 class MusicBrainzUnavailable(MusicBrainzError):
     """Five failures in a row, of any retryable kind: MusicBrainz itself is
     down, or unreachable, not this one lookup."""
@@ -152,7 +156,7 @@ class MusicBrainz:
         # `MusicBrainzError` below.
         body = self.cache.fetch(url, fetch)
         if body == _NOT_FOUND:
-            raise MusicBrainzError(f"musicbrainz: {url} -> 404")
+            raise MusicBrainzNotFound(f"musicbrainz: {url} -> 404")
         return body
 
     def release(self, mbid: str) -> dict:
@@ -164,6 +168,14 @@ class MusicBrainz:
 
     def release_relations(self, mbid: str) -> dict:
         url = f"{_BASE}/release/{mbid}?inc=release-rels&fmt=json"
+        return json.loads(self._get(url))
+
+    def release_works(self, mbid: str) -> dict:
+        """The release's recordings with the works they perform and those works' relationships."""
+        url = (
+            f"{_BASE}/release/{mbid}"
+            "?inc=recordings+recording-level-rels+work-rels+work-level-rels+artist-rels&fmt=json"
+        )
         return json.loads(self._get(url))
 
     def latin_releases(self, release: dict) -> list[dict]:

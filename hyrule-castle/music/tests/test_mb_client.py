@@ -475,5 +475,44 @@ class ArtistLookup(ClientTestCase):
         )
 
 
+#: A release's recordings with the works they perform and each work's
+#: composers, lyricists and writers: the answer `tests.test_composer` plans from.
+WORKS = (FIXTURES / "release-works.json").read_bytes()
+WORKS_URL = ("https://musicbrainz.org/ws/2/release/{mbid}"
+             "?inc=recordings+recording-level-rels+work-rels+work-level-rels+artist-rels&fmt=json")
+
+
+class WorkRelations(ClientTestCase):
+    def test_the_work_relations_lookup_asks_its_own_url_once_and_answers_warm_from_the_cache(self) -> None:
+        # A new client over the same cache, with a transport
+        # that fails on any request, shows the answer was kept.
+        client, transport = self.client((200, WORKS))
+        self.assertEqual(client.release_works(RELEASE_MBID), json.loads(WORKS))
+        [request] = transport.requests
+        self.assertEqual(request.url, WORKS_URL.format(mbid=RELEASE_MBID))
+
+        warm, transport = self.client()
+        self.assertEqual(warm.release_works(RELEASE_MBID), json.loads(WORKS))
+        self.assertEqual(transport.requests, [])
+
+    def test_a_release_and_its_work_relations_are_two_lookups_and_neither_answers_for_the_other(self) -> None:
+        # Folding the relations into the release lookup would change the URL
+        # every cached release is kept under, and the library would be fetched
+        # again at one release a second.
+        cold, transport = self.client((200, RELEASE), (200, WORKS))
+        self.assertEqual(cold.release(RELEASE_MBID), json.loads(RELEASE))
+        self.assertEqual(cold.release_works(RELEASE_MBID), json.loads(WORKS))
+        self.assertEqual([r.url for r in transport.requests], [
+            f"https://musicbrainz.org/ws/2/release/{RELEASE_MBID}"
+            "?inc=artist-credits+labels+media+recordings+release-groups&fmt=json",
+            WORKS_URL.format(mbid=RELEASE_MBID),
+        ])
+
+        warm, transport = self.client()
+        self.assertEqual(warm.release(RELEASE_MBID), json.loads(RELEASE))
+        self.assertEqual(warm.release_works(RELEASE_MBID), json.loads(WORKS))
+        self.assertEqual(transport.requests, [])
+
+
 if __name__ == "__main__":
     unittest.main()

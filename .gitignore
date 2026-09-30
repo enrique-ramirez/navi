@@ -21,3 +21,7 @@ _tmp/
 
 __pycache__/
 .DS_Store
+
+node_modules/
+hyrule-castle/music/agitha/ui/dist/
+hyrule-castle/music/agitha/ui/.vitest/

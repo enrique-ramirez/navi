@@ -47,7 +47,7 @@ def _batch_identify(args: argparse.Namespace) -> int:
     job = Job(Path(args.job))
     memory = Path(args.memory) if args.memory else default_memory(job)
     rejudge = Path(args.rejudge) if args.rejudge else None
-    return run(Path(args.root), job, memory, list(args.reopen or []), rejudge=rejudge)
+    return run(Path(args.root), job, memory, list(args.reopen or []), rejudge=rejudge, composer=not args.no_composer)
 
 
 def _batch_apply(args: argparse.Namespace) -> int:
@@ -83,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     identify_parser.add_argument("--reopen", action="append", default=[], metavar="PATH")
     identify_parser.add_argument("--rejudge", metavar="ORIGINAL",
                                  help="judge the albums a job tagged again from their original tags and covers under ORIGINAL")
+    identify_parser.add_argument("--no-composer", action="store_true",
+                                 help="make no work relationship lookup and leave every file's composer tags as they are")
 
     apply_parser = batch_subparsers.add_parser("apply", help="write the auto-apply and accepted albums")
     apply_parser.add_argument("--job", required=True, metavar="DIR")

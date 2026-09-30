@@ -6,17 +6,21 @@ that lead to the same album, an unknown action, a repoint the engine's own
 (`not game music` from before reads as `soundtrack`), an `accept` with no
 `release_id`, an `accept` whose `edits` is not an object of objects of lists,
 an edit to a field the page never offers or at a position the album does
-not have, or JSON that does not parse: any of these refuses the file entire, naming
-every offence found rather than only the first, so the owner does not
-re-export once per problem.
+not have, an owner `cover` that is not a relative path inside the job, or
+JSON that does not parse: any of these refuses the file entire, naming every
+offence found rather than only the first, so the owner does not re-export
+once per problem.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import PurePosixPath
 
-from musiclib import mapping
+from mutagen.id3 import Frames, PairedTextFrame, TextFrame
+
+from musiclib import files, mapping, tagwrite
 from musiclib.batch import job as job_module
 from musiclib.batch.job import Job
 from musiclib.batch.memory import NOT_GAME_MUSIC
@@ -31,6 +35,19 @@ _GAME_CHOICES = {VIDEO_GAME_MUSIC, SOUNDTRACK, NEITHER, NOT_GAME_MUSIC}
 ID_FIELDS = {"release id", "release group id", "recording id", "release track id",
              "artist id", "album artist id"}
 _OFFERED_FIELDS = set(mapping.PICARD) - ID_FIELDS
+
+#: Raw keys of each family that hold a rating besides what `tagwrite.is_rating_key`
+#: knows, and those that hold a picture. Compared case-folded.
+_RATINGS = {"mp4": {"----:com.apple.itunes:rating", "----:com.apple.itunes:fmps_rating", "rate"},
+            "asf": {"wm/shareduserrating", "fmps_rating"}}
+_BINARY = {"vorbis": {"metadata_block_picture"}, "mp4": {"covr"}, "asf": {"wm/picture"}}
+_ID3_BINARY = {"APIC", "GEOB", "PRIV"}
+_ID3_KEYED = ("TXXX", "COMM", "USLT")
+
+#: MP4 atoms whose value is a number, a flag or a pair rather than text, so
+#: no list of strings writes them.
+_MP4_NOT_TEXT = {"tmpo", "cpil", "rtng", "stik", "gnre", "trkn", "disk", "pgap", "hdvd", "shwm", "pcst",
+                 "plID", "cnID", "atID", "geID", "cmID", "sfID", "akID"}
 
 
 class DecisionsRejected(Exception):
@@ -82,15 +99,65 @@ def _known_albums(albums: list[dict], applied: dict[str, str]) -> set[str]:
 
 
 def _is_edits_shape(edits) -> bool:
-    """Whether `edits` is `{"<position>": {"<field>": [<value>, ...]}}` all the way down."""
+    """Whether `edits` is `{"<position>": {"<field or raw key>": [<value>, ...] | null}}` all the way down."""
     if not isinstance(edits, dict):
         return False
     for fields in edits.values():
         if not isinstance(fields, dict):
             return False
-        if not all(isinstance(values, list) for values in fields.values()):
+        if not all(values is None or isinstance(values, list) for values in fields.values()):
             return False
     return True
+
+
+def _is_id3_text_frame(key: str) -> bool:
+    """Whether `key` is a bare text frame `tagwrite` builds from a list of values."""
+    frame = Frames.get(key)
+    return (frame is not None and issubclass(frame, TextFrame) and not issubclass(frame, PairedTextFrame)
+            and key != "TXXX")
+
+
+def _raw_key_offence(family: str, key: str) -> str | None:
+    """Why an owner may not set or remove `key`, a raw key of `family`, or `None`.
+
+    Names are compared case-folded: a Vorbis field name has no case, and an
+    ID or rating spelled another way is still one.
+    """
+    folded = key.casefold()
+    for field in ID_FIELDS:
+        if (real := mapping.PICARD[field].get(family)) and real.casefold() == folded:
+            return "is a MusicBrainz ID"
+    if tagwrite.is_rating_key(family, folded if family == "vorbis" else key) or folded in _RATINGS.get(family, ()):
+        return "is a rating"
+    if family == "id3":
+        frame_id = key.split(":", 1)[0]
+        if frame_id in _ID3_BINARY:
+            return "is a binary frame"
+        if ":" in key and frame_id in _ID3_KEYED or _is_id3_text_frame(key):
+            return None
+        return "is not a text frame this engine can write"
+    if folded in _BINARY.get(family, ()):
+        return "is a binary tag"
+    if family == "vorbis" and not (key and key.isascii() and all(" " <= c <= "}" and c != "=" for c in key)):
+        return "is not a Vorbis field name"
+    if family == "mp4" and not key.startswith("----:"):
+        if len(key) != 4:
+            return "is neither four characters nor a ----: atom"
+        if key in _MP4_NOT_TEXT:
+            return "is not a text atom"
+    return None
+
+
+def _cover_offence(job: Job, cover) -> str | None:
+    """Why `cover` cannot name an image inside the job, or `None`. Whether the file exists is not asked."""
+    if not isinstance(cover, str):
+        return f"cover must be a path inside the job, not {cover!r}"
+    path = PurePosixPath(cover)
+    if not cover or path.is_absolute() or ".." in path.parts:
+        return f"cover {cover!r} must be a relative path inside the job, without '..'"
+    if not (job.path / cover).resolve().is_relative_to(job.path.resolve()):
+        return f"cover {cover!r} leads outside the job"
+    return None
 
 
 def read(job: Job) -> dict | None:
@@ -144,6 +211,8 @@ def read(job: Job) -> dict | None:
         elif action == "accept":
             if not decision.get("release_id"):
                 offences.append(f"{key!r}: an accept needs a release_id")
+            if decision.get("cover") is not None and (offence := _cover_offence(job, decision["cover"])):
+                offences.append(f"{key!r}: {offence}")
             game = decision.get("game")
             entry = by_source.get(key) or by_source.get(follow_moves(key, applied)) or {}
             if game is not None and game not in _GAME_CHOICES:
@@ -153,13 +222,20 @@ def read(job: Job) -> dict | None:
                 offences.append(f"{key!r}: edits must be positions of fields of lists, not {edits!r}")
                 continue
             positions = set(entry.get("fields") or {})
+            families = {planned.get("position"):
+                        files.FAMILY_BY_EXTENSION.get(PurePosixPath(planned.get("source", "")).suffix.lower())
+                        for planned in entry.get("files") or []}
             for position, fields in (edits or {}).items():
                 if position not in positions:
                     offences.append(f"{key!r}: {position!r} is not a position this album has")
                     continue
                 for field in fields:
-                    if field not in _OFFERED_FIELDS:
+                    if field in _OFFERED_FIELDS:
+                        continue
+                    if field in ID_FIELDS or not (family := families.get(position)):
                         offences.append(f"{key!r}: {field!r} is not a field the page offers")
+                    elif offence := _raw_key_offence(family, field):
+                        offences.append(f"{key!r}: {position!r}: {field!r} {offence}")
 
     if offences:
         raise DecisionsRejected("; ".join(offences))

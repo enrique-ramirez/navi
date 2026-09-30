@@ -99,6 +99,20 @@ def _size(data: bytes) -> tuple[int, int]:
         return image.size
 
 
+def cover_check(data: bytes) -> tuple[int, int, bool, str | None]:
+    """Width, height, whether `data` passes the cover test, and where not, one sentence on how it fails.
+
+    Raises `OSError` where `data` is not an image.
+    """
+    width, height = _size(data)
+    problems = []
+    if not (10 * width >= 9 * height and 10 * width <= 11 * height):
+        problems.append("its width and height differ by more than 10 %")
+    if min(width, height) < 500:
+        problems.append("its shorter side is under 500 px")
+    return width, height, not problems, ("The cover is " + " and ".join(problems) + ".") if problems else None
+
+
 def average_hash(data: bytes) -> int:
     """The 64-bit average hash of an image: one bit per pixel of its 8 by 8 grey thumbnail, set above the mean."""
     with Image.open(io.BytesIO(data)) as image:
@@ -205,6 +219,7 @@ def plan_images(
     group_images: Callable[[], list[dict]] | None = None,
     local: Sequence[tuple[str, bytes]] = (),
     existing: Mapping[str, bytes] | None = None,
+    owner_cover: bytes | None = None,
 ) -> ImagePlan:
     """The album's image files, from the Cover Art Archive's list for the release.
 
@@ -222,6 +237,10 @@ def plan_images(
     `existing` maps the album folder's file names to their bytes. An archive
     image other than the cover is not saved when its bytes, as they would be
     written, are a file in `existing` or an image saved before it.
+
+    `owner_cover`, an image the owner chose (any format Pillow reads), is
+    `cover.jpg` whatever the archive has and whether or not it passes; a local
+    cover it replaces is consumed as it would have been without it.
     """
     existing = existing or {}
     downloads: dict[str, bytes] = {}
@@ -271,7 +290,7 @@ def plan_images(
             chosen, holds = _local_over_archive(front, cover, candidates)
     elif candidates:
         chosen = next((c for c in candidates if passes(*_size(c[1]))), candidates[0])
-    else:
+    elif owner_cover is None:
         problems.append(
             "no front cover: not in the Cover Art Archive for the release or its release group, "
             "and no cover image in the folder")
@@ -281,6 +300,9 @@ def plan_images(
         # `front.*` is usually a scan of the booklet and is the owner's: copied, never consumed.
         if chosen[0].casefold() != "cover.jpg" and Path(chosen[0]).stem.casefold() != "front":
             consumed = chosen[0]
+    if owner_cover is not None:
+        cover = _as_jpeg(owner_cover)
+        holds = []
     if cover is not None:
         files["cover.jpg"] = cover
 
