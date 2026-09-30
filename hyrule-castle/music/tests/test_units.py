@@ -353,6 +353,38 @@ class Disagreement(UnitsTestCase):
         self.assertEqual(len(unit.unreadable), 1)
         self.assertIsNone(unit.status)
 
+    def test_one_albums_discs_told_apart_by_a_suffix_are_one_album(self) -> None:
+        # The Chrono Cross rip: every disc's tracks name the album with their disc on the end.
+        suffixes = {
+            "brackets": ("Chrono Cross (Disc 1)", "Chrono Cross (Disc 2)", "Chrono Cross (Disc 3)"),
+            "square": ("Chrono Cross [Disc 1]", "Chrono Cross [disc 2]", "Chrono Cross [DISC 3]"),
+            "cd": ("Chrono Cross (CD 1)", "Chrono Cross (cd2)", "Chrono Cross (CD 3)"),
+            "dash": ("Chrono Cross - Disc 1", "Chrono Cross - Disc 2", "Chrono Cross - disc 3"),
+            "of": ("Chrono Cross Disc 1 of 3", "Chrono Cross Disc 2 of 3", "Chrono Cross (Disc 3 of 3)"),
+            "some bare": ("Chrono Cross", "Chrono Cross (Disc 2)", "Chrono Cross [CD 3]"),
+        }
+        for name, values in suffixes.items():
+            with self.subTest(name):
+                album = self.album(f"Y/Yasunori Mitsuda/(1999) Chrono Cross {name}")
+                for disc, value in enumerate(values, start=1):
+                    add(album, f"CD{disc}/01. Track.flac", value)
+                [unit] = [u for u in units.units(self.root) if u.rel.endswith(name)]
+                self.assertIsNone(unit.status, unit.reason)
+
+    def test_two_albums_with_disc_suffixes_still_disagree(self) -> None:
+        album = self.album("Y/Yasunori Mitsuda/(1999) Chrono Cross")
+        add(album, "CD1/01. Track.flac", "Chrono Cross (Disc 1)")
+        add(album, "CD2/01. Track.flac", "Chrono Trigger (Disc 2)")
+        unit = self.only_unit()
+        self.assertEqual(unit.status, NEEDS_A_PERSON)
+        self.assertIn("Chrono Trigger (Disc 2)", unit.reason)
+
+    def test_a_disc_word_inside_the_title_is_not_a_suffix(self) -> None:
+        album = self.album("D/Daft Punk/(2001) Discovery")
+        add(album, "01. One More Time.flac", "Discovery")
+        add(album, "02. Aerodynamic.flac", "Discovery (Disc 1) Live")
+        self.assertEqual(self.only_unit().status, NEEDS_A_PERSON)
+
 
 if __name__ == "__main__":
     unittest.main()

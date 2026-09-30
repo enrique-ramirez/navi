@@ -28,6 +28,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote
 
 import mutagen
 from mutagen.id3 import ID3, TIT2
@@ -450,6 +451,36 @@ class AlbumView(unittest.TestCase):
         self.assertEqual(view["tree"], [])
         self.assertEqual(view["extras_to"], [])
         self.assertIsNone(view["cover"])
+
+    def test_an_album_with_no_plan_still_shows_its_files_as_uploaded(self) -> None:
+        uploaded = self.get_json(f"/api/drops/{DROP}/albums/02")["uploaded"]
+        self.assertEqual([f["path"] for f in uploaded], ["01 x.mp3"])
+        self.assertEqual(uploaded[0]["audio_url"], f"/api/drops/{DROP}/albums/02/audio/01%20x.mp3")
+
+    def test_the_uploaded_files_are_every_track_in_path_order_with_its_facts(self) -> None:
+        # The extras album's plan lists its tracks in reverse; `uploaded` is the folder's own order, tracks only.
+        uploaded = self.extras_view["uploaded"]
+        self.assertEqual([f["path"] for f in uploaded], TRACKS)
+        for got, track in zip(uploaded, TRACKS):
+            with self.subTest(track=track):
+                want = truth(self.extras_album / track)
+                self.assertEqual((got["format"], got["family"], got["lossless"], got["bit_depth"]),
+                                 ("MP3", "id3", False, None))
+                self.assertEqual((got["size"], got["bitrate"], got["sample_rate"], got["channels"]),
+                                 (want["size"], want["bitrate"], want["sample_rate"], want["channels"]))
+                self.assertAlmostEqual(got["length"], want["length"], delta=LENGTH_TOLERANCE)
+                self.assertEqual(got["audio_url"], f"/api/drops/{EXTRAS_DROP}/albums/01/audio/{quote(track)}")
+
+    def test_the_uploaded_tags_read_as_the_plans_before_does_pictures_as_kind_and_size(self) -> None:
+        # The picture album's `before` is what the engine read, sized by the view: the same text is expected here.
+        uploaded = self.picture_view["uploaded"]
+        before = {PurePosixPath(f["source"]).name: f["before"] for f in self.picture_view["preview"]["files"]}
+        for got in uploaded[:2]:
+            with self.subTest(path=got["path"]):
+                pictures = {k: v for k, v in got["tags"].items() if k.startswith("APIC:")}
+                self.assertTrue(pictures)
+                self.assertEqual(pictures, {k: v for k, v in before[got["path"]].items() if k.startswith("APIC:")})
+                self.assertEqual(got["tags"]["TIT2"], [got["path"]])
 
     def test_an_unknown_album_or_drop_is_404_json_with_an_error(self) -> None:
         for path in (f"/api/drops/{DROP}/albums/09", f"/api/drops/20000101-000000/albums/01"):

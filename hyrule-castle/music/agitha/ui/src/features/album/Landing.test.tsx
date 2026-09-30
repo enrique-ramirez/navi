@@ -51,6 +51,7 @@ function view(
 		decision: null,
 		cover: null,
 		cover_now: null,
+		uploaded: [],
 		duplicate: null,
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		...over,

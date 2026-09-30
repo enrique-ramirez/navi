@@ -10,7 +10,8 @@ the whole result the same way `musiclib check` judges a tree already on disk
 are never held to different rules.
 
 A unit that cannot be planned at all - it needs a person, or a file could not
-be read - comes back as a `Plan` holding only that problem and no files.
+be read - comes back as a `Plan` holding only that problem and no files,
+except the one a person has already settled by naming the release.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from musiclib import ascii as ascii_
 from musiclib import artists, check, composers, files, genres, images, mapping, names
 from musiclib.caa import CoverArtError
 from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzNotFound, MusicBrainzUnavailable
-from musiclib.units import TrackPair, Unit, counted_media, group_media, pair
+from musiclib.units import DISAGREEMENT, NEEDS_A_PERSON, TrackPair, Unit, counted_media, group_media, pair
 
 #: The one instruction every "the archive is unavailable" problem carries:
 #: a 500 or a timeout is not "this release has no images" (only a real,
@@ -340,7 +341,7 @@ def plan_album(
     incoming: str | None = None, status: str | None = None,
     pairs: list[TrackPair] | None = None, edition: str | None = None,
     local: Sequence[tuple[str, bytes]] | None = None, created: Sequence[str] = (),
-    owner_cover: bytes | None = None, composer: bool = True,
+    owner_cover: bytes | None = None, composer: bool = True, chosen: bool = False,
 ) -> Plan:
     """The full intended state of `unit`, planned against `release`.
 
@@ -359,11 +360,16 @@ def plan_album(
     `composer` lays each track's composers from MusicBrainz's work
     relationships over the file's composer tags (`composers`), at one more
     lookup per release. Off, those tags are left as the file has them.
+
+    `chosen` says the owner named `release`: files that disagree on the album
+    tag are then planned as that one release, with the disagreement kept as a
+    hold. Nothing else a unit is stopped for is planned.
     """
     owner_input = owner_input or {}
     root = unit.path.parents[2]
 
-    if unit.status:
+    settled = chosen and unit.status == NEEDS_A_PERSON and (unit.reason or "").startswith(DISAGREEMENT)
+    if unit.status and not settled:
         return _blocked(unit, root, status, [f"{unit.status}: {unit.reason}"])
     if unit.unreadable:
         return _blocked(unit, root, status,
@@ -436,6 +442,8 @@ def plan_album(
         pairs = pair(unit, release)
     file_plans: list[FilePlan] = []
     holds: list[str] = list(image_plan.holds)
+    if settled:
+        holds.append(f"{unit.status}: {unit.reason}")
     suggestions: dict[str, str] = {}
     if pairs is None:
         disk_counts = [len(tracks) for tracks in group_media(unit)]

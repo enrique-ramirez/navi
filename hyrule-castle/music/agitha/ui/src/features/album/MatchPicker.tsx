@@ -4,6 +4,7 @@ import {
 	Disc3,
 	ExternalLink,
 	Link as LinkIcon,
+	Search,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -29,6 +30,19 @@ const RELEASE_URL = new RegExp(
 );
 
 type Translate = ReturnType<typeof useTranslate>["t"];
+
+// What to search MusicBrainz for: the album tag, less any disc marker, or the folder's name.
+function searchTerm(view: AlbumView) {
+	const tags = view.preview?.files[0]?.before ?? view.uploaded?.[0]?.tags ?? {};
+	const album = ["TALB", "album", "©alb", "WM/AlbumTitle"]
+		.map((key) => tags[key]?.[0])
+		.find(Boolean);
+	const raw = album ?? view.name.replace(/[_]+/g, " ");
+	return raw.replace(/\s*[([]?\s*(disc|cd)\s*\d+.*$/i, "").trim();
+}
+
+const searchUrl = (term: string) =>
+	`https://musicbrainz.org/search?type=release&method=indexed&query=${encodeURIComponent(term)}`;
 
 function Thumb({ candidate }: { candidate: Candidate }) {
 	const [failed, setFailed] = useState(false);
@@ -145,11 +159,13 @@ export function MatchPicker({
 		setOpen(false);
 	}
 
+	// A pasted release is chosen outright, as picking it from the list would be.
 	function use() {
 		const release = pasted.trim();
-		if (BARE.test(release) || RELEASE_URL.test(release)) {
+		const id = new RegExp(UUID, "i").exec(release)?.[0]?.toLowerCase();
+		if (id && (BARE.test(release) || RELEASE_URL.test(release))) {
 			setRefused(false);
-			pending.setRepoint(release);
+			pending.setCandidate(id);
 			setPasted("");
 			setOpen(false);
 		} else {
@@ -209,7 +225,16 @@ export function MatchPicker({
 	return (
 		<section className={styles.picker} aria-labelledby={`${panelId}-title`}>
 			<h3 id={`${panelId}-title`} className={styles.label}>
-				{t("match.title")}
+				<a
+					className={styles.search}
+					href={searchUrl(searchTerm(view))}
+					target="_blank"
+					rel="noreferrer"
+					title={t("match.search")}
+				>
+					{t("match.title")}
+					<Search size={12} aria-hidden="true" />
+				</a>
 			</h3>
 			<div ref={root} className={styles.anchor}>
 				<div className={styles.current}>
@@ -246,6 +271,19 @@ export function MatchPicker({
 									</span>
 								</span>
 								<Badge level={levelOf(chosen)} />
+							</>
+						) : chosenId ? (
+							<>
+								<span className={styles.thumb} aria-hidden="true">
+									<LinkIcon size={20} />
+								</span>
+								<span className={styles.text}>
+									<span className={styles.name}>{t("match.pasted")}</span>
+									<span className={styles.facts}>{chosenId}</span>
+									<span className={styles.reasons}>
+										{t("match.pastedNext")}
+									</span>
+								</span>
 							</>
 						) : (
 							<span className={styles.text}>

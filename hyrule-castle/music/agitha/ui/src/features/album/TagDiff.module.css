@@ -21,7 +21,7 @@
 }
 
 .actionCol {
-	width: 2.75rem;
+	width: 4rem;
 }
 
 .table thead th {
@@ -172,6 +172,20 @@ tr:not(:hover):not(:focus-within) .icon:not(:focus-visible) {
 
 tr[data-edited] .icon {
 	opacity: 1;
+}
+
+.keep {
+	padding: 2px var(--space-2);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	color: var(--muted);
+	font-size: 0.75rem;
+}
+
+.keep:hover {
+	background: var(--accent-quiet);
+	color: var(--text);
 }
 
 .empty {

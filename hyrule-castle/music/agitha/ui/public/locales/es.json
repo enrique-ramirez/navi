@@ -250,5 +250,16 @@
 	"tracks.changes": "cambian {n} de sus etiquetas",
 	"track.ownTags": "Etiquetas propias de esta pista",
 	"track.ownTagsOf": "Etiquetas de {title}",
-	"cover.notShown": "se escribirá una portada; aún no se puede mostrar"
+	"cover.notShown": "se escribirá una portada; aún no se puede mostrar",
+	"tags.keep": "Conservar",
+	"tags.keepTitle": "Conservar {tag} actual y editarla",
+	"hold.times": "{topic} en {n} pistas",
+	"match.search": "Buscar este álbum en MusicBrainz",
+	"match.pasted": "Edición que pegaste",
+	"match.pastedNext": "Guarda y vuelve a previsualizar para buscarla",
+	"uploaded.title": "Archivos tal como se subieron ({n})",
+	"uploaded.note": "Aún no hay nada previsto para ellos. Sus etiquetas se muestran tal como están.",
+	"uploaded.list": "Archivos subidos",
+	"uploaded.tags": "Etiquetas actuales",
+	"uploaded.tagsOf": "Etiquetas de {file}"
 }

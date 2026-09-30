@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Moon, Sun } from "lucide-react";
 
 import { useTheme } from "@/shared/hooks/useTheme";
@@ -15,8 +16,10 @@ export function TopBar() {
 	return (
 		<header className={styles.bar}>
 			<h1 className={styles.brand}>
-				<Parasol size={28} />
-				<span>{t("app.title")}</span>
+				<Link to="/" className={styles.home}>
+					<Parasol size={28} />
+					<span>{t("app.title")}</span>
+				</Link>
 			</h1>
 			<div className={styles.spacer} />
 			<button type="button" className={styles.button} onClick={toggle}>

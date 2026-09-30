@@ -51,6 +51,7 @@ const album: AlbumView = {
 	busy: true,
 	preview: null,
 	files: [],
+	uploaded: [],
 	names: { id3: {}, vorbis: {}, mp4: {}, asf: {} },
 	library_path: null,
 	tree: [],

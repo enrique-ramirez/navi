@@ -25,6 +25,7 @@ export function albumView(over: Partial<AlbumView> = {}): AlbumView {
 		busy: false,
 		preview,
 		files: preview.files.map((file) => facts(file.position)),
+		uploaded: [],
 		names: {
 			id3: {
 				TIT2: "Title",

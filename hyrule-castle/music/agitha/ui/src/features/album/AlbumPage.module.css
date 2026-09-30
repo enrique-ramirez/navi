@@ -99,6 +99,24 @@
 	font-size: 0.875rem;
 }
 
+.holdGroup summary {
+	cursor: pointer;
+}
+
+.holdGroup ul {
+	margin: var(--space-2) 0 0;
+	padding-left: var(--space-4);
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.holdGroup ul li {
+	display: list-item;
+	padding: 2px 0;
+	background: none;
+	border: 0;
+}
+
 .holds li svg {
 	flex: none;
 	color: var(--caution);

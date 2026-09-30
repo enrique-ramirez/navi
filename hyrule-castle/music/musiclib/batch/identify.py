@@ -321,7 +321,8 @@ def plan_entry(unit: Unit, root: Path, clients: Clients, memory: dict, decision:
         plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=owner_input,
                           incoming=None, status=identification.status,
                           pairs=None if rejudged is not None else top.pairs, edition=edition,
-                          local=local, created=created, owner_cover=owner_cover, composer=composer)
+                          local=local, created=created, owner_cover=owner_cover, composer=composer,
+                          chosen=forced_choice)
 
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)
         positions = [position_key(p) for p in pairs]
@@ -422,7 +423,7 @@ def rebuild(unit: Unit, root: Path, clients: Clients, inputs: dict, job_path: Pa
     plan = plan_album(unit, release, clients.mb, clients.caa, owner_input=inputs["owner_input"],
                       status=inputs["status"], edition=inputs.get("edition"),
                       local=local, created=inputs.get("created", []), owner_cover=owner_cover,
-                      composer=inputs.get("composer", True))
+                      composer=inputs.get("composer", True), chosen=inputs.get("chosen", False))
     edits = inputs.get("edits") or {}
     if edits:
         pairs, family_by_source = _entry_pairs(unit, root, release, plan)

@@ -13,6 +13,7 @@ The library, the fakes and the job layout are `tests.test_batch_identify`'s.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import shutil
@@ -21,6 +22,9 @@ import unittest
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from musiclib.batch import identify as batch_identify
+from musiclib.batch.job import Job
+from musiclib.units import units
 from tests import builders
 from tests.test_batch_apply import Library
 from tests.test_batch_identify import Services, album, no_throttle, release, run_identify
@@ -422,6 +426,59 @@ class Repointed(_Job):
 
     def test_a_pasted_bare_mbid_is_planned_against_and_held_the_same_way(self):
         self.assertPlannedAgainstThePaste(PASTED["id"])
+
+
+class SettledByTheOwner(_Job):
+    """Files that disagree on the album tag are planned once the owner names the release, and still say so."""
+
+    def disagree(self) -> str:
+        second = self.root / REPOINTED / "02 two.flac"
+        builders.write_tags(second, {"ALBUM": ["Second B-sides"]})
+        return "needs a person: files disagree on the album tag: Second [rip], Second B-sides"
+
+    def decide(self, decision: dict) -> dict:
+        self.first_run()
+        write_decisions(self.job, {"job": "j1", "albums": {REPOINTED: decision}})
+        code, _out, err = self.identify()
+        self.assertEqual(code, 0, err)
+        return self.entries()[REPOINTED]
+
+    def assertPlannedWithTheDisagreementShown(self, entry: dict, why: str) -> None:
+        self.assertEqual((entry["release_id"], len(entry["files"])), (PASTED["id"], 2))
+        self.assertIsNotNone(entry["destination"])
+        self.assertEqual(set(entry["fields"]), {"1-1", "1-2"})
+        self.assertIn({"kind": "validation", "detail": why}, entry["holds"])
+        self.assertIs(entry["inputs"]["chosen"], True)
+
+    def test_without_a_choice_the_album_is_not_planned(self):
+        why = self.disagree()
+        entry = self.first_run()[REPOINTED]
+        self.assertEqual((entry["status"], entry["files"], entry["destination"]), ("needs a person", [], None))
+        self.assertIn({"kind": "status", "detail": why}, entry["holds"])
+
+    def test_a_repoint_plans_it_against_the_paste(self):
+        why = self.disagree()
+        entry = self.decide({"action": "repoint", "release": PASTED["id"]})
+        self.assertPlannedWithTheDisagreementShown(entry, why)
+        self.assertIn({"kind": "repointed", "detail": PASTED["id"]}, entry["holds"])
+
+    def test_an_accept_of_the_paste_plans_it_and_nothing_blocks_the_write(self):
+        why = self.disagree()
+        entry = self.decide({"action": "accept", "release_id": PASTED["id"], "edits": {}, "game": None})
+        self.assertPlannedWithTheDisagreementShown(entry, why)
+        self.assertNotIn("decision", [hold["kind"] for hold in entry["holds"]])
+
+        # Apply plans it again from the entry's inputs, and must get the plan identify showed.
+        [unit] = [u for u in units(self.root) if u.rel == REPOINTED]
+        built = batch_identify.clients(Job(self.job), transport=Services(SERVICES))
+        plan = batch_identify.rebuild(unit, self.root, built, entry["inputs"], self.job)
+        self.assertEqual(hashlib.sha256(plan.to_json()).hexdigest(), entry["plan_digest"])
+
+    def test_an_unreadable_file_still_stops_it_whatever_the_owner_chose(self):
+        self.disagree()
+        (self.root / REPOINTED / "03 three.flac").write_bytes(b"not audio at all")
+        entry = self.decide({"action": "repoint", "release": PASTED["id"]})
+        self.assertEqual(entry["files"], [])
 
 
 

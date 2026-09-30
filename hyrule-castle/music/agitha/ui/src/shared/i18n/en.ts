@@ -257,6 +257,18 @@ export const en = {
 	"track.ownTags": "Tags only this track has",
 	"track.ownTagsOf": "Tags of {title}",
 	"cover.notShown": "a cover will be written; it can't be shown yet",
+	"tags.keep": "Keep",
+	"tags.keepTitle": "Keep the current {tag}, then edit it",
+	"hold.times": "{topic} on {n} tracks",
+	"match.search": "Search MusicBrainz for this album",
+	"match.pasted": "Release you pasted",
+	"match.pastedNext": "Save & re-preview to look it up",
+	"uploaded.title": "Files as uploaded ({n})",
+	"uploaded.note":
+		"Nothing is planned for these yet. Their tags are shown as they are now.",
+	"uploaded.list": "Uploaded files",
+	"uploaded.tags": "Tags now",
+	"uploaded.tagsOf": "Tags of {file}",
 } as const;
 
 export type Phrase = keyof typeof en;

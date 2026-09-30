@@ -12,6 +12,19 @@
 	text-transform: uppercase;
 }
 
+.search {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
+	color: inherit;
+	text-decoration: none;
+}
+
+.search:hover {
+	color: var(--accent);
+	text-decoration: underline;
+}
+
 .anchor {
 	position: relative;
 }

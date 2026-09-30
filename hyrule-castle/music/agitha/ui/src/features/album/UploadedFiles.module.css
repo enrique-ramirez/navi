@@ -1,0 +1,47 @@
+.note {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.tags {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: separate;
+	border-spacing: 0;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font-size: 0.875rem;
+}
+
+.tags thead th {
+	padding: var(--space-2) var(--space-3);
+	color: var(--muted);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-align: left;
+	text-transform: uppercase;
+	border-bottom: 1px solid var(--border);
+}
+
+.tags thead th:first-child {
+	width: 11rem;
+}
+
+.tags tbody th,
+.tags tbody td {
+	padding: var(--space-2) var(--space-3);
+	overflow-wrap: anywhere;
+	text-align: left;
+}
+
+.tags tbody tr + tr > * {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.tags tbody th {
+	color: var(--muted);
+	font-weight: 400;
+}

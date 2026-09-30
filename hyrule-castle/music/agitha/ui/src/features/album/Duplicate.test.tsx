@@ -122,6 +122,7 @@ function view(over: Partial<AlbumView> = {}): AlbumView {
 		decision: null,
 		cover: null,
 		cover_now: null,
+		uploaded: [],
 		duplicate: chronoCross(),
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		...over,

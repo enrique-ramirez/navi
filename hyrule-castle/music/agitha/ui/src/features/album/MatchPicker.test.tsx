@@ -155,7 +155,7 @@ describe("MatchPicker", () => {
 	it.each([
 		["a release URL", `https://musicbrainz.org/release/${id(9)}`],
 		["a bare MBID", id(9)],
-	])("looks up %s pasted in", async (_, pasted) => {
+	])("chooses %s pasted in", async (_, pasted) => {
 		const user = userEvent.setup();
 		renderWithProviders(<Picker view={view()} />);
 
@@ -167,9 +167,12 @@ describe("MatchPicker", () => {
 		await user.click(screen.getByRole("button", { name: "Use this release" }));
 
 		const chosen = await trigger();
-		expect(chosen).toHaveTextContent("Look up this release");
-		expect(chosen).toHaveTextContent(pasted);
-		expect(latest?.draft).toEqual({ action: "repoint", release: pasted });
+		expect(chosen).toHaveTextContent("Release you pasted");
+		expect(chosen).toHaveTextContent(id(9));
+		expect(latest?.draft).toMatchObject({
+			action: "accept",
+			release_id: id(9),
+		});
 	});
 
 	it.each([

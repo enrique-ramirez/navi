@@ -18,8 +18,20 @@
 	color: var(--accent);
 }
 
+.home {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: inherit;
+	text-decoration: none;
+}
+
 .brand span {
 	color: var(--text);
+}
+
+.home:hover span {
+	color: var(--accent);
 }
 
 .spacer {

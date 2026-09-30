@@ -117,7 +117,10 @@ export function usePending(view: AlbumView): Pending {
 
 	const start = useMemo(() => startOf(view), [view]);
 	const draft = store.draft ?? start;
-	const baseline = view.decision ? normalize(view.decision) : start;
+	// Only an accept is a draft the page can hold; after a repoint the preview's release is the
+	// accept the owner has yet to send, which is not a change of theirs.
+	const baseline =
+		view.decision?.action === "accept" ? normalize(view.decision) : start;
 
 	const positions = view.preview?.files.map((file) => file.position) ?? [];
 

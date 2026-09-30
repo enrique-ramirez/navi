@@ -202,6 +202,22 @@ describe("TagDiff", () => {
 		).toBeInTheDocument();
 	});
 
+	it("keeps a tag the plan removes, as an editable value", async () => {
+		const view = albumView();
+		for (const file of view.preview!.files) file.before["TXXX:MOOD"] = ["calm"];
+		await renderTags(view);
+		const user = userEvent.setup();
+
+		await user.click(
+			within(rowOf("TXXX:MOOD")).getByRole("button", {
+				name: "Keep the current TXXX:MOOD, then edit it",
+			}),
+		);
+
+		expect(sent("TXXX:MOOD")).toEqual([["calm"], ["calm"], ["calm"]]);
+		expect(input("TXXX:MOOD")).toHaveValue("calm");
+	});
+
 	it("adds a tag by its key", async () => {
 		const user = userEvent.setup();
 		await renderTags();

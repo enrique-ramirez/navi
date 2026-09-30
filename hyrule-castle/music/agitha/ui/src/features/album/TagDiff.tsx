@@ -242,16 +242,27 @@ export function TagDiff({
 											>
 												<RotateCcw size={14} aria-hidden="true" />
 											</button>
+										) : row.next !== null ? (
+											<button
+												type="button"
+												className={styles.icon}
+												title={t("tags.remove", { tag: name })}
+												aria-label={t("tags.remove", { tag: name })}
+												onClick={() => set(row, null)}
+											>
+												<Trash2 size={14} aria-hidden="true" />
+											</button>
 										) : (
-											row.next !== null && (
+											// A tag the plan removes can be kept, and then edited like any other.
+											Array.isArray(row.now) && (
 												<button
 													type="button"
-													className={styles.icon}
-													title={t("tags.remove", { tag: name })}
-													aria-label={t("tags.remove", { tag: name })}
-													onClick={() => set(row, null)}
+													className={styles.keep}
+													title={t("tags.keepTitle", { tag: name })}
+													aria-label={t("tags.keepTitle", { tag: name })}
+													onClick={() => set(row, row.now as string[])}
 												>
-													<Trash2 size={14} aria-hidden="true" />
+													{t("tags.keep")}
 												</button>
 											)
 										))}

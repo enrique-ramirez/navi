@@ -22,7 +22,7 @@ import mutagen
 import mutagen.asf
 import mutagen.id3
 import mutagen.mp4
-from musiclib import images
+from musiclib import files, images, walk
 from musiclib.mapping import READABLE, readable_name
 
 from . import audio, drops, duplicates, ranges, state
@@ -52,6 +52,12 @@ def _cached(job: Path) -> list[Path]:
         return []
 
 
+#: Covers converted to JPEG, by the digest the plan gives them. A PNG front
+#: takes a few hundred milliseconds to convert, and the view is asked for often.
+_CONVERTED: dict[str, bytes] = {}
+_CONVERTED_KEPT = 16
+
+
 def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
     """The bytes shown as the album's cover and their content type, or None where the plan writes no cover.
 
@@ -71,6 +77,8 @@ def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
     planned = (entry or {}).get("images", {}).get("cover.jpg")
     if not planned:
         return None
+    if planned["sha256"] in _CONVERTED:
+        return _CONVERTED[planned["sha256"]], "image/jpeg"
     folder = ranges.album_folder(config, drop, n)
     local = [path for path in sorted(folder.rglob("*")) if path.suffix.lower() in IMAGE_SUFFIXES
              and path.is_file() and not path.is_symlink()] if folder is not None else []
@@ -88,6 +96,9 @@ def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
         except images.NOT_AN_IMAGE:
             continue
         if hashlib.sha256(converted).hexdigest() == planned["sha256"]:
+            _CONVERTED[planned["sha256"]] = converted
+            while len(_CONVERTED) > _CONVERTED_KEPT:
+                _CONVERTED.pop(next(iter(_CONVERTED)))
             return converted, "image/jpeg"
     return None
 
@@ -224,6 +235,37 @@ def _with_sizes(config: Config, drop: str, n: str, entry: dict[str, Any]) -> dic
     return shown
 
 
+def _uploaded(config: Config, drop: str, n: str) -> list[dict[str, Any]]:
+    """Every track of the staged album folder as uploaded, in the order musiclib reads them, with its tags now.
+
+    A track is what `files.is_track` says; the tags are read the way the
+    plan's `before` is, binary ones shown as kind and size. A file mutagen
+    cannot read is left out, as the plan leaves it.
+    """
+    folder = ranges.album_folder(config, drop, n)
+    if folder is None:
+        return []
+    paths, _unlistable = walk.album_contents(folder)
+    result = []
+    for path in paths:
+        rel = path.relative_to(folder).as_posix()
+        if not files.is_track(path, PurePosixPath(rel)):
+            continue
+        try:
+            track = files.read(path)
+        except files.Unreadable:
+            continue
+        found = audio.facts(path)
+        if found is None:
+            continue
+        result.append({
+            "path": rel, "family": track.family, "tags": _sized(track.tags, _binary_sizes(path)),
+            **{key: value for key, value in dataclasses.asdict(found).items() if key != "family"},
+            "audio_url": f"/api/drops/{drop}/albums/{n}/audio/{quote(rel)}",
+        })
+    return result
+
+
 def _landing(entry: dict[str, Any]) -> list[str]:
     """The album folder as it will land: kept files that follow it, the tracks, and the images the plan writes."""
     destination = entry["destination"]
@@ -245,7 +287,7 @@ def _landed(config: Config, drop: str, n: str) -> dict[str, Any] | None:
     return {
         "drop": drop, "n": n, "name": PurePosixPath(destination).name if destination else n,
         "state": "in the library", "stderr": "", "error": None, "step": None, "file": None, "busy": False,
-        "preview": entry, "files": [], "names": _names(), "library_path": landed.get("path"),
+        "preview": entry, "files": [], "uploaded": [], "names": _names(), "library_path": landed.get("path"),
         "tree": [], "extras_to": [], "decision": None, "cover": None, "cover_now": None, "duplicate": None,
         "approvable": {"ok": False, "reason": "in the library", "code": "in-library", "hold": None},
     }
@@ -293,6 +335,7 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "busy": summary["busy"],
         "preview": _with_sizes(config, drop, n, entry) if entry else None,
         "files": _file_facts(config, drop, n, entry) if entry else [],
+        "uploaded": _uploaded(config, drop, n),
         "names": _names(),
         "library_path": str(config.library / destination) if destination else None,
         "tree": _landing(entry) if destination else [],

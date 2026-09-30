@@ -64,3 +64,13 @@
 		grid-template-columns: 7rem 1fr;
 	}
 }
+
+/* Beside a long track list, the chosen track stays in view under the review bar. */
+@media (min-width: 1101px) {
+	.detail {
+		position: sticky;
+		top: 6.5rem;
+		max-height: calc(100vh - 7.5rem);
+		overflow-y: auto;
+	}
+}

@@ -328,6 +328,34 @@ export interface FileFacts {
 	audio_url: string;
 }
 
+/** One track of the album folder as uploaded, whatever the plan made of it. */
+export interface UploadedFile {
+	/** Album-relative path as uploaded, `/`-separated. */
+	path: string;
+	/** The tag family its tags are keyed in. */
+	family: Family;
+	/** The file's tags now, raw keys of its family, binary frames as text like `before`. */
+	tags: TagMap;
+	/** `FLAC`, `MP3`, `MP4`, `Ogg Vorbis`, `WMA`. */
+	format: string;
+	/** FLAC, or ALAC in MP4. */
+	lossless: boolean;
+	/** Bits per second. */
+	bitrate: number;
+	/** Hz. */
+	sample_rate: number;
+	/** `null` for a lossy format. */
+	bit_depth: number | null;
+	/** 1 mono, 2 stereo. */
+	channels: number;
+	/** Seconds. */
+	length: number;
+	/** Bytes. */
+	size: number;
+	/** `/api/drops/<drop>/albums/<n>/audio/<path>`. */
+	audio_url: string;
+}
+
 export interface CoverInfo {
 	url: string;
 	width: number;
@@ -416,6 +444,8 @@ export interface AlbumView {
 	preview: PlanEntry | null;
 	/** One per track of the preview, in plan order; empty with no preview. */
 	files: FileFacts[];
+	/** Every track of the album folder as uploaded, in musiclib's order (disc folder, then path); empty once it has left the inbox. */
+	uploaded: UploadedFile[];
 	/** Family -> raw key -> readable name; a key not listed shows as itself. */
 	names: Record<Family, Record<string, string>>;
 	/** `/srv/music/library/` plus the destination; `null` with no destination. */

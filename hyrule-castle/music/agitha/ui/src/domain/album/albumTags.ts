@@ -4,6 +4,7 @@ import type {
 	FileFacts,
 	PlanFile,
 	TagMap,
+	UploadedFile,
 } from "@/shared/api/types";
 
 interface Keys {
@@ -100,8 +101,12 @@ function valuesOf(tags: TagMap, keys: Keys): AlbumValues {
 export function albumTags(view: AlbumView): AlbumTags {
 	const file = view.preview?.files[0];
 	if (!file) {
-		const none: AlbumValues = { title: "", artist: "", year: "", genres: [] };
-		return { ...none, before: none };
+		// Nothing planned: the album as the files say it is now.
+		const uploaded = view.uploaded?.[0];
+		const now: AlbumValues = uploaded
+			? valuesOf(uploaded.tags, KEYS[uploaded.family])
+			: { title: "", artist: "", year: "", genres: [] };
+		return { ...now, before: now };
 	}
 	const keys = KEYS[familyOf(view, file)];
 	return {
@@ -115,3 +120,24 @@ export function trackTitle(view: AlbumView, file: PlanFile): string {
 }
 
 export const genreKeyOf = (family: Family) => KEYS[family].genre;
+
+const DISC: Record<Family, string> = {
+	id3: "TPOS",
+	vorbis: "discnumber",
+	mp4: "disk",
+	asf: "WM/PartOfSet",
+};
+
+// The number before a slash, `3` of `3/12`; empty where there is none.
+const leading = (value: string) => /^\s*(\d+)/.exec(value)?.[1] ?? "";
+
+/** What an uploaded file's tags say it is, before anything is planned. */
+export function uploadedValues(file: UploadedFile) {
+	const keys = KEYS[file.family];
+	return {
+		title: first(file.tags, keys.trackTitle),
+		album: first(file.tags, keys.title),
+		track: leading(first(file.tags, keys.track)),
+		disc: leading(first(file.tags, DISC[file.family])),
+	};
+}
