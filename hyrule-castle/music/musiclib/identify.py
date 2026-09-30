@@ -483,6 +483,7 @@ def chosen(unit: Unit, mb: MusicBrainz, value: str, owner_input=None, incoming=N
     try:
         release = mb.release(release_id)
         candidate = _candidate(release_id, release, unit, mb)
+        _judge_artists([candidate], unit, mb)
     except MusicBrainzUnavailable:
         return Identification("unidentified", "musicbrainz unavailable", [])
     hold = _soundtrack_hold("auto", candidate, [candidate], unit, mb, owner_input, incoming)

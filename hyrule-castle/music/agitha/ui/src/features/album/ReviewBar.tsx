@@ -6,7 +6,7 @@ import {
 	Trash2,
 	Undo2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isRunning } from "@/domain/album/albumQuery";
 import { albumTags } from "@/domain/album/albumTags";
 import type { AlbumView } from "@/shared/api/types";
@@ -16,9 +16,12 @@ import { Alert } from "@/shared/ui/Alert";
 import { Confirm } from "@/shared/ui/Confirm";
 import { approveReason } from "./approveReason";
 import { Outcome } from "./Outcome";
-import type { Pending } from "./pending";
+import type { Draft, Pending } from "./pending";
 import styles from "./ReviewBar.module.css";
 import { useDecision } from "./useDecision";
+
+const releaseOf = (draft: Draft) =>
+	draft.action === "repoint" ? `repoint ${draft.release}` : draft.release_id;
 
 // What the primary button does. `confirm` sends the unchanged draft so the server accepts the
 // preview, then approves once identify has run again; `save` sends the owner's changes and stops,
@@ -46,6 +49,22 @@ export function ReviewBar({
 		move,
 		refresh,
 	} = useDecision(view, pending);
+
+	// Another release replans every tag, so it is sent as soon as it is chosen rather than on Save.
+	// `sent` keeps a release identify refused from being sent again on every render.
+	const release = releaseOf(pending.draft);
+	const sent = useRef<string | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: sends when the chosen release changes, not on every new view
+	useEffect(() => {
+		if (busy || view.state !== "ready") return;
+		if (release === (view.preview?.release_id ?? "")) {
+			sent.current = null;
+			return;
+		}
+		if (sent.current === release) return;
+		sent.current = release;
+		void send({ kind: "preview" });
+	}, [release, busy, view.state]);
 
 	const running = isRunning(view.state);
 	const tags = albumTags(view);

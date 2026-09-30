@@ -180,6 +180,7 @@ tr[data-edited] .icon {
 	border-radius: var(--radius-pill);
 	color: var(--muted);
 	font-size: 0.75rem;
+	white-space: nowrap;
 }
 
 .keep:hover {

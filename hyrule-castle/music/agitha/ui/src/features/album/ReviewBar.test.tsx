@@ -318,6 +318,52 @@ describe("ReviewBar", () => {
 			expect(posts(fake.calls)).toHaveLength(1);
 		});
 
+		it("sends another release as soon as it is chosen, with no Save", async () => {
+			vi.useFakeTimers({ shouldAdvanceTime: true });
+			const other = "6f1a2b3c-0000-4000-8000-000100000002";
+			const identified = accepted();
+			identified.preview = { ...identified.preview!, release_id: other };
+			const fake = serve(accepted(), { identified });
+			restore = fake.restore;
+			renderBar();
+
+			await screen.findByRole("button", { name: "Approve" });
+			act(() => latest?.setCandidate(other));
+
+			await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+			expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({
+				...UNCHANGED,
+				release_id: other,
+			});
+			await throughPolls(() =>
+				expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled(),
+			);
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(posts(fake.calls)).toHaveLength(1);
+		});
+
+		it("sends a release the server refuses only once", async () => {
+			const fake = fakeFetch({
+				[`GET ${ALBUM_URL}`]: () => Response.json(accepted()),
+				[`POST ${ALBUM_URL}/decision`]: () =>
+					Response.json(
+						{ error: "the release was not found" },
+						{ status: 400 },
+					),
+			});
+			restore = fake.restore;
+			renderBar();
+
+			await screen.findByRole("button", { name: "Approve" });
+			act(() => latest?.setRepoint("https://musicbrainz.org/release/nope"));
+
+			expect(await screen.findByRole("alert")).toHaveTextContent(
+				"the release was not found",
+			);
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			expect(posts(fake.calls)).toHaveLength(1);
+		});
+
 		it("undoes the changes without sending anything", async () => {
 			const fake = serve(accepted());
 			restore = fake.restore;

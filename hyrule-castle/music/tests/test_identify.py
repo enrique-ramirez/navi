@@ -799,6 +799,18 @@ class Search(IdentifyTestCase):
                 result = run(self.client(server))
                 self.assertEqual([(c.release_id, c.duration_diff) for c in result.candidates], [(TAGGED, 0.0)])
 
+    def test_a_release_the_owner_chose_is_judged_on_its_artist_like_one_the_search_found(self) -> None:
+        # Unjudged, the owner's pick read as "artist differs" whatever its credit.
+        for label, artist, agrees in (("same artist", "Nine Inch Nails", True), ("another", "Filter", False)):
+            with self.subTest(label):
+                self.forget()
+                server = Server(releases=(release_json(TAGGED, [[200, 180]]),))
+                files = [vorbis(self.album, f"0{n}. Track {n}.flac", length, tracknumber=str(n),
+                                album="The Downward Spiral", albumartist=artist)
+                         for n, length in ((1, 200), (2, 180))]
+                result = chosen(unit(self.album, files), self.client(server), TAGGED)
+                self.assertEqual([c.artist_agrees for c in result.candidates], [agrees])
+
     def test_a_release_whose_media_do_not_pair_with_the_files_has_no_length_difference(self) -> None:
         # Disc folders of 2 and 1 against media of 1 and 2: the total of 3
         # gets it fetched, and no file has a track to be compared with. That
