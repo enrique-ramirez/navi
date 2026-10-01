@@ -85,30 +85,39 @@ def planned_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | Non
         except images.NOT_AN_IMAGE:
             continue
         if hashlib.sha256(converted).hexdigest() == planned["sha256"]:
-            _CONVERTED[planned["sha256"]] = converted
-            while len(_CONVERTED) > _CONVERTED_KEPT:
-                _CONVERTED.pop(next(iter(_CONVERTED)))
+            _remember(planned["sha256"], converted)
+            return converted, "image/jpeg"
+    front = images.first_embedded_front(_plan_tracks(config, drop, n, entry, folder)) if folder is not None else None
+    if front is not None:
+        try:
+            converted = images.as_jpeg(front)
+        except images.NOT_AN_IMAGE:
+            return None
+        if hashlib.sha256(converted).hexdigest() == planned["sha256"]:
+            _remember(planned["sha256"], converted)
             return converted, "image/jpeg"
     return None
 
 
-def _first_track(config: Config, drop: str, n: str, entry: dict[str, Any] | None, folder: Path) -> Path | None:
+def _plan_tracks(config: Config, drop: str, n: str, entry: dict[str, Any] | None, folder: Path) -> list[Path]:
     if entry and entry.get("files"):
-        return config.inbox / drop / n / entry["source"] / _tail(entry["files"][0]["source"], entry["source"])
-    return next((path for path in sorted(folder.rglob("*")) if audio.facts(path) is not None), None)
+        base = config.inbox / drop / n / entry["source"]
+        return [base / _tail(item["source"], entry["source"]) for item in entry["files"]]
+    return [path for path in sorted(folder.rglob("*")) if audio.facts(path) is not None]
+
+
+def _remember(sha: str, data: bytes) -> None:
+    _CONVERTED[sha] = data
+    while len(_CONVERTED) > _CONVERTED_KEPT:
+        _CONVERTED.pop(next(iter(_CONVERTED)))
 
 
 def current_cover(config: Config, drop: str, n: str, entry: dict[str, Any] | None) -> tuple[bytes, str] | None:
     folder = ranges.album_folder(config, drop, n)
     if folder is None:
         return None
-    track = _first_track(config, drop, n, entry, folder)
-    try:
-        pictures = images.embedded_pictures(track) if track is not None else []
-    except (OSError, ValueError, mutagen.MutagenError):
-        pictures = []
-    if pictures:
-        data = next((data for kind, data in pictures if kind == 3), pictures[0][1])
+    data = images.first_embedded_front(_plan_tracks(config, drop, n, entry, folder))
+    if data is not None:
         return data, images.mime(data) or "application/octet-stream"
     try:
         covers = images.local_covers(folder)

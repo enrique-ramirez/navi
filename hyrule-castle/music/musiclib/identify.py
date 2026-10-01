@@ -258,7 +258,7 @@ def _judge_artists(candidates: list, unit: Unit, client: MusicBrainz) -> None:
             candidate.artist_agrees = artists.agrees(unit, candidate.release, client)
 
 
-_COVER_SHOWN_WITHIN = 10
+_COVER_SHOWN_WITHIN = images.SAME_PICTURE_WITHIN
 
 
 def _showing_cover(fitting: list, caa: CoverArt | None, local_cover: bytes | None) -> set[str]:

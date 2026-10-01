@@ -24,6 +24,7 @@ import unittest
 
 from PIL import Image
 
+from musiclib import images
 from musiclib.cache import Cache
 from tests import builders
 from tests.test_agitha_decision import ALBUM, CLEAN_ID, DROP, PYTHON, STUB, AlbumCase, accept, sha256
@@ -306,6 +307,94 @@ class TheCurrentCover(CoverCase):
         (self.folder() / "cover.jpg").unlink()
         self.assertIsNone(self.view()["cover_now"])
         self.assertEqual(self.served_now()[0], 404)
+
+
+class TheEmbeddedFront(CoverCase):
+    """A `cover.jpg` the engine took from the tracks' own front picture is shown and served like any other.
+
+    The fake archive has no art, so the engine plans the files' embedded front.
+    Nothing in the folder or the job's cache holds those bytes:
+    the page must read them from the tracks, as the engine did.
+    """
+
+    def folder(self):
+        return self.inbox / DROP / "01" / "drop" / "album" / ALBUM
+
+    def tracks(self):
+        return sorted(self.folder().glob("*.mp3"))
+
+    def identify_again(self) -> dict:
+        found = subprocess.run([PYTHON, str(STUB), *self.identify_argv()], capture_output=True, text=True)
+        self.assertEqual(found.returncode, 0, found.stderr)
+        return self.view()
+
+    def assertPlansAndServes(self, view: dict, written: bytes) -> dict:
+        """`written` is what the engine writes as `cover.jpg`; answers the view's `cover`."""
+        planned = view["preview"]["images"].get("cover.jpg")
+        # The engine's side, checked first, so a failure below is the page's.
+        self.assertEqual(planned, {"length": len(written), "sha256": sha256(written)},
+                         "the engine did not plan the embedded front as cover.jpg")
+        cover = view["cover"]
+        self.assertIsNotNone(cover, "the album view has no cover for a plan that has one")
+        status, content_type, body = self.served()
+        self.assertEqual((status, content_type), (200, "image/jpeg"))
+        self.assertEqual(body, written)
+        return cover
+
+    def test_a_jpeg_front_the_tracks_carry_is_served_and_measured_with_no_image_in_the_folder(self) -> None:
+        data = builders.picture(600, 600, (20, 120, 200))
+        for track in self.tracks():
+            builders.embed_picture(track, data)
+        (self.folder() / "cover.jpg").unlink()
+        cover = self.assertPlansAndServes(self.identify_again(), data)
+        self.assertEqual(cover, {"url": URL, "width": 600, "height": 600, "passes": True, "problem": None})
+
+    def test_a_png_front_is_served_as_the_jpeg_the_engine_converts_it_to_and_warns_when_it_fails_the_test(self) -> None:
+        # 450 x 500 fails the 500 px half of the test: the embedded front is
+        # still the cover, and the view carries the warning.
+        # The folder's own cover.jpg stays and loses to it, so
+        # serving the folder's image instead is caught too. Track 1 carries
+        # nothing and track 3 another picture: the engine takes track 2's, so
+        # reading track 1 alone, or the last track, finds the wrong bytes.
+        data = builders.picture(450, 500, (200, 160, 30), "PNG")
+        _one, two, three = self.tracks()
+        builders.embed_picture(two, data, mime="image/png")
+        builders.embed_picture(three, builders.picture(600, 600, (90, 30, 200)))
+        cover = self.assertPlansAndServes(self.identify_again(), images.as_jpeg(data))
+        self.assertEqual((cover["url"], cover["width"], cover["height"], cover["passes"]), (URL, 450, 500, False))
+        self.assertIsInstance(cover["problem"], str)
+        self.assertIn("500", cover["problem"])
+
+    def test_a_planned_cover_found_nowhere_is_not_stood_in_for_by_the_tracks_picture(self) -> None:
+        # The tracks' picture is served only when it is the plan's bytes,
+        # never because nothing else matched.
+        builders.embed_picture(self.tracks()[0], builders.picture(600, 600, (20, 120, 200)))
+        elsewhere = builders.picture(700, 700, (120, 20, 200))
+        doc = json.loads(self.plan_bytes)
+        doc["albums"][0]["images"]["cover.jpg"] = {"length": len(elsewhere), "sha256": sha256(elsewhere)}
+        (self.job / "plan.json").write_text(json.dumps(doc), encoding="utf-8")
+        self.assertIsNone(self.view()["cover"])
+        self.assertEqual(self.served()[0], 404)
+
+    def test_the_current_cover_is_the_first_track_that_carries_a_picture_when_track_1_carries_none(self) -> None:
+        # Track 1 bare, tracks 2 and 3 each with their own picture: the plan's
+        # order picks track 2, never track 3 nor the folder's 1600 x 900 cover.
+        # Track 2's front is its second picture, after one of type 0 (other),
+        # so taking the track's first picture regardless of type is caught.
+        second = builders.picture(520, 520, (30, 200, 90))
+        third = builders.picture(540, 540, (90, 30, 200))
+        _one, two, three = self.tracks()
+        builders.embed_picture(two, builders.picture(510, 510, (200, 30, 30)), picture_type=0)
+        builders.embed_picture(two, second)
+        builders.embed_picture(three, third)
+        cover = self.view()["cover_now"]
+        self.assertIsNotNone(cover, "the Current tab shows nothing")
+        self.assertEqual((cover["url"], cover["width"], cover["height"]), (NOW, 520, 520))
+        self.assertEqual(self.served_now(), (200, "image/jpeg", second))
+
+    def served_now(self) -> tuple[int, str, bytes]:
+        status, content_type, body = self.request("GET", NOW)
+        return status, content_type.split(";")[0].strip(), body
 
 
 if __name__ == "__main__":

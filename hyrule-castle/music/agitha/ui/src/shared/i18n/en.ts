@@ -211,7 +211,8 @@ export const en = {
 	"review.chooseCopy": "Choose which copy to keep below",
 	"cover.next": "New",
 	"cover.now": "Current",
-	"cover.noneNext": "no cover will be written",
+	"cover.noneNext":
+		"no cover yet: upload one, or identify again when the archive answers",
 	"cover.noneNow": "the files have no cover",
 	"cover.replace": "Drop an image or click to replace",
 	"cover.undo": "use the planned cover",

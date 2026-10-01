@@ -13,11 +13,13 @@ from `tests.test_check`, so they hold whatever `plan_images` is handed.
 from __future__ import annotations
 
 import base64
+import http.client
 import io
 import json
 import struct
 import tempfile
 import unittest
+import urllib.error
 import zlib
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -236,6 +238,9 @@ class WhichImageIsTheFront(unittest.TestCase):
 
 NO_FRONT = ("no front cover: not in the Cover Art Archive for the release or its release group, "
             "and no cover image in the folder")
+#: What `plan_album` says instead, where the archive answered and neither the files nor the folder
+#: carry a cover. `plan_images` called on its own still says `NO_FRONT`.
+NO_COVER = "no cover: the cover art archive has no front and the files carry none; upload a cover"
 
 
 class NoFrontInTheArchive(unittest.TestCase):
@@ -630,7 +635,7 @@ class TheFrontFallsBack(_FrontPlanning):
                 # no images either, so the tracks show it was really planned.
                 self.assertTrue(plan.files, plan.problems)
                 self.assertNotIn("cover.jpg", plan.images)
-                self.assertIn(NO_FRONT, plan.problems)
+                self.assertIn(NO_COVER, plan.problems)
 
     def test_a_stray_whose_name_guesses_the_front_is_the_cover_and_stays_as_front_jpg(self) -> None:
         # The one at the root and the one in a subfolder both land as
@@ -640,47 +645,96 @@ class TheFrontFallsBack(_FrontPlanning):
                 data = builders.jpeg(90, 90)
                 plan = self.plan_rip({name: data})
                 self.assertEqual(plan.images.get("cover.jpg"), data, plan.problems)
-                self.assertNotIn(NO_FRONT, plan.problems)
+                self.assertEqual([p for p in plan.problems if p.startswith(("no cover", "no front cover"))], [])
                 self.assertEqual(list(plan.moved.values()), ["front.jpg"])
                 self.assertNotIn(PurePosixPath(name).name, _names(plan.deletions))
 
 
+def listed(*entries: tuple[str, str, bytes]) -> tuple[list[dict], dict[str, bytes]]:
+    """An archive listing of `(type, url, bytes)` entries, a Front-typed one marked front, and the bytes behind each."""
+    return ([caa_image(n, [kind], url, front=kind == "Front") for n, (kind, url, _data) in enumerate(entries, start=1)],
+            {url: data for _kind, url, data in entries})
+
+
 class ADownloadThatIsNotAnImage(_FrontPlanning):
-    def test_is_a_problem_naming_its_url_and_never_raises(self) -> None:
+    """A fetched archive image that is not an image counts as a failed image.
+
+    It is not saved, is named in `ImagePlan.unreadable`, adds no problem, and a
+    front that is not one falls through the cover order as a failed download
+    does. The album-level effects are judged through `plan_album`; the naming
+    through `plan_images`, the seam that carries it (a `Plan`'s own `unreadable`
+    is unreadable audio files, which is something else).
+    """
+
+    def unreadable(self, release_images=(), group_images=None, **arguments) -> images.ImagePlan:
+        """The same archive handed to `plan_images` directly."""
+        listing, bodies = listed(*release_images)
+        group_listing, group_bodies = listed(*(group_images or ()))
+        return images.plan_images(listing, {**bodies, **group_bodies}.__getitem__,
+                                  group_images=None if group_images is None else lambda: group_listing, **arguments)
+
+    def assert_left_out(self, plan, url: str, body: bytes) -> None:
+        # A problem would hold the album; the owner's answer is that it lands without the image.
+        self.assertEqual([problem for problem in plan.problems if url in problem], [])
+        self.assertNotIn(body, plan.images.values())
+
+    def test_is_left_out_named_as_unreadable_and_never_a_problem_or_a_raise(self) -> None:
         # An HTML error page served with a 200 is not a missing cover, and
         # not a crash either: raising here would file the album under
-        # `error` in a batch, where a problem holds it for the owner.
+        # `error` in a batch.
+        folder = builders.jpeg(501, 501)
         cases = {
             "the release's front": (dict(release_images=[("Front", RELEASE_FRONT[1], NOT_AN_IMAGE)]),
-                                    RELEASE_FRONT[1]),
+                                    RELEASE_FRONT[1], folder),
             "the release's back": (dict(release_images=[RELEASE_FRONT, ("Back", RELEASE_BACK[1], b"")]),
-                                   RELEASE_BACK[1]),
+                                   RELEASE_BACK[1], RELEASE_FRONT[2]),
             "the release group's front": (dict(release_images=[],
                                                group_images=[("Front", GROUP_FRONT[1], NOT_AN_IMAGE)]),
-                                          GROUP_FRONT[1]),
+                                          GROUP_FRONT[1], folder),
         }
-        for case, (archive, url) in cases.items():
+        for case, (archive, url, cover) in cases.items():
             with self.subTest(case):
-                plan = self.plan_rip({"cover.jpg": builders.jpeg(501, 501)}, **archive)
-                self.assertIn(f"cover art archive: {url} is not an image", plan.problems)
+                plan = self.plan_rip({"cover.jpg": folder}, **archive)
+                body = dict((u, d) for _k, u, d in [*archive["release_images"], *archive.get("group_images", [])])[url]
+                self.assert_left_out(plan, url, body)
+                assert_image(self, plan.images.get("cover.jpg"), cover)
+                self.assertNotIn("back.jpg", plan.images)
+                image_plan = self.unreadable(**archive, local=[("cover.jpg", folder)])
+                self.assertEqual(image_plan.unreadable, [url])
+                self.assertEqual(image_plan.problems, [])
 
-    def test_a_broken_release_front_holds_the_album_and_neither_the_release_group_nor_the_folder_stands_in(
+    def test_a_broken_release_front_falls_through_to_the_folder_cover_and_the_release_group_is_never_asked(
             self) -> None:
-        # The release has a front, so the release group is never asked; a
-        # broken download is the archive failing, not the front being missing.
-        # Falling back would plan a good-looking cover from another release
-        # and hide the problem that holds the album. The folder image passes
-        # the cover bar, so "the first local cover that passes" must not
-        # reach it either.
-        plan = self.plan_rip({"folder.jpg": builders.jpeg(501, 501)},
+        # The release has a front, so the release group is never asked: its
+        # front belongs to another release of the album. The folder cover
+        # stands in, as it does for a front whose download failed.
+        folder = builders.jpeg(501, 501)
+        plan = self.plan_rip({"folder.jpg": folder},
                              release_images=[("Front", RELEASE_FRONT[1], NOT_AN_IMAGE)],
                              group_images=[GROUP_FRONT])
-        self.assertIn(f"cover art archive: {RELEASE_FRONT[1]} is not an image", plan.problems)
-        self.assertNotIn("cover.jpg", plan.images)
+        assert_image(self, plan.images.get("cover.jpg"), folder)
+        self.assert_left_out(plan, RELEASE_FRONT[1], NOT_AN_IMAGE)
         self.assertEqual([url for url in self.archives.asked if "/release-group/" in url], [])
-        self.assertNotIn("folder.jpg", _names(plan.deletions))
 
-    def test_a_truncated_jpeg_or_one_pillow_raises_valueerror_or_syntaxerror_on_is_the_same_problem(self) -> None:
+    def test_a_broken_front_falls_through_to_the_embedded_front_then_the_folder_then_none(self) -> None:
+        # The order a failed download takes (`TheCoverOrder`), and never the
+        # release group's front, which passes and would win if it were asked.
+        broken = [("Front", RELEASE_FRONT[1], NOT_AN_IMAGE), RELEASE_BACK]
+        cases = {
+            "an embedded front and a folder cover": (dict(embedded=SMALL_EMBEDDED, local=[("folder.jpg", FOLDER)]),
+                                                     SMALL_EMBEDDED),
+            "a folder cover": (dict(local=[("folder.jpg", SMALL_FOLDER)]), SMALL_FOLDER),
+            "neither": ({}, None),
+        }
+        for case, (arguments, expected) in cases.items():
+            with self.subTest(case):
+                plan = self.unreadable(broken, [GROUP_FRONT], **arguments)
+                self.assertEqual(plan.files.get("cover.jpg"), expected, describe(plan.files.get("cover.jpg")))
+                self.assertEqual(plan.unreadable, [RELEASE_FRONT[1]])
+                self.assertEqual(plan.files.get("back.jpg"), RELEASE_BACK[2])
+
+    def test_a_truncated_jpeg_or_one_pillow_raises_valueerror_or_syntaxerror_on_is_left_out_the_same_way(
+            self) -> None:
         # A JPEG's first three bytes prove nothing about the rest, so one cut
         # off mid-download would otherwise be kept byte for byte as the cover.
         for body_name, body in BROKEN.items():
@@ -690,8 +744,13 @@ class ADownloadThatIsNotAnImage(_FrontPlanning):
             ):
                 with self.subTest(body=body_name, image=where):
                     plan = self.plan_rip({}, **archive)
-                    self.assertIn(f"cover art archive: {url} is not an image", plan.problems)
-                    self.assertNotIn(body, plan.images.values())
+                    self.assert_left_out(plan, url, body)
+                    if where == "back":
+                        assert_image(self, plan.images.get("cover.jpg"), RELEASE_FRONT[2])
+                        self.assertNotIn("back.jpg", plan.images)
+                    image_plan = self.unreadable(**archive)
+                    self.assertEqual(image_plan.unreadable, [url])
+                    self.assertNotIn(body, image_plan.files.values())
 
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
@@ -1402,6 +1461,299 @@ class CopiesInAnAlbumAnEditMoves(_FrontPlanning):
                 self.assertIn("booklet-01.jpg", _names(deletions))
                 self.assertIn("album.jpg", _names(kept))
                 self.assertNotIn("album.jpg", _names(deletions))
+
+
+def raising(make_error):
+    """A transport that never answers: each request raises a fresh `make_error()`."""
+
+    def transport(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
+        raise make_error()
+
+    return transport
+
+
+#: What `urlopen` raises when the archive does not answer in time, and when it cannot be reached.
+NO_ANSWER = {
+    "timeout": lambda: TimeoutError("timed out"),
+    "no connection": lambda: urllib.error.URLError(ConnectionRefusedError(61, "Connection refused")),
+}
+
+
+class AnArchiveThatDoesNotAnswer(unittest.TestCase):
+    """A timeout or a failed connection is a failed request, like a 500."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.cache_dir = Path(tmp.name)
+        front = by_id(1003)["image"]
+        # Each request the client makes: its URL, the call that makes it, and what a working archive answers.
+        self.requests = {
+            "the release's listing": (f"https://coverartarchive.org/release/{RELEASE_MBID}",
+                                      lambda art: art.images(RELEASE_MBID),
+                                      json.dumps(RELEASE).encode(), CAA_IMAGES),
+            "the release group's listing": (f"https://coverartarchive.org/release-group/{RELEASE_GROUP_MBID}",
+                                            lambda art: art.release_group_images(RELEASE_GROUP_MBID),
+                                            json.dumps(RELEASE).encode(), CAA_IMAGES),
+            "an image download": (front, lambda art: art.download(front), BODIES[front], BODIES[front]),
+        }
+
+    def client(self, transport) -> caa.CoverArt:
+        return caa.CoverArt(Cache(self.cache_dir), transport=transport)
+
+    def test_a_timeout_or_a_failed_connection_is_a_cover_art_error_naming_the_url_in_place_of_a_status(
+            self) -> None:
+        for word, make_error in NO_ANSWER.items():
+            for request, (url, call, _body, _answer) in self.requests.items():
+                with self.subTest(word=word, request=request):
+                    self.cache_dir = Path(tempfile.mkdtemp(dir=self.cache_dir))
+                    with self.assertRaises(caa.CoverArtError) as raised:
+                        call(self.client(raising(make_error)))
+                    self.assertEqual(str(raised.exception), f"cover art archive: {url} -> {word}")
+
+    def test_a_request_that_did_not_answer_is_not_cached_and_is_asked_again(self) -> None:
+        # Identify again is the only retry, so a failure left in the cache
+        # would make the album's archive images unreachable for good.
+        for word, make_error in NO_ANSWER.items():
+            for request, (url, call, body, answer) in self.requests.items():
+                with self.subTest(word=word, request=request):
+                    self.cache_dir = Path(tempfile.mkdtemp(dir=self.cache_dir))
+                    with self.assertRaises(caa.CoverArtError):
+                        call(self.client(raising(make_error)))
+                    parts = urlsplit(url)
+                    working = Transport({f"{parts.netloc}{parts.path}": (200, body)})
+                    self.assertEqual(call(self.client(working)), answer)
+                    self.assertEqual(working.requests, [url])
+
+
+
+class AnArchiveThatBreaksOffAnAnswer(unittest.TestCase):
+    """An answer cut short is a failed connection, like one that never came.
+
+    `urlopen` raises these while reading a body the archive stopped sending,
+    and they are not `OSError`, so a client that turns only `OSError` into
+    `CoverArtError` lets them through and fails identify.
+    """
+
+    BROKEN = {
+        "a body cut short": lambda: http.client.IncompleteRead(b"\xff\xd8\xff", 48_000),
+        "a status line it cannot read": lambda: http.client.BadStatusLine("HTTP/1.1 5"),
+    }
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.cache_dir = Path(tmp.name)
+        front = by_id(1003)["image"]
+        self.requests = {
+            "the release's listing": (f"https://coverartarchive.org/release/{RELEASE_MBID}",
+                                      lambda art: art.images(RELEASE_MBID), json.dumps(RELEASE).encode(), CAA_IMAGES),
+            "the release group's listing": (f"https://coverartarchive.org/release-group/{RELEASE_GROUP_MBID}",
+                                            lambda art: art.release_group_images(RELEASE_GROUP_MBID),
+                                            json.dumps(RELEASE).encode(), CAA_IMAGES),
+            "an image download": (front, lambda art: art.download(front), BODIES[front], BODIES[front]),
+        }
+
+    def client(self, transport) -> caa.CoverArt:
+        return caa.CoverArt(Cache(self.cache_dir), transport=transport)
+
+    def test_an_http_exception_is_a_cover_art_error_saying_no_connection_and_is_not_cached(self) -> None:
+        for broken, make_error in self.BROKEN.items():
+            for request, (url, call, body, answer) in self.requests.items():
+                with self.subTest(broken=broken, request=request):
+                    self.cache_dir = Path(tempfile.mkdtemp(dir=self.cache_dir))
+                    with self.assertRaises(caa.CoverArtError) as raised:
+                        call(self.client(raising(make_error)))
+                    self.assertEqual(str(raised.exception), f"cover art archive: {url} -> no connection")
+
+                    parts = urlsplit(url)
+                    working = Transport({f"{parts.netloc}{parts.path}": (200, body)})
+                    self.assertEqual(call(self.client(working)), answer)
+                    self.assertEqual(working.requests, [url])
+
+#: Covers told apart by size and shade. The front, the embedded front, the
+#: folder's and the owner's each pass the cover test; the `SMALL_` ones fail it.
+FRONT = shade(600, 600, 10)
+FAILING_FRONT = shade(1600, 646, 15)
+GROUP_COVER = shade(700, 700, 30)
+EMBEDDED = shade(800, 800, 200)
+SMALL_EMBEDDED = shade(300, 300, 210)
+FOLDER = shade(900, 900, 60)
+SMALL_FOLDER = shade(320, 320, 70)
+OWNER = shade(650, 650, 240)
+BACK_A, BACK_B, MEDIUM = shade(400, 300, 100), shade(410, 300, 110), shade(420, 300, 120)
+
+
+def downloads(bodies: dict[str, bytes], *failed: str):
+    """A `download` that answers `bodies` and gives None for each URL of `failed`, as a request that failed."""
+
+    def download(url: str) -> bytes | None:
+        return None if url in failed else bodies[url]
+
+    return download
+
+
+def group(*entries: tuple[list[str], bytes]) -> tuple[list[dict], dict[str, bytes]]:
+    """A release group's listing, which names another release's images, the first entry marked front."""
+    listing, bodies = [], {}
+    for number, (types, data) in enumerate(entries, start=1):
+        url = f"https://coverartarchive.org/release/{OTHER_RELEASE}/{number}.jpg"
+        listing.append(caa_image(number, types, url, front=number == 1 and "Front" in types))
+        bodies[url] = data
+    return listing, bodies
+
+
+class TheCoverOrder(unittest.TestCase):
+    """The cover order at `plan_images`: owner, fetched front, embedded front, folder cover.
+
+    `download` gives None for an image whose request failed. `embedded` is the
+    files' embedded front, which `plan_album` reads and hands in.
+    """
+
+    def without_a_fetched_front(self) -> dict[str, dict]:
+        """`plan_images` arguments for each way an album can have no archive front, none of them a cover."""
+        listing, bodies = archive((["Front"], FRONT), (["Back"], BACK_A))
+        back_only, back_bodies = archive((["Back"], BACK_A))
+        group_listing, group_bodies = group((["Front"], GROUP_COVER))
+        return {
+            "the archive answered with no front": dict(
+                caa_images=back_only, download=downloads(back_bodies), group_images=lambda: []),
+            "the archive has nothing for the release or its group": dict(
+                caa_images=[], download=downloads({}), group_images=lambda: []),
+            "the release's front failed to download": dict(
+                caa_images=listing, download=downloads(bodies, listing[0]["image"])),
+            "the release group's front failed to download": dict(
+                caa_images=back_only, download=downloads({**back_bodies, **group_bodies}, group_listing[0]["image"]),
+                group_images=lambda: group_listing),
+        }
+
+    def test_with_no_owner_cover_a_fetched_archive_front_is_the_cover_over_the_embedded_front_and_a_folder_cover(
+            self) -> None:
+        listing, bodies = archive((["Front"], FRONT), (["Back"], BACK_A))
+        back_only, back_bodies = archive((["Back"], BACK_A))
+        group_listing, group_bodies = group((["Front"], GROUP_COVER))
+        cases = {
+            "the release's front": (dict(caa_images=listing, download=downloads(bodies)), FRONT),
+            "the release group's front": (dict(caa_images=back_only, download=downloads({**back_bodies, **group_bodies}),
+                                               group_images=lambda: group_listing), GROUP_COVER),
+        }
+        for case, (arguments, expected) in cases.items():
+            for local in ([], [("folder.jpg", FOLDER)]):
+                with self.subTest(case, local=[name for name, _data in local]):
+                    plan = images.plan_images(**arguments, local=local, embedded=EMBEDDED)
+                    assert_image(self, plan.files.get("cover.jpg"), expected)
+
+    def test_a_fetched_front_that_fails_the_cover_test_is_weighed_against_folder_covers_only(self) -> None:
+        # The embedded front is never weighed against a fetched archive front,
+        # though here it passes and the archive's front does not.
+        listing, bodies = archive((["Front"], FAILING_FRONT))
+        for case, local, expected in (("no folder cover: the archive's front", [], FAILING_FRONT),
+                                      ("a folder cover that passes: the folder's", [("folder.jpg", FOLDER)], FOLDER)):
+            with self.subTest(case):
+                plan = images.plan_images(listing, downloads(bodies), local=local, embedded=EMBEDDED)
+                assert_image(self, plan.files.get("cover.jpg"), expected)
+
+    def test_without_a_fetched_front_the_embedded_front_is_the_cover_over_a_folder_cover(self) -> None:
+        for case, arguments in self.without_a_fetched_front().items():
+            for name in ("folder.jpg", "cover.jpg"):
+                with self.subTest(case, folder=name):
+                    plan = images.plan_images(**arguments, local=[(name, FOLDER)], embedded=EMBEDDED)
+                    assert_image(self, plan.files.get("cover.jpg"), EMBEDDED)
+                    # The folder cover that lost stays under its own name.
+                    self.assertIsNone(plan.consumed)
+                    # A problem here would hold the album.
+                    self.assertEqual(plan.problems, [])
+
+    def test_the_embedded_front_is_the_cover_though_it_fails_the_cover_test_and_a_folder_cover_passes(
+            self) -> None:
+        for case, arguments in self.without_a_fetched_front().items():
+            with self.subTest(case):
+                plan = images.plan_images(**arguments, local=[("folder.jpg", FOLDER)], embedded=SMALL_EMBEDDED)
+                assert_image(self, plan.files.get("cover.jpg"), SMALL_EMBEDDED)
+                self.assertEqual(plan.problems, [])
+                self.assertEqual(plan.holds, [])
+
+    def test_without_a_fetched_or_an_embedded_front_the_folder_cover_is_the_cover(self) -> None:
+        for case, arguments in self.without_a_fetched_front().items():
+            for embedded in ({}, {"embedded": None}):
+                with self.subTest(case, embedded=embedded):
+                    plan = images.plan_images(**arguments, local=[("folder.jpg", SMALL_FOLDER)], **embedded)
+                    assert_image(self, plan.files.get("cover.jpg"), SMALL_FOLDER)
+                    self.assertEqual(plan.consumed, "folder.jpg")
+                    self.assertEqual(plan.problems, [])
+
+    def test_with_none_of_them_there_is_no_cover_and_the_images_that_were_fetched_are_still_planned(self) -> None:
+        # A failed front costs the album only the front.
+        listing, bodies = archive((["Front"], FRONT), (["Back"], BACK_A))
+        plan = images.plan_images(listing, downloads(bodies, listing[0]["image"]), embedded=None)
+        self.assertNotIn("cover.jpg", plan.files)
+        assert_image(self, plan.files.get("back.jpg"), BACK_A)
+
+    def test_an_owner_cover_is_the_cover_over_every_other_and_drops_the_hold_of_two_failing_covers(self) -> None:
+        passing, passing_bodies = archive((["Front"], FRONT))
+        failing, failing_bodies = archive((["Front"], FAILING_FRONT))
+        cases = {
+            "a fetched front that passes": dict(caa_images=passing, download=downloads(passing_bodies)),
+            "a fetched front that fails, and a folder cover that fails": dict(
+                caa_images=failing, download=downloads(failing_bodies), local=[("folder.jpg", SMALL_FOLDER)]),
+            "a front that failed to download": dict(
+                caa_images=passing, download=downloads(passing_bodies, passing[0]["image"])),
+            "an embedded front": dict(caa_images=[], download=downloads({}), embedded=EMBEDDED),
+            "a folder cover": dict(caa_images=[], download=downloads({}), local=[("folder.jpg", FOLDER)]),
+            "a failed front, an embedded front and a folder cover": dict(
+                caa_images=passing, download=downloads(passing_bodies, passing[0]["image"]),
+                embedded=EMBEDDED, local=[("folder.jpg", FOLDER)]),
+        }
+        for case, arguments in cases.items():
+            with self.subTest(case):
+                plan = images.plan_images(**arguments, owner_cover=OWNER)
+                assert_image(self, plan.files.get("cover.jpg"), OWNER)
+                self.assertEqual(plan.holds, [])
+                self.assertEqual(plan.problems, [])
+
+    def test_with_the_front_fetched_the_plan_is_the_same_with_or_without_an_embedded_front(self) -> None:
+        passing, passing_bodies = archive((["Front"], FRONT), (["Back"], BACK_A), (["Back"], BACK_B))
+        failing, failing_bodies = archive((["Front"], FAILING_FRONT), (["Medium"], MEDIUM))
+        back_only, back_bodies = archive((["Back"], BACK_A))
+        group_listing, group_bodies = group((["Front"], GROUP_COVER), (["Back"], BACK_B))
+        cases = {
+            "a passing front and a passing folder cover": dict(
+                caa_images=passing, download=downloads(passing_bodies), local=[("folder.jpg", FOLDER)]),
+            "a failing front and a passing folder cover, consumed": dict(
+                caa_images=failing, download=downloads(failing_bodies), local=[("folder.jpg", FOLDER)]),
+            "a failing front and a failing folder cover, held": dict(
+                caa_images=failing, download=downloads(failing_bodies), local=[("cover.jpg", SMALL_FOLDER)]),
+            "a failing front alone": dict(caa_images=failing, download=downloads(failing_bodies)),
+            "the release group's front": dict(
+                caa_images=back_only, download=downloads({**back_bodies, **group_bodies}),
+                group_images=lambda: group_listing, existing={"back.jpg": BACK_A}),
+        }
+        for case, arguments in cases.items():
+            for embedded in (EMBEDDED, SMALL_EMBEDDED):
+                with self.subTest(case, embedded=describe(embedded)):
+                    today = images.plan_images(**arguments)
+                    self.assertNotEqual(today.files.get("cover.jpg"), embedded)
+                    self.assertEqual(images.plan_images(**arguments, embedded=embedded), today)
+
+
+class AFailedArchiveImage(unittest.TestCase):
+    """An image that failed to download is left out, and the rest named as if it were absent."""
+
+    def test_of_two_backs_the_first_failing_the_other_is_back_jpg(self) -> None:
+        listing, bodies = archive((["Front"], FRONT), (["Back"], BACK_A), (["Back"], BACK_B), (["Medium"], MEDIUM))
+        plan = images.plan_images(listing, downloads(bodies, listing[1]["image"]))
+        self.assertEqual(sorted(plan.files), ["back.jpg", "cover.jpg", "medium.jpg"])
+        assert_image(self, plan.files["back.jpg"], BACK_B)
+        assert_image(self, plan.files["cover.jpg"], FRONT)
+        self.assertEqual(plan.problems, [])
+        self.assertEqual(plan.files, images.plan_images([listing[0], *listing[2:]], downloads(bodies)).files)
+
+    def test_of_two_pdfs_the_first_failing_the_other_is_booklet_pdf(self) -> None:
+        listing, bodies = archive((["Front"], FRONT), (["Booklet"], PDF_1), (["Booklet"], PDF_2))
+        plan = images.plan_images(listing, downloads(bodies, listing[1]["image"]))
+        self.assertEqual(sorted(plan.files), ["booklet.pdf", "cover.jpg"])
+        self.assertEqual(plan.files["booklet.pdf"], PDF_2)
+        self.assertEqual(plan.problems, [])
 
 
 if __name__ == "__main__":

@@ -195,6 +195,36 @@ def jpeg(width: int, height: int) -> bytes:
     return out.getvalue()
 
 
+def picture(width: int, height: int, colour: tuple[int, int, int], fmt: str = "JPEG") -> bytes:
+    """A plain image in one colour, as a JPEG unless `fmt` names another format Pillow writes.
+
+    The colour tells two pictures of the same size apart, by their bytes and
+    after a conversion that changes the bytes.
+    """
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (width, height), colour).save(out, fmt)
+    return out.getvalue()
+
+
+def two_tone(width: int, height: int, fmt: str = "JPEG",
+             colours: tuple[tuple[int, int, int], tuple[int, int, int]] = ((230, 230, 230), (30, 30, 30))) -> bytes:
+    """One picture at any size: split corner to corner, the first colour above the diagonal, the second below.
+
+    A flat picture's average hash is 0 whatever its colour, so two flat
+    pictures look alike to a same-picture test; this one has a hash of its own,
+    and the same one at every size.
+    """
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (width, height), colours[0])
+    ImageDraw.Draw(image).polygon([(0, height), (width, 0), (width, height)], fill=colours[1])
+    out = io.BytesIO()
+    image.save(out, fmt)
+    return out.getvalue()
+
+
 @functools.cache
 def embedded_cover() -> bytes:
     """`cover.jpg` shrunk to 1200 px on the long side, as the rules embed it."""
@@ -207,11 +237,13 @@ def embedded_cover() -> bytes:
     return out.getvalue()
 
 
-def embed_picture(path: Path | str, data: bytes, picture_type: int = 3, replace: bool = False) -> None:
+def embed_picture(path: Path | str, data: bytes, picture_type: int = 3, replace: bool = False,
+                  mime: str = "image/jpeg") -> None:
     """Embed a JPEG, as a front cover (type 3) unless told otherwise.
 
-    MP3 is saved as ID3v2.4. M4A has no picture types, so every `covr` is a
-    front cover there and `picture_type` is ignored.
+    `mime` is what the tag says the picture is; give it with any other
+    format. MP3 is saved as ID3v2.4. M4A has no picture types, so every
+    `covr` is a front cover there and `picture_type` is ignored.
     """
     ext = Path(path).suffix.lower().lstrip(".")
     if ext == "mp3":
@@ -220,14 +252,14 @@ def embed_picture(path: Path | str, data: bytes, picture_type: int = 3, replace:
             tag.delall("APIC")
         # The description keeps a second picture from replacing the first.
         desc = f"picture {len(tag.getall('APIC')) + 1}"
-        tag.add(APIC(encoding=3, mime="image/jpeg", type=picture_type, desc=desc, data=data))
+        tag.add(APIC(encoding=3, mime=mime, type=picture_type, desc=desc, data=data))
         tag.save(path, v2_version=4)
     elif ext in ("flac", "ogg"):
         from PIL import Image
 
         picture = Picture()
         picture.type = picture_type
-        picture.mime = "image/jpeg"
+        picture.mime = mime
         picture.width, picture.height = Image.open(io.BytesIO(data)).size
         picture.depth = 24
         picture.data = data
@@ -251,7 +283,7 @@ def embed_picture(path: Path | str, data: bytes, picture_type: int = 3, replace:
     elif ext == "wma":
         audio = ASF(path)
         blobs = [] if replace else list(audio.get("WM/Picture", []))
-        blobs.append(ASFByteArrayAttribute(asf_picture(data, picture_type)))
+        blobs.append(ASFByteArrayAttribute(asf_picture(data, picture_type, mime)))
         audio["WM/Picture"] = blobs
         audio.save()
     else:

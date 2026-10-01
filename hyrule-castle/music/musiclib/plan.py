@@ -29,11 +29,11 @@ from musiclib.mb import VARIOUS_ARTISTS, MusicBrainzError, MusicBrainzNotFound, 
 from musiclib.strays import Stray
 from musiclib.units import DISAGREEMENT, NEEDS_A_PERSON, TrackPair, Unit, counted_media, disc_number, group_media, pair
 
-#: The one instruction every "the archive is unavailable" problem carries:
-#: a 500 or a timeout is not "this release has no images" (only a real,
-#: cached 404 is), so it must stop the plan rather than let it through with a
-#: cover a retry might still have found.
 _CAA_UNAVAILABLE = "cover art archive unavailable"
+
+_NO_COVER_ARCHIVE_FAILED = ("no cover: the cover art archive is unavailable and the files carry none; "
+                            "upload a cover or identify again")
+_NO_COVER_NO_FRONT = "no cover: the cover art archive has no front and the files carry none; upload a cover"
 
 #: A destination name over this many UTF-8 bytes is refused: ext4, the
 #: filesystem the box writes to, holds 255 bytes a name regardless of how
@@ -66,10 +66,9 @@ class Plan:
     `files` covers only the tracks. `deletions`, `extras` and `kept` are
     every other file the unit already has, sorted the way `check` sorts them
     (`check.classify_other`), as paths relative to `root`. `cover.jpg` is in
-    none of them: it is either replaced by the archive's front or kept as it
-    is, never deleted, and lives in `images` instead. `problems` stops the
-    album being written; `holds` and `suggestions` do not, they only keep it
-    out of `certain`/`auto`.
+    none of them: it is never deleted, and lives in `images` instead.
+    `problems` stops the album being written; `holds` and `suggestions` do not,
+    they only keep it out of `certain`/`auto`.
     """
 
     root: Path
@@ -441,6 +440,28 @@ def folder_artist_name(credit: list[dict], mb) -> str:
     return ascii_.to_ascii(artists.own_name(credit, mb))
 
 
+def _archive_hold(failures: Sequence[tuple[str, str]], image_plan: images.ImagePlan) -> str:
+    if image_plan.cover_from is None:
+        cover = "there is no cover"
+    else:
+        cover = "the cover is " + {
+            "owner": "the owner's",
+            "archive": "the archive's front",
+            "embedded": "the files' embedded front",
+            "folder": f"the folder's {image_plan.cover_name}",
+        }[image_plan.cover_from]
+    listed = "; ".join(f"{url} -> {status}" for url, status in dict.fromkeys(failures))
+    return f"{_CAA_UNAVAILABLE}: {listed}; {cover}"
+
+
+def _embedded_front(unit: Unit, pairs: Sequence[TrackPair] | None) -> bytes | None:
+    if pairs is None:
+        tracks = list(unit.tracks)
+    else:
+        tracks = [p.file for medium in sorted({p.medium for p in pairs}) for p in pairs if p.medium == medium]
+    return images.first_embedded_front([Path(track.path) for track in tracks])
+
+
 def plan_album(
     unit: Unit, release: dict, mb, caa, owner_input: dict | None = None,
     incoming: str | None = None, status: str | None = None,
@@ -502,45 +523,66 @@ def plan_album(
     redundant = set(images.redundant_archive_names(loose))
     discs = {folder: number for folder in _disc_folders(unit) if (number := disc_number(folder)) is not None}
     answered: list[Stray] = []
+
+    if pairs is None:
+        pairs = pair(unit, release)
+    files_front = _embedded_front(unit, pairs) if local is None else None
+
     try:
         caa_images = caa.images(release["id"])
-
-        def plan_images(local_covers, existing):
-            return images.plan_images(
-                caa_images, caa.download,
-                group_images=lambda: caa.release_group_images(release["release-group"]["id"]),
-                local=local_covers, owner_cover=owner_cover, existing=existing)
-
-        folder_covers = images.local_covers(unit.path) if local is None else list(local)
-        existing = {name: data for name, data in folder_files.items() if name not in left_behind}
-        image_plan = plan_images(folder_covers, existing)
-        staying = {name: data for name, data in existing.items() if name not in redundant}
-        answered = strays_module.settle(
-            stray_bytes, discs, strays or {}, image_plan.files.get("cover.jpg"),
-            {name: data for name, data in image_plan.files.items() if name != "cover.jpg"}, staying)
-        kept_strays = {stray.keeps: stray_bytes[stray.path] for stray in answered if stray.keeps is not None}
-        # A stray kept as `front.*` is a local cover like one already in the folder, so the archive's front
-        # is judged against it: the plan is made again with it in. Only here, after the copy rule
-        # has run, so that the stray is never deleted as a copy of the cover it became.
-        fronts = [(name, data) for name, data in kept_strays.items()
-                  if Path(name).stem == "front" and Path(name).suffix in images.LOCAL_SUFFIXES]
-        if fronts:
-            # `local_covers`' order: by stem's rank, then name.
-            covers = sorted([*folder_covers, *fronts],
-                            key=lambda c: (images.LOCAL_STEMS.index(Path(c[0]).stem.casefold()), c[0].casefold()))
-            image_plan = plan_images(covers, {**existing, **kept_strays})
-        taken = {strays_module.name_key(name) for name in kept_strays}
-        for name in [n for n in image_plan.files if n != "cover.jpg" and strays_module.name_key(n) in taken]:
-            del image_plan.files[name]
+        listing_failure = None
     except CoverArtError as exc:
-        # A 500 or a timeout is not "this release has no images" (`caa`
-        # itself already turns a real 404 into an empty list, cached): taking
-        # it as that would keep the rip's cover and write the album as done
-        # with whatever the archive would have given on a working day.
-        problems.append(f"{_CAA_UNAVAILABLE}: {exc}")
-        image_plan = images.ImagePlan(files={}, problems=[])
-        answered = strays_module.settle(stray_bytes, discs, strays or {}, None, {}, folder_files)
-    problems.extend(image_plan.problems)
+        caa_images, listing_failure = [], (exc.url, exc.status)
+
+    def plan_images(local_covers, existing):
+        failures = [] if listing_failure is None else [listing_failure]
+
+        def download(url: str) -> bytes | None:
+            try:
+                return caa.download(url)
+            except CoverArtError as exc:
+                failures.append((exc.url, exc.status))
+                return None
+
+        def group_listing() -> list[dict]:
+            try:
+                return caa.release_group_images(release["release-group"]["id"])
+            except CoverArtError as exc:
+                failures.append((exc.url, exc.status))
+                return []
+
+        # With the release's listing failed, the group's is not asked in its place: it could name a
+        # different edition's front.
+        group_images = group_listing if listing_failure is None else (lambda: [])
+        plan = images.plan_images(
+            caa_images, download, group_images=group_images, local=local_covers,
+            owner_cover=owner_cover, existing=existing, embedded=files_front)
+        return plan, failures + [(url, "not an image") for url in plan.unreadable]
+
+    folder_covers = images.local_covers(unit.path) if local is None else list(local)
+    existing = {name: data for name, data in folder_files.items() if name not in left_behind}
+    image_plan, failures = plan_images(folder_covers, existing)
+    staying = {name: data for name, data in existing.items() if name not in redundant}
+    answered = strays_module.settle(
+        stray_bytes, discs, strays or {}, image_plan.files.get("cover.jpg"),
+        {name: data for name, data in image_plan.files.items() if name != "cover.jpg"}, staying)
+    kept_strays = {stray.keeps: stray_bytes[stray.path] for stray in answered if stray.keeps is not None}
+    # A stray kept as `front.*` is a local cover like one already in the folder, so the archive's front
+    # is judged against it: the plan is made again with it in. Only here, after the copy rule
+    # has run, so that the stray is never deleted as a copy of the cover it became.
+    fronts = [(name, data) for name, data in kept_strays.items()
+              if Path(name).stem == "front" and Path(name).suffix in images.LOCAL_SUFFIXES]
+    if fronts:
+        covers = sorted([*folder_covers, *fronts],
+                        key=lambda c: (images.LOCAL_STEMS.index(Path(c[0]).stem.casefold()), c[0].casefold()))
+        image_plan, failures = plan_images(covers, {**existing, **kept_strays})
+    taken = {strays_module.name_key(name) for name in kept_strays}
+    for name in [n for n in image_plan.files if n != "cover.jpg" and strays_module.name_key(n) in taken]:
+        del image_plan.files[name]
+
+    problems.extend(p for p in image_plan.problems if p != images.NO_FRONT)
+    if image_plan.no_cover:
+        problems.append(_NO_COVER_ARCHIVE_FAILED if failures else _NO_COVER_NO_FRONT)
     embedded = images.embedded_front(image_plan.files["cover.jpg"]) if "cover.jpg" in image_plan.files else None
 
     album_date = _album_date(release, unit.tracks)
@@ -576,10 +618,10 @@ def plan_album(
             # Only a 404 means no composers; any other refusal holds the album.
             composed = {}
 
-    if pairs is None:
-        pairs = pair(unit, release)
     file_plans: list[FilePlan] = []
     holds: list[str] = list(image_plan.holds)
+    if failures:
+        holds.append(_archive_hold(failures, image_plan))
     if settled:
         holds.append(f"{unit.status}: {unit.reason}")
     suggestions: dict[str, str] = {}

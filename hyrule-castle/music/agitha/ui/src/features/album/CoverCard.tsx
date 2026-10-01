@@ -46,7 +46,7 @@ export function CoverCard({
 	const next = shownChosen ?? view.cover;
 	const now = view.cover_now;
 	const shown = side === "now" ? now : next;
-	const planned = Object.keys(view.preview?.images ?? {}).length > 0;
+	const planned = "cover.jpg" in (view.preview?.images ?? {});
 
 	async function take(file: File | null | undefined) {
 		setError(null);
@@ -153,7 +153,7 @@ export function CoverCard({
 					{shown
 						? t("duplicate.by", { w: shown.width, h: shown.height })
 						: null}
-					{side === "next" && shownChosen && (
+					{side === "next" && shownChosen && planned && (
 						<>
 							{" · "}
 							<button

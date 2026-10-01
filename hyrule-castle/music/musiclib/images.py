@@ -8,8 +8,9 @@ import re
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Literal, Mapping, Sequence
 
+from mutagen import MutagenError
 from mutagen.asf import ASF, ASFByteArrayAttribute
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import APIC, ID3, ID3NoHeaderError
@@ -21,12 +22,22 @@ _SKIP_TYPES = {"Raw/Unedited", "Watermark"}
 _EMBED_MAX = 1200
 
 
+CoverFrom = Literal["owner", "archive", "embedded", "folder"]
+
+NO_FRONT = ("no front cover: not in the Cover Art Archive for the release or its release group, "
+            "and no cover image in the folder")
+
+
 @dataclass
 class ImagePlan:
     files: dict[str, bytes]
     problems: list[str]
     consumed: str | None = None  # the folder file that became `cover.jpg`, when it was not one already
     holds: list[str] = field(default_factory=list)
+    cover_from: CoverFrom | None = None
+    cover_name: str | None = None
+    no_cover: bool = False
+    unreadable: list[str] = field(default_factory=list)
 
 
 def _is_skipped(image: dict) -> bool:
@@ -235,13 +246,38 @@ def average_hash_or_none(data: bytes) -> int | None:
         return None
 
 
+SAME_PICTURE_WITHIN = 10
+_SAME_PICTURE_COLOUR = 16
+
+
+def _thumbnail(data: bytes) -> bytes:
+    with Image.open(io.BytesIO(data)) as image:
+        return image.convert("RGB").resize((8, 8), Image.BOX).tobytes()
+
+
+def _same_picture(a: bytes, b: bytes) -> bool:
+    ha, hb = average_hash_or_none(a), average_hash_or_none(b)
+    if ha is None or hb is None or hash_distance(ha, hb) > SAME_PICTURE_WITHIN:
+        return False
+    ta, tb = _thumbnail(a), _thumbnail(b)
+    return sum(abs(x - y) for x, y in zip(ta, tb)) / len(ta) <= _SAME_PICTURE_COLOUR
+
+
+def _embedded_cover(data: bytes) -> bytes | None:
+    try:
+        return as_jpeg(data)
+    except NOT_AN_IMAGE:
+        return None
+
+
 def plan_images(
     caa_images: list[dict],
-    download: Callable[[str], bytes],
+    download: Callable[[str], bytes | None],
     group_images: Callable[[], list[dict]] | None = None,
     local: Sequence[tuple[str, bytes]] = (),
     existing: Mapping[str, bytes] | None = None,
     owner_cover: bytes | None = None,
+    embedded: bytes | None = None,
 ) -> ImagePlan:
     """The album's image files, from the Cover Art Archive's list for the release.
 
@@ -260,6 +296,12 @@ def plan_images(
     image other than the cover is not saved when its bytes, as they would be
     written, are a file in `existing` or an image saved before it.
 
+    `download` gives None for an image whose request failed. That image is
+    left out and the others are named as if it were absent. A failed front
+    is not replaced by the release group's; with no fetched front, `embedded`
+    (the files' own front, any format Pillow reads) is the cover before any
+    folder cover, whether or not it passes.
+
     `owner_cover`, an image the owner chose (any format Pillow reads), is
     `cover.jpg` whatever the archive has and whether or not it passes; a local
     cover it replaces is consumed as it would have been without it.
@@ -267,22 +309,35 @@ def plan_images(
     existing = existing or {}
     downloads: dict[str, bytes] = {}
 
-    def get(image: dict) -> bytes:
+    unreadable: list[str] = []
+
+    def get(image: dict) -> bytes | None:
         url = image["image"]
         if url not in downloads:
-            downloads[url] = download(url)
+            data = download(url)
+            if data is not None and not _is_pdf(data) and _embedded_cover(data) is None:
+                unreadable.append(url)
+                data = None
+            downloads[url] = data
         return downloads[url]
 
-    def first_front(listing: list[dict]) -> dict | None:
-        return next((image for image in _front_candidates(listing) if not _is_pdf(get(image))), None)
+    def first_front(listing: list[dict]) -> tuple[dict | None, bool]:
+        for image in _front_candidates(listing):
+            data = get(image)
+            if data is None:
+                return None, True
+            if not _is_pdf(data):
+                return image, False
+        return None, False
 
     kept = [image for image in caa_images if not _is_skipped(image)]
-    pdfs = [image for image in kept if _is_pdf(get(image))]
-    pictures = [image for image in kept if image not in pdfs]
+    fetched_kept = [image for image in kept if get(image) is not None]
+    pdfs = [image for image in fetched_kept if _is_pdf(get(image))]
+    pictures = [image for image in fetched_kept if image not in pdfs]
 
-    front = first_front(caa_images)
-    if front is None and group_images is not None:
-        front = first_front(group_images())
+    front, front_failed = first_front(caa_images)
+    if front is None and not front_failed and group_images is not None:
+        front, _failed = first_front(group_images())
 
     files: dict[str, bytes] = {}
     problems: list[str] = []
@@ -290,11 +345,8 @@ def plan_images(
     consumed: str | None = None
 
     def fetch(image: dict) -> bytes | None:
-        try:
-            return as_jpeg(get(image))
-        except NOT_AN_IMAGE:
-            problems.append(f"cover art archive: {image['image']} is not an image")
-            return None
+        data = get(image)
+        return None if data is None else as_jpeg(data)
 
     candidates: list[tuple[str, bytes]] = []
     for name, data in local:
@@ -303,27 +355,43 @@ def plan_images(
         except NOT_AN_IMAGE:
             continue
 
+    from_files = None if embedded is None else _embedded_cover(embedded)
     cover: bytes | None = None
     chosen: tuple[str, bytes] | None = None
+    cover_from: CoverFrom | None = None
+    cover_name: str | None = None
     if front is not None:
         cover = fetch(front)
+        cover_from = "archive" if cover is not None else None
         # A broken front stays broken: it does not hand the cover to the folder.
         if cover is not None and candidates:
             chosen, holds = _local_over_archive(front, cover, candidates)
+    elif from_files is not None:
+        # An applied album's tracks embed a 1200 px copy of the `cover.jpg` beside them: the folder's file
+        # is the same picture at full size, so it stays the cover rather than being replaced by its copy.
+        # Any other folder cover, or a smaller `cover.jpg`, loses to the embedded front.
+        same = next((c for c in candidates
+                     if c[0].casefold() == "cover.jpg" and min(pixel_size(c[1])) >= min(pixel_size(from_files))
+                     and _same_picture(c[1], from_files)), None)
+        if same is not None:
+            chosen = same
+        else:
+            cover = from_files
+            cover_from = "embedded"
     elif candidates:
         chosen = next((c for c in candidates if passes(*pixel_size(c[1]))), candidates[0])
     elif owner_cover is None:
-        problems.append(
-            "no front cover: not in the Cover Art Archive for the release or its release group, "
-            "and no cover image in the folder")
+        problems.append(NO_FRONT)
 
     if chosen is not None:
         cover = chosen[1]
+        cover_from, cover_name = "folder", chosen[0]
         # `front.*` is usually a scan of the booklet and is the owner's: copied, never consumed.
         if chosen[0].casefold() != "cover.jpg" and Path(chosen[0]).stem.casefold() != "front":
             consumed = chosen[0]
     if owner_cover is not None:
         cover = as_jpeg(owner_cover)
+        cover_from, cover_name = "owner", None
         holds = []
     if cover is not None:
         files["cover.jpg"] = cover
@@ -366,7 +434,9 @@ def plan_images(
         if name.casefold() not in folder_names:
             files[name] = data
 
-    return ImagePlan(files=files, problems=problems, consumed=consumed, holds=holds)
+    return ImagePlan(files=files, problems=problems, consumed=consumed, holds=holds,
+                     cover_from=cover_from, cover_name=cover_name, no_cover=cover is None,
+                     unreadable=unreadable)
 
 
 def embedded_front(cover_jpeg: bytes) -> bytes:
@@ -452,6 +522,17 @@ def embed(path: Path, jpeg: bytes) -> None:
         audio.save()
     else:
         raise ValueError(f"unsupported extension: {ext!r}")
+
+
+def first_embedded_front(tracks: Sequence[Path]) -> bytes | None:
+    for track in tracks:
+        try:
+            pictures = embedded_pictures(track)
+        except (OSError, ValueError, MutagenError):
+            continue
+        if pictures:
+            return next((data for kind, data in pictures if kind == 3), pictures[0][1])
+    return None
 
 
 def embedded_pictures(path: Path) -> list[tuple[int, bytes]]:

@@ -1,7 +1,7 @@
 import { fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AlbumCover, AlbumView } from "@/shared/api/types";
+import type { AlbumCover, AlbumView, ImageDigest } from "@/shared/api/types";
 import { ALBUM_URL, albumView } from "@/test/albumView";
 import { type Call, fakeFetch } from "@/test/fakeFetch";
 import { renderWithProviders, screen, userEvent } from "@/test/render";
@@ -50,6 +50,18 @@ function serveUpload(answer: { passes: boolean; problem: string | null }) {
 }
 
 const puts = (calls: Call[]) => calls.filter((c) => c.method === "PUT");
+
+const BACK: ImageDigest = {
+	length: 18_204,
+	sha256: "3c0d9e1f5a7b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b7c9d",
+};
+
+// A plan with these images and no cover.jpg among them.
+function withoutCover(images: Record<string, ImageDigest>) {
+	const view = albumView({ cover: null });
+	view.preview!.images = images;
+	return view;
+}
 
 describe("CoverCard", () => {
 	let restore: (() => void) | undefined;
@@ -130,15 +142,29 @@ describe("CoverCard", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("says no cover will be written where the plan writes none", async () => {
-		const view = albumView({ cover: null });
-		view.preview!.images = {};
-		renderWithProviders(<Card view={view} />);
+	// A plan held for want of a cover can still write other archive images,
+	// so any image planned is not a cover planned.
+	it.each<[string, Record<string, ImageDigest>]>([
+		["no image at all", {}],
+		["a back but no front", { "back.jpg": BACK }],
+	])(
+		"asks for an upload or a later identify where the plan writes no cover, with %s",
+		async (_, images) => {
+			renderWithProviders(<Card view={withoutCover(images)} />);
 
-		expect(
-			await screen.findByText("no cover will be written"),
-		).toBeInTheDocument();
-	});
+			expect(
+				await screen.findByText(
+					"no cover yet: upload one, or identify again when the archive answers",
+				),
+			).toBeInTheDocument();
+			expect(
+				screen.queryByText("no cover will be written"),
+			).not.toBeInTheDocument();
+			expect(
+				screen.queryByText("a cover will be written; it can't be shown yet"),
+			).not.toBeInTheDocument();
+		},
+	);
 
 	it("uploads a picked image, shows it as the new cover, and warns when it fails the test", async () => {
 		const fake = serveUpload({
@@ -179,6 +205,47 @@ describe("CoverCard", () => {
 		expect(
 			screen.queryByRole("button", { name: "use the planned cover" }),
 		).not.toBeInTheDocument();
+	});
+
+	it.each<[string, Record<string, ImageDigest>]>([
+		["no image at all", {}],
+		["a back but no front", { "back.jpg": BACK }],
+	])(
+		"offers no planned cover to go back to where the plan writes none, with %s",
+		async (_, images) => {
+			restore = serveUpload({ passes: true, problem: null }).restore;
+			const user = userEvent.setup();
+			renderWithProviders(<Card view={withoutCover(images)} />);
+
+			await user.upload(await screen.findByLabelText("Pick a cover"), png());
+
+			// The upload has landed, so the caption has drawn all it will draw.
+			expect(
+				await screen.findByRole("img", { name: "Clean Album cover" }),
+			).toHaveAttribute("src", BLOB);
+			expect(latest?.draft.cover).toBe(OWNER_PATH);
+			expect(
+				screen.queryByRole("button", { name: "use the planned cover" }),
+			).not.toBeInTheDocument();
+		},
+	);
+
+	// The plan writes a cover.jpg the server cannot serve yet. The plan still
+	// has a cover to go back to, even though the page has no picture of it.
+	it("goes back to a planned cover it cannot show yet", async () => {
+		restore = serveUpload({ passes: true, problem: null }).restore;
+		const user = userEvent.setup();
+		renderWithProviders(<Card view={albumView({ cover: null })} />);
+
+		await user.upload(await screen.findByLabelText("Pick a cover"), png());
+		await user.click(
+			await screen.findByRole("button", { name: "use the planned cover" }),
+		);
+
+		expect(latest?.draft.cover).toBeNull();
+		expect(
+			screen.getByText("a cover will be written; it can't be shown yet"),
+		).toBeInTheDocument();
 	});
 
 	it("takes an image dropped on the cover", async () => {
