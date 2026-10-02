@@ -24,6 +24,10 @@
 	color: var(--muted);
 }
 
+.gloss {
+	color: var(--faint);
+}
+
 .mark {
 	color: var(--caution);
 	font-size: 0.75rem;
@@ -43,6 +47,15 @@
 	align-items: center;
 	gap: var(--space-1);
 	overflow-wrap: anywhere;
+}
+
+/* A long value, lyrics above all, is cut to a few lines; its whole text is the title of the line. */
+.value > span:first-child {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
 }
 
 .count {

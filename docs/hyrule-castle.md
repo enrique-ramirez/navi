@@ -240,6 +240,13 @@ The unit of work is a drop: one upload, named `YYYYMMDD-HHMMSS`, which can hold 
 
 It runs one `musiclib batch identify` per album, with the drop's upload time as every file's `ADDED`, one process at a time, and `batch apply` when the album is approved, both rooted in the inbox. Then the inbox folder is deleted. An album whose artist folder already holds the same album is compared with it, and the replaced copy is deleted only after a checksum-verified move.
 
+agitha writes one line to the journal for each thing it changes on disk, starting with `write`: a drop staged, an album landed, a save, a folder removed. A line names paths, counts and tag names, never a tag's value.
+
+```sh
+journalctl -u agitha -g '^write '      # every change, without the request lines
+journalctl -u agitha -g ' failed: '    # the changes that did not land
+```
+
 agitha never stops or restarts foobar2000. A new album reaches foobar2000's index through library-folder monitoring, or at its next start. foobar2000's media library does not pick up an album folder that is removed and re-created at the same path within a second; the files stay out of the library until foobar2000 restarts.
 
 ## The music player

@@ -1,12 +1,15 @@
 {
   "artists": [
     {
+      "empty": false,
       "name": "Sabaton"
     },
     {
+      "empty": false,
       "name": "Sonata Arctica"
     },
     {
+      "empty": false,
       "name": "Stratovarius"
     }
   ]

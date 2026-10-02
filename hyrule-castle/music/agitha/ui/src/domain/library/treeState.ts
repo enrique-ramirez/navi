@@ -5,33 +5,23 @@ export interface Place {
 	album?: string;
 }
 
-/** The folders the tree has open. */
-export interface Shown {
-	letter?: string;
-	artist?: string;
-}
+const partsOf = (place: Place) =>
+	[place.letter, place.artist, place.album].filter(
+		(part) => part !== undefined,
+	);
 
-/**
- * The folders the tree opens for an address. It follows the address, but only
- * to a folder that has answered: until then it keeps what it showed.
- */
-export function shownFor(
-	url: Place,
-	shown: Shown,
-	pending: { letter: boolean; artist: boolean },
-): Shown {
-	const letter =
-		url.letter === undefined || !pending.letter ? url.letter : shown.letter;
-	if (url.artist === undefined) return { letter };
-	if (letter === url.letter && !pending.artist)
-		return { letter, artist: url.artist };
-	return { letter, artist: letter === shown.letter ? shown.artist : undefined };
+/** The place as a library-relative path, empty for the library itself. */
+export const pathOf = (place: Place) => partsOf(place).join("/");
+
+/** The folders that must be open for the place to show in the tree: its letter and its artist. */
+export function ancestorsOf(place: Place): string[] {
+	if (place.letter === undefined) return [];
+	if (place.artist === undefined) return [place.letter];
+	return [place.letter, `${place.letter}/${place.artist}`];
 }
 
 /** Whether `path` is the deepest place the address names. */
 export function isHere(url: Place, ...path: string[]) {
-	const here = [url.letter, url.artist, url.album].filter(
-		(part) => part !== undefined,
-	);
+	const here = partsOf(url);
 	return path.length === here.length && path.every((p, i) => p === here[i]);
 }

@@ -1,23 +1,13 @@
 import type { AlbumView, Edits, PlanFile } from "@/shared/api/types";
+import type { Change, Side, TagRow } from "@/shared/ui/tagRow";
 import { familyOf } from "./albumTags";
 import { GENRE, type Neutral, neutralFor } from "./neutral";
-import { type Locked, lockedKind, PICTURE } from "./tagModel";
+import { lockedKind, PICTURE } from "./tagModel";
 
-export type Side = string[] | null | "differs";
+export type { Change, Side };
+export type DiffRow = TagRow;
 
-export type Change = "same" | "changed" | "added" | "removed";
-
-export interface DiffRow {
-	key: string;
-	now: Side;
-	next: Side;
-	change: Change;
-	locked: Locked | null;
-	edited: boolean;
-	removedBy: string[];
-}
-
-const present = (values: string[] | undefined) =>
+export const present = (values: string[] | undefined) =>
 	values && values.length > 0 ? values : null;
 
 const joined = (side: Side) =>
@@ -27,7 +17,7 @@ const joined = (side: Side) =>
 			? "\u0002"
 			: side.join("\u0000");
 
-function common(sides: (string[] | null)[]): Side {
+export function common(sides: (string[] | null)[]): Side {
 	const first = sides[0] ?? null;
 	return sides.every((side) => joined(side) === joined(first))
 		? first
@@ -57,7 +47,7 @@ function nextOf(
 	return edit === undefined ? present(file.after[key]) : present(edit ?? []);
 }
 
-function changeOf(now: Side, next: Side): Change {
+export function changeOf(now: Side, next: Side): Change {
 	if (joined(now) === joined(next)) return "same";
 	if (now === null) return "added";
 	if (next === null) return "removed";

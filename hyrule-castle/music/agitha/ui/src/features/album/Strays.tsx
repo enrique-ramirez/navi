@@ -5,7 +5,7 @@ import { isRunning } from "@/domain/album/albumQuery";
 import { albumUrl } from "@/shared/api/album";
 import type { AlbumView, Stray, StrayAnswer } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import pageStyles from "./AlbumPage.module.css";
+import pageStyles from "@/shared/styles/albumPage.module.css";
 import type { Pending } from "./pending";
 import styles from "./Strays.module.css";
 

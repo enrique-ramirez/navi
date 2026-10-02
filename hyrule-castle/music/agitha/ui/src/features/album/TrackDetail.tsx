@@ -1,13 +1,13 @@
 import { factsOf, familyOf, trackTitle } from "@/domain/album/albumTags";
+import { describeEncoding } from "@/domain/album/describeEncoding";
 import type { DiffRow } from "@/domain/album/diff";
 import { formatKbps, formatLength, formatSize } from "@/domain/album/format";
 import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import { describeEncoding } from "./describeEncoding";
-import { FactsList } from "./FactsList";
+import styles from "@/shared/styles/trackDetail.module.css";
+import { FactsList } from "@/shared/ui/FactsList";
 import type { Pending } from "./pending";
 import { TagDiff } from "./TagDiff";
-import styles from "./TrackDetail.module.css";
 
 export function TrackDetail({
 	view,

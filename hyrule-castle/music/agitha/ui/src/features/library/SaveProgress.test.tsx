@@ -24,11 +24,12 @@ import {
 	albumOf,
 	box,
 	closeAlbum,
-	dropSymphonicMetal,
 	marked,
+	newValue,
 	openAlbum,
 	openReview,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	shownWithTags,
 	tag,
@@ -43,11 +44,13 @@ const MOVED = `${SONATA}/(2008) Ecliptica`;
 const STALE = "the album changed since this page loaded";
 const NOT_READ_BACK = "02. My Land.flac did not read back as written.";
 
-// Ecliptica as the files hold it once the draft is written: My Land has lost
-// `symphonic metal`, so no track carries it.
+// Ecliptica as the files hold it once the draft is written: every track's
+// genre is `power metal` alone, so My Land has lost `symphonic metal` and
+// Replica has gained a genre.
 function written(over: Partial<LibraryAlbum> = {}) {
 	const album = albumOf(over);
 	album.tracks[1]!.tags.genre = ["power metal"];
+	album.tracks[3]!.tags.TCON = ["power metal"];
 	return album;
 }
 
@@ -106,7 +109,7 @@ const library = (over: Partial<Library> = {}): Library => ({
 // One edit, its review, and Save.
 async function save(page: ReturnType<typeof open>) {
 	await shown();
-	await dropSymphonicMetal(page.user);
+	await setPowerMetal(page.user);
 	const review = await openReview(page.user);
 	await page.user.click(within(review).getByRole("button", { name: "Save" }));
 }
@@ -125,14 +128,14 @@ const gets = (page: ReturnType<typeof open>, folder: string) =>
 
 const editable = () => {
 	expect(box("My Land")).toBeEnabled();
-	expect(screen.getByRole("button", { name: "Remove Genre" })).toBeEnabled();
+	expect(newValue("Genre")).toBeEnabled();
 };
 
 describe("SaveProgress", () => {
 	it("posts to save the draft the review showed, and nothing before Save is pressed", async () => {
 		const page = open(library());
 		await shown();
-		await dropSymphonicMetal(page.user);
+		await setPowerMetal(page.user);
 		const review = await openReview(page.user);
 		expect(posted(page.calls, "/api/library/save")).toEqual([]);
 
@@ -323,9 +326,10 @@ describe("SaveProgress", () => {
 			);
 			await throughPolls(editable);
 			expect(marked("Genre")).toBeVisible();
-			expect(tag("Genre")).not.toHaveTextContent("symphonic metal");
+			expect(newValue("Genre")).toHaveValue("power metal");
 			expect(reviewButton()).toBeEnabled();
-			expect(screen.queryByRole("status")).toBeNull();
+			// The cover's warning is a status too; the save's is the one that must be gone.
+			expect(screen.queryByText("Saving")).toBeNull();
 			// The album is read again: the files are what the restart left.
 			await throughPolls(() =>
 				expect(albumGets(page.calls)).toBeGreaterThan(before),
@@ -335,7 +339,8 @@ describe("SaveProgress", () => {
 			await vi.advanceTimersByTimeAsync(4_200);
 			expect(jobGets(page)).toBe(asked);
 			// Nothing brought the save back meanwhile.
-			expect(screen.queryByRole("status")).toBeNull();
+			// The cover's warning is a status too; the save's is the one that must be gone.
+			expect(screen.queryByText("Saving")).toBeNull();
 			expect(reviewButton()).toBeEnabled();
 		});
 

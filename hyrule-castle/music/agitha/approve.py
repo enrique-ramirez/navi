@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import drops, duplicates, matches, state, swap
+from . import drops, duplicates, log, matches, state, swap
 from .paths import ALBUM_NUMBER
 from .refusal import BUSY, TAKEN, Refusal
 
@@ -80,6 +80,7 @@ def approve(request: Handler, match: re.Match[str], config: Config) -> None:
                       keep="new" if held is not None else None)
     if not queue.enqueue(drop, n, "apply"):
         raise Refusal(409, BUSY)
+    log.write("queue-apply", f"{drop}/{n}", keep="new" if held is not None else None)
     request.send_json(202, _album_answer("applying", None, None))
 
 
@@ -141,7 +142,11 @@ def _put_in_library(config: Config, drop: str, n: str, entry: dict[str, Any] | N
     keeps = bool(entry and entry["destination"]) and _keeps_new(folder)
     old = duplicates.library_copy(config, entry) if keeps and entry else None
     if old is not None or (keeps and swap.stranded(folder)):
-        return duplicates.replace(config, drop, n, entry, old), None
+        failed = duplicates.replace(config, drop, n, entry, old)
+        if failed is None:
+            log.write("replace-duplicate", entry["destination"], drop=f"{drop}/{n}",
+                      was=old.relative_to(config.library).as_posix() if old is not None else None)
+        return failed, None
     return _rename_in(config, folder, entry), None
 
 
@@ -156,11 +161,13 @@ def land(config: Config, drop: str, n: str) -> dict[str, Any]:
     entry = state.plan_entry(config, drop, n)
     failed, note = _put_in_library(config, drop, n, entry, _replaces(folder))
     if failed is not None:
+        log.failed("land", f"{drop}/{n}", failed["error"])
         return failed
     destination = entry["destination"] if entry else None
     target = config.library / destination if destination else None
     drops.replace_json(config.jobs / f"agitha-{drop}-{n}" / "landed.json",
                        {"state": "in the library", "path": str(target)})
+    log.write("land", f"{drop}/{n}", path=destination, note=note)
     shutil.rmtree(folder)
     _clear_empty_drop(config, drop)
     return _album_answer("in the library", str(target), note)
@@ -171,6 +178,7 @@ def _clear_empty_drop(config: Config, drop: str) -> None:
     folder = config.inbox / drop
     if folder.is_dir() and not any(p.is_dir() and ALBUM_NUMBER.fullmatch(p.name) for p in folder.iterdir()):
         shutil.rmtree(folder)
+        log.write("clear-drop", drop)
 
 
 def move(request: Handler, match: re.Match[str], config: Config) -> None:
@@ -189,6 +197,7 @@ def move(request: Handler, match: re.Match[str], config: Config) -> None:
 def _remove_album(config: Config, drop: str, n: str) -> None:
     shutil.rmtree(config.inbox / drop / n, ignore_errors=True)
     shutil.rmtree(config.jobs / f"agitha-{drop}-{n}", ignore_errors=True)
+    log.write("discard-album", f"{drop}/{n}")
 
 
 def discard_album(request: Handler, match: re.Match[str], config: Config) -> None:
@@ -219,4 +228,5 @@ def discard_drop(request: Handler, match: re.Match[str], config: Config) -> None
     for album in numbers:
         _remove_album(config, drop, album)
     shutil.rmtree(folder, ignore_errors=True)
+    log.write("discard-drop", drop, albums=len(numbers))
     request.send_json(200, {"state": "discarded"})

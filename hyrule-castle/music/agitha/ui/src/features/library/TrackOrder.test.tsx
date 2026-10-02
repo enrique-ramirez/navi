@@ -14,7 +14,6 @@ import {
 	BLANK,
 	box,
 	closeAlbum,
-	dropSymphonicMetal,
 	EIGHTH,
 	inPathOrder,
 	LAND,
@@ -22,6 +21,7 @@ import {
 	openReview,
 	REPLICA,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	TITLES,
 } from "@/test/libraryAlbum";
@@ -199,7 +199,7 @@ describe("TrackOrder", () => {
 
 			// A swap that was only hidden would go out with the next draft.
 			await selectOnly(user, ...TITLES);
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await openReview(user);
 			expect(posted(calls, PREVIEW).map((draft) => draft.swaps)).toEqual([[]]);
 		});
@@ -215,7 +215,7 @@ describe("TrackOrder", () => {
 			await selectOnly(user, "8th Commandment", "Replica");
 			await user.click(swapOffered()!);
 			await selectOnly(user, ...TITLES);
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await openReview(user);
 
 			expect(posted(calls, PREVIEW).map(inPathOrder)).toEqual([
@@ -229,9 +229,9 @@ describe("TrackOrder", () => {
 					edits: [
 						{
 							tracks: refsOf(tracks),
-							set: {},
+							set: { Genre: ["power metal"] },
 							add: {},
-							remove: { Genre: ["symphonic metal"] },
+							remove: {},
 						},
 					],
 					swaps: [[EIGHTH, REPLICA]],
@@ -305,7 +305,7 @@ describe("TrackOrder", () => {
 
 			await user.click(box("Replica"));
 			expect(box("Replica")).not.toBeChecked();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			expect(marked("Genre")).toBeVisible();
 			expect(reviewButton()).toBeEnabled();
 			// Nothing of the answer can be on the page: it has not been given.
@@ -526,7 +526,7 @@ describe("TrackOrder", () => {
 					screen.getByRole("heading", { name: /Ecliptica/ }),
 				).toBeVisible();
 				for (const title of TITLES) expect(box(title)).toBeChecked();
-				await dropSymphonicMetal(user);
+				await setPowerMetal(user);
 				expect(reviewButton()).toBeEnabled();
 			},
 		);

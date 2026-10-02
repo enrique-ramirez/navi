@@ -1,23 +1,13 @@
-import { ImageUp, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { putCover } from "@/shared/api/album";
 import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import { droppedFile } from "@/shared/ui/droppedFile";
-import { Parasol } from "@/shared/ui/Parasol";
-import styles from "./CoverCard.module.css";
+import { CoverPicker, type ShownCover } from "@/shared/ui/CoverPicker";
 import type { Pending } from "./pending";
 
 // The image types the server reads.
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-
-interface Chosen {
-	url: string;
-	width: number;
-	height: number;
-	problem: string | null;
-}
 
 export function CoverCard({
 	view,
@@ -29,10 +19,7 @@ export function CoverCard({
 	title: string;
 }) {
 	const { t } = useTranslate();
-	const [side, setSide] = useState<"next" | "now">("next");
-	const [chosen, setChosen] = useState<Chosen | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [over, setOver] = useState(false);
+	const [chosen, setChosen] = useState<ShownCover | null>(null);
 	const last = useRef<string | null>(null);
 	last.current = chosen?.url ?? null;
 	useEffect(
@@ -44,22 +31,12 @@ export function CoverCard({
 
 	const sent = pending.draft.cover ?? null;
 	const shownChosen = sent ? chosen : null;
-	const next = shownChosen ?? view.cover;
-	const now = view.cover_now;
-	const shown = side === "now" ? now : next;
 	const planned = "cover.jpg" in (view.preview?.images ?? {});
 
 	async function take(file: File | null | undefined) {
-		setError(null);
-		if (!file || !IMAGE_TYPES.includes(file.type)) {
-			setError(t("cover.notImage"));
-			return;
-		}
+		if (!file || !IMAGE_TYPES.includes(file.type)) return t("cover.notImage");
 		const answer = await putCover(view, file);
-		if (!answer.ok) {
-			setError(answer.error ?? t("cover.failed"));
-			return;
-		}
+		if (!answer.ok) return answer.error ?? t("cover.failed");
 		const result = answer.body;
 		pending.setCover(result.path);
 		if (chosen) URL.revokeObjectURL(chosen.url);
@@ -69,111 +46,24 @@ export function CoverCard({
 			height: result.height,
 			problem: result.passes ? null : (result.problem ?? ""),
 		});
-		setSide("next");
+		return null;
 	}
 
-	const problem = side === "next" ? next?.problem : null;
-
 	return (
-		<figure className={styles.card}>
-			<label
-				className={styles.drop}
-				data-over={over || undefined}
-				onDragOver={(event) => {
-					event.preventDefault();
-					setOver(true);
-				}}
-				onDragLeave={() => setOver(false)}
-				onDrop={(event) => {
-					event.preventDefault();
-					setOver(false);
-					void take(droppedFile(event.dataTransfer));
-				}}
-			>
-				{shown ? (
-					<img
-						src={shown.url}
-						alt={t("album.cover", { title })}
-						className={styles.image}
-					/>
-				) : (
-					<div className={styles.placeholder}>
-						<Parasol size={64} />
-						<span>
-							{t(
-								side === "now"
-									? "cover.noneNow"
-									: planned
-										? "cover.notShown"
-										: "cover.noneNext",
-							)}
-						</span>
-					</div>
-				)}
-				<span className={styles.overlay}>
-					<ImageUp size={20} aria-hidden="true" />
-					{t("cover.replace")}
-				</span>
-				<input
-					type="file"
-					accept="image/*"
-					className="visually-hidden"
-					aria-label={t("cover.pick")}
-					onChange={(event) => {
-						void take(event.target.files?.[0]);
-						event.target.value = "";
-					}}
-				/>
-			</label>
-
-			<figcaption className={styles.caption}>
-				<fieldset className={styles.toggle}>
-					<legend className="visually-hidden">{t("cover.title")}</legend>
-					<button
-						type="button"
-						aria-pressed={side === "next"}
-						onClick={() => setSide("next")}
-					>
-						{t("cover.next")}
-					</button>
-					<button
-						type="button"
-						aria-pressed={side === "now"}
-						onClick={() => setSide("now")}
-					>
-						{t("cover.now")}
-					</button>
-				</fieldset>
-				<span className={styles.size}>
-					{shown
-						? t("duplicate.by", { w: shown.width, h: shown.height })
-						: null}
-					{side === "next" && shownChosen && planned && (
-						<>
-							{" · "}
-							<button
-								type="button"
-								className={styles.link}
-								onClick={() => pending.setCover(null)}
-							>
-								{t("cover.undo")}
-							</button>
-						</>
-					)}
-				</span>
-			</figcaption>
-
-			{problem && (
-				<p role="status" className={styles.warning}>
-					<TriangleAlert size={14} aria-hidden="true" />
-					{t("cover.fails", { problem })}
-				</p>
-			)}
-			{error && (
-				<p role="alert" className={styles.warning}>
-					{error}
-				</p>
-			)}
-		</figure>
+		<CoverPicker
+			title={title}
+			next={shownChosen ?? view.cover}
+			// The warning is about the cover the album will get; the one it has is on its way out.
+			now={view.cover_now && { ...view.cover_now, problem: null }}
+			noNext={t(planned ? "cover.notShown" : "cover.noneNext")}
+			noNow={t("cover.noneNow")}
+			pickLabel={t("cover.pick")}
+			undo={
+				shownChosen && planned
+					? { label: t("cover.undo"), run: () => pending.setCover(null) }
+					: null
+			}
+			onFile={take}
+		/>
 	);
 }

@@ -787,6 +787,46 @@ class LandsAMove(SaveCase):
         self.assertEqual(builders.tree(self.folders["extras"]), extras)
 
 
+class LogsEachSave(SaveCase):
+    def saves(self, logged: Any) -> list[str]:
+        return [line for line in logged.output if ":write save " in line or ":write restore " in line]
+
+    def test_a_save_logs_the_album_how_many_tracks_changed_and_the_names_of_the_tags_and_no_value(self) -> None:
+        path = self.path("ecliptica")
+        first, middle, last = self.tracks("ecliptica")
+        with self.assertLogs("agitha.writes") as logged:
+            self.saved(path, edit((first, last), set={"Genre": NEW_GENRES}),
+                       edit((middle,), add={"Composer": ["Tony Kakko"]}))
+        self.assertEqual(self.saves(logged),
+                         [f"INFO:agitha.writes:write save {path} tracks=3 tags=Composer,Genre cover=kept"])
+
+    def test_a_save_that_moves_the_album_logs_where_it_landed(self) -> None:
+        path = self.path("ecliptica")
+        with self.assertLogs("agitha.writes") as logged:
+            self.saved(path, edit(set={"Album artist": ["The Band"]}), lands=BANDED)
+        self.assertEqual(self.saves(logged),
+                         [f"INFO:agitha.writes:write save {path} to={BANDED} tracks=3 tags=Album artist cover=kept"])
+
+    def test_a_save_that_fails_logs_the_album_and_the_reason_the_job_gives(self) -> None:
+        path = self.path("ecliptica")
+        draft = self.draft(path, edit(set={"Genre": NEW_GENRES}))
+        with self.assertLogs("agitha.writes") as logged, Swap(self, path, 3).patched():
+            reason = self.failed(self.accepted(draft))
+        self.assertEqual(self.saves(logged), [f"WARNING:agitha.writes:write save {path} failed: {reason}"])
+
+    def test_a_start_that_puts_an_album_back_logs_its_path(self) -> None:
+        path = self.path("ecliptica")
+        swap = Swap(self, path, "stops before 3")
+        with swap.patched():
+            self.accepted(self.draft(path, edit(set={"Genre": NEW_GENRES})))
+            self.assertTrue(swap.stopped.wait(DEADLINE), NEVER[3])
+            assert swap.worker is not None
+            swap.worker.join(10)
+        with self.assertLogs("agitha.writes") as logged:
+            self.restart()
+        self.assertEqual(self.saves(logged), [f"INFO:agitha.writes:write restore {path}"])
+
+
 class RefusesADraftItCannotLand(SaveCase):
     def test_a_draft_over_a_track_that_is_gone_is_refused_as_changed_since_the_page_loaded(self) -> None:
         path = self.path("ecliptica")

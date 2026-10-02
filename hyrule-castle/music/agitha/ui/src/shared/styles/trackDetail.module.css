@@ -17,7 +17,7 @@
 }
 
 .label {
-	composes: caption from "../../shared/styles/caption.module.css";
+	composes: caption from "./caption.module.css";
 }
 
 @media (min-width: 1101px) {

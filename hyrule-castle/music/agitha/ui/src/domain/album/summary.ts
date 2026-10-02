@@ -1,4 +1,4 @@
-import type { AlbumView } from "@/shared/api/types";
+import type { AlbumView, UploadedFile } from "@/shared/api/types";
 import { uploadedValues } from "./albumTags";
 
 export interface Summary {
@@ -33,8 +33,22 @@ function audioOf(view: AlbumView) {
 	}));
 }
 
-export function summaryOf(view: AlbumView): Summary | null {
-	const files = audioOf(view);
+export const summaryOf = (view: AlbumView) => summaryOfFiles(audioOf(view));
+
+/** What a set of audio files adds up to; `disc` is whatever tells one disc from another. */
+export function summaryOfFiles(
+	files: (Pick<
+		UploadedFile,
+		| "format"
+		| "lossless"
+		| "bitrate"
+		| "sample_rate"
+		| "bit_depth"
+		| "channels"
+		| "length"
+		| "size"
+	> & { disc: string | number })[],
+): Summary | null {
 	if (files.length === 0) return null;
 	const bitrates = files.map((file) => file.bitrate);
 	return {

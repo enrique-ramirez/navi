@@ -5,7 +5,7 @@
 }
 
 .label {
-	composes: caption from "../../shared/styles/caption.module.css";
+	composes: caption from "./caption.module.css";
 }
 
 .group {

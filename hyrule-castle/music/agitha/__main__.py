@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from agitha import log
 from agitha.server import Config, make_server
 
 
@@ -22,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         inbox=args.inbox, jobs=args.jobs, library=args.library, extras=args.extras,
         musiclib=args.musiclib, static=args.static, port=args.port, host=args.host,
     )
+    log.configure()
     server = make_server(config)
     # A bound-to-everything server has no single address to print; 0.0.0.0 is
     # what a caller that asked for port 0 needs to find the port.

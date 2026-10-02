@@ -167,7 +167,7 @@ class AnswersTheFolders(ShelfCase):
         self.assertEqual(self.answer(address("S/Sabaton")), {"albums": [], "names": names})
 
     def test_the_hash_letter_opens_to_an_artist_and_an_album_named_in_japanese(self) -> None:
-        self.assertEqual(self.answer(address("#")), {"artists": [{"name": "植松伸夫"}]})
+        self.assertEqual(self.answer(address("#")), {"artists": [{"name": "植松伸夫", "empty": False}]})
         self.assertEqual([album["path"] for album in self.answer(address("#/植松伸夫"))["albums"]], [PIANO])
         self.assertEqual(self.answer(address(PIANO))["path"], PIANO)
 
@@ -441,7 +441,7 @@ class RefusesWhatIsOutsideTheRoot(LibraryCase):
 
     def setUp(self) -> None:
         # Without these every refusal below would pass against a server with no library routes at all.
-        self.assertEqual(self.answer(address("S"))["artists"][0].keys(), {"name"})
+        self.assertEqual(self.answer(address("S"))["artists"][0].keys(), {"name", "empty"})
         self.assertEqual(self.answer(address(self.INSIDE))["path"], self.INSIDE)
         self.assertEqual(self.fetch(address(self.INSIDE, "/audio/01.%20Inside.flac")).status, 200)
         self.assertEqual(self.fetch(address(self.INSIDE, "/cover")).status, 200)

@@ -14,12 +14,12 @@ import { hasKeepChoice } from "@/domain/album/keepChoice";
 import type { AlbumView } from "@/shared/api/types";
 import { albumStatePhrase } from "@/shared/i18n/albumState";
 import { useTranslate } from "@/shared/i18n/useTranslate";
+import styles from "@/shared/styles/reviewBar.module.css";
 import { Alert } from "@/shared/ui/Alert";
 import { Confirm } from "@/shared/ui/Confirm";
 import { approveReason } from "./approveReason";
 import { Outcome } from "./Outcome";
 import type { Draft, Pending } from "./pending";
-import styles from "./ReviewBar.module.css";
 import { useDecision } from "./useDecision";
 
 const releaseOf = (draft: Draft) =>

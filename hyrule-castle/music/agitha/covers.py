@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from musiclib import images
 
-from . import drops
+from . import drops, log
 from .refusal import Refusal
 
 if TYPE_CHECKING:
@@ -55,6 +55,7 @@ def upload(request: Handler, match: re.Match[str], config: Config) -> None:
     token = secrets.token_hex(16)
     _folder(config).mkdir(parents=True, exist_ok=True)
     drops.replace_bytes(_folder(config) / token, data)
+    log.write("store-library-cover", token, bytes=len(data))
     request.send_json(200, {"cover": token, **answer})
 
 

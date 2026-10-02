@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import { putLibraryCover, Refused } from "@/shared/api/library";
 import type {
 	CoverCheck,
@@ -7,17 +6,28 @@ import type {
 	LibraryCover as ServedCover,
 } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import { droppedFile } from "@/shared/ui/droppedFile";
-import styles from "./LibraryCover.module.css";
+import { CoverPicker, type ShownCover } from "@/shared/ui/CoverPicker";
 
 interface Picked {
 	token: string;
 	url: string;
 }
 
+const shownOf = (check: CoverCheck, url: string): ShownCover => ({
+	url,
+	width: check.width,
+	height: check.height,
+	problem: check.passes ? null : (check.problem ?? ""),
+});
+
+/** The address the album's cover is fetched from after `version` saves have written one over it. */
+export const versioned = (url: string, version: number) =>
+	version === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
+
 /**
  * The album's cover and the image that would replace it. The new image is
- * `cover`, the page's draft; the card keeps only its own preview address.
+ * `cover`, the page's draft; the card keeps only its own preview address, and
+ * hands it up with the draft so the review can show the image too.
  */
 export function LibraryCover({
 	current,
@@ -33,13 +43,12 @@ export function LibraryCover({
 	version: number;
 	title: string;
 	readOnly: boolean;
-	onCover: (cover: CoverUpload) => void;
+	/** The new cover and where the page can show it from; `null` twice to keep the one the album has. */
+	onCover: (cover: CoverUpload | null, url: string | null) => void;
 }) {
 	const { t } = useTranslate();
 	const [picked, setPicked] = useState<Picked | null>(null);
-	const [error, setError] = useState<string | null>(null);
 	const [uploading, setUploading] = useState(false);
-	const [over, setOver] = useState(false);
 	const last = useRef<string | null>(null);
 	last.current = picked?.url ?? null;
 	useEffect(
@@ -54,107 +63,48 @@ export function LibraryCover({
 		setPicked(null);
 	}, [cover]);
 
-	const busy = readOnly || uploading;
 	const added =
 		cover !== null && picked?.token === cover.cover
-			? { check: cover, url: picked.url }
+			? shownOf(cover, picked.url)
 			: null;
+	const now = current && shownOf(current, versioned(current.url, version));
 
 	async function take(file: File | null | undefined) {
-		if (busy || !file) return;
-		setError(null);
+		if (!file) return null;
 		setUploading(true);
 		try {
 			const answer = await putLibraryCover(file);
 			if (picked) URL.revokeObjectURL(picked.url);
-			setPicked({ token: answer.cover, url: URL.createObjectURL(file) });
-			onCover(answer);
+			const url = URL.createObjectURL(file);
+			setPicked({ token: answer.cover, url });
+			onCover(answer, url);
+			return null;
 		} catch (failure) {
-			setError(
-				failure instanceof Refused && failure.sentence !== null
-					? failure.sentence
-					: t("library.failed"),
-			);
+			return failure instanceof Refused && failure.sentence !== null
+				? failure.sentence
+				: t("library.failed");
 		} finally {
 			setUploading(false);
 		}
 	}
 
-	const shownUrl =
-		current &&
-		(version === 0
-			? current.url
-			: `${current.url}${current.url.includes("?") ? "&" : "?"}v=${version}`);
-
 	return (
-		<figure
-			className={styles.card}
-			data-over={over || undefined}
-			onDragOver={(event) => {
-				event.preventDefault();
-				setOver(true);
-			}}
-			onDragLeave={() => setOver(false)}
-			onDrop={(event) => {
-				event.preventDefault();
-				setOver(false);
-				void take(droppedFile(event.dataTransfer));
-			}}
-		>
-			<div className={styles.images}>
-				{current && shownUrl ? (
-					<CoverImage
-						src={shownUrl}
-						alt={t("album.cover", { title })}
-						check={current}
-					/>
-				) : (
-					<p>{t("library.noCover")}</p>
-				)}
-				{added && (
-					<CoverImage
-						src={added.url}
-						alt={t("library.newCover")}
-						check={added.check}
-					/>
-				)}
-			</div>
-			<input
-				type="file"
-				accept="image/*"
-				aria-label={t("library.replaceCover")}
-				disabled={busy}
-				onChange={(event) => {
-					void take(event.target.files?.[0]);
-					event.target.value = "";
-				}}
-			/>
-			{error && <p role="alert">{error}</p>}
-		</figure>
-	);
-}
-
-function CoverImage({
-	src,
-	alt,
-	check,
-}: {
-	src: string;
-	alt: string;
-	check: CoverCheck;
-}) {
-	const { t } = useTranslate();
-	return (
-		<figure className={styles.image}>
-			<img src={src} alt={alt} />
-			<figcaption>
-				{t("duplicate.by", { w: check.width, h: check.height })}
-			</figcaption>
-			{!check.passes && (
-				<p className={styles.warning}>
-					{t("cover.fails", { problem: check.problem ?? "" })}
-				</p>
-			)}
-		</figure>
+		<CoverPicker
+			title={title}
+			next={added ?? now}
+			now={now}
+			sides={added !== null}
+			nextAlt={added ? t("library.newCover") : undefined}
+			noNext={t("library.noCover")}
+			noNow={t("library.noCover")}
+			pickLabel={t("library.replaceCover")}
+			disabled={readOnly || uploading}
+			undo={
+				added && !readOnly
+					? { label: t("library.keepCover"), run: () => onCover(null, null) }
+					: null
+			}
+			onFile={take}
+		/>
 	);
 }

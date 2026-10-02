@@ -63,7 +63,17 @@
 
 .save {
 	justify-self: start;
-	cursor: pointer;
+	padding: var(--space-2) var(--space-4);
+	background: var(--accent);
+	border: 1px solid var(--accent);
+	border-radius: var(--radius-pill);
+	color: var(--on-accent);
+	font-weight: 600;
+}
+
+.save:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
 }
 
 .cover {
@@ -82,4 +92,34 @@
 .album {
 	display: grid;
 	gap: var(--space-3);
+}
+
+.covers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	align-items: center;
+	color: var(--muted);
+}
+
+.thumb {
+	display: grid;
+	gap: var(--space-1);
+	margin: 0;
+}
+
+.thumb img {
+	display: block;
+	width: 10rem;
+	height: 10rem;
+	object-fit: contain;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+.thumb figcaption {
+	color: var(--muted);
+	font-family: var(--font-numeric);
+	font-size: 0.75rem;
 }

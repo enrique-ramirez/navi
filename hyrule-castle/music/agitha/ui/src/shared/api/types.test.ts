@@ -515,7 +515,7 @@ describe("the library fixtures", () => {
 	it("show one album the same from its artist, its letter and the root", () => {
 		const [letterName, artistName] = album.path.split("/");
 		expect(root.letters).toContain(letterName);
-		expect(letter.artists).toContainEqual({ name: artistName });
+		expect(letter.artists).toContainEqual({ name: artistName, empty: false });
 		const summary = artist.albums.find((entry) => entry.path === album.path);
 		expect(summary?.tracks).toEqual(album.tracks);
 		expect(summary?.name).toBe(album.path.split("/")[2]);

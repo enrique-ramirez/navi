@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import drops, duplicates, library, planpaths, swap
+from . import drops, duplicates, library, log, planpaths, swap
 from .refusal import BEING_SAVED, HOLDS_A_LINK, MATCH_CHANGED, TAKEN, Refusal
 
 if TYPE_CHECKING:
@@ -44,6 +44,7 @@ def start(request: Handler, match: re.Match[str], config: Config) -> None:
         if any(entry.is_symlink() for entry in folder.rglob("*")):
             raise Refusal(409, HOLDS_A_LINK)
         drop = _copy_into_a_drop(config, path, folder)
+    log.write("start-match", path, drop=f"{drop}/{N}")
     request.server.queue.enqueue(drop, N, "identify")
     request.send_json(201, {"drop": drop, "n": N})
 
@@ -65,8 +66,9 @@ def _copy_into_a_drop(config: Config, path: str, folder: Path) -> str:
         shutil.copytree(folder, album / "drop" / "album" / folder.name, symlinks=True)
         drops.write_record(base, {"started": now.isoformat(), "done": True, "ignored": [], "refused": [],
                                   "error": None, "items": [{"name": folder.name, "kind": "folder", "files": []}]})
-    except BaseException:
+    except BaseException as exc:
         shutil.rmtree(base, ignore_errors=True)
+        log.failed("start-match", path, f"{type(exc).__name__}: {exc}")
         raise
     return drop
 
@@ -109,4 +111,5 @@ def land(config: Config, drop: str, n: str, entry: dict[str, Any],
     failed = duplicates.replace(config, drop, n, entry, old, unchanged)
     if failed is not None:
         return failed, None
+    log.write("land-match", replaces, to=entry["destination"], drop=f"{drop}/{n}")
     return None, swap.after_landing(config.library, config.extras, replaces, entry["destination"])

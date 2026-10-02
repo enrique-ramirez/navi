@@ -2,6 +2,7 @@ import { Play, Square } from "lucide-react";
 import { useState } from "react";
 
 import { uploadedValues } from "@/domain/album/albumTags";
+import { describeEncoding } from "@/domain/album/describeEncoding";
 import {
 	formatKbps,
 	formatLength,
@@ -12,11 +13,10 @@ import { bytesOf } from "@/domain/album/tagModel";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
 import type { AlbumView, UploadedFile } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import pageStyles from "./AlbumPage.module.css";
-import { describeEncoding } from "./describeEncoding";
-import { FactsList } from "./FactsList";
-import detailStyles from "./TrackDetail.module.css";
-import listStyles from "./TrackList.module.css";
+import pageStyles from "@/shared/styles/albumPage.module.css";
+import detailStyles from "@/shared/styles/trackDetail.module.css";
+import { FactsList } from "@/shared/ui/FactsList";
+import listStyles from "@/shared/ui/TrackRows.module.css";
 import styles from "./UploadedFiles.module.css";
 
 function Tags({ view, file }: { view: AlbumView; file: UploadedFile }) {

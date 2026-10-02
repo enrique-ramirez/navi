@@ -4,10 +4,14 @@ Every path is resolved under `config.library` and refused (404, nothing read)
 where it leaves it, so a `..`, an absolute name or a symlink out reads as no
 such folder. An answer reads the one letter, artist or album it names and
 nothing wider.
+
+The one write is `remove`, `DELETE` of an artist or an album folder that
+holds nothing.
 """
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 from collections.abc import Iterable
@@ -18,7 +22,7 @@ from urllib.parse import quote
 from musiclib import genres, images, mapping, names, walk
 from musiclib.batch.decisions import raw_key_offence
 
-from . import drops, ranges, review
+from . import drops, log, ranges, review, swap
 from .refusal import Refusal
 from .state import LETTER_FOLDERS
 
@@ -154,9 +158,19 @@ def root_view(request: Handler, match: re.Match[str], config: Config) -> None:
     request.send_json(200, {"root": str(config.library), "readable": readable, "letters": letters})
 
 
+def _is_empty(folder: Path) -> bool:
+    """Whether `folder` holds no entry at all, a hidden file included; a folder that cannot be listed is not empty."""
+    try:
+        with os.scandir(folder) as entries:
+            return next(entries, None) is None
+    except OSError:
+        return False
+
+
 def letter(request: Handler, match: re.Match[str], config: Config) -> None:
     folder = open_folder(config, match.group(1))
-    request.send_json(200, {"artists": [{"name": path.name} for path in walk.child_dirs(folder)]})
+    request.send_json(200, {"artists": [{"name": path.name, "empty": _is_empty(path)}
+                                        for path in walk.child_dirs(folder)]})
 
 
 def artist(request: Handler, match: re.Match[str], config: Config) -> None:
@@ -169,13 +183,44 @@ def artist(request: Handler, match: re.Match[str], config: Config) -> None:
         named = names.DATED_FOLDER_RE.fullmatch(folder.name)
         has_cover = _cover_file(folder, root) is not None
         albums.append({
-            "path": path, "name": folder.name,
+            "path": path, "name": folder.name, "empty": _is_empty(folder),
             "year": named.group(1) if named else "", "title": named.group(2) if named else folder.name,
             "cover_url": f"{_address(path)}/cover" if has_cover else None,
             "match": open_ones.get(path),
             "tracks": read_tracks(config, path, folder)[0],
         })
     request.send_json(200, {"albums": albums, "names": review.names()})
+
+
+def remove(request: Handler, match: re.Match[str], config: Config) -> None:
+    """`DELETE` of an artist or an album folder that holds nothing: one `os.rmdir`, so nothing that holds a file can go.
+
+    An artist's letter folder goes with it where that was its last artist. An
+    album's artist folder stays.
+    """
+    parts = match.groups()
+    path = "/".join(parts)
+    folder = library_root(config).joinpath(*parts)
+    # A folder reached through a link resolves to another name, and removing it would remove what the link names.
+    if open_folder(config, *parts) != folder:
+        raise Refusal(404, "No such folder.")
+    if not _is_empty(folder):
+        raise Refusal(409, f"not empty: {path}")
+    try:
+        os.rmdir(folder)
+    except OSError as exc:
+        log.failed("remove-folder", path, exc.strerror or exc)
+        if exc.errno in (errno.ENOTEMPTY, errno.EEXIST):
+            raise Refusal(409, f"not empty: {path}") from None
+        raise Refusal(500, f"could not remove {path}: {exc.strerror or exc}") from None
+    log.write("remove-folder", path)
+    removed = [path]
+    if len(parts) == 2:
+        swap.prune(folder.parent, library_root(config))
+        if not folder.parent.exists():
+            log.write("remove-folder", parts[0])
+            removed.append(parts[0])
+    request.send_json(200, {"removed": removed})
 
 
 def _album_folder(config: Config, match: re.Match[str]) -> tuple[str, Path]:

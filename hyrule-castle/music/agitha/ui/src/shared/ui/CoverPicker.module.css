@@ -112,3 +112,7 @@
 	color: var(--caution);
 	font-size: 0.8125rem;
 }
+
+.drop[data-disabled] {
+	cursor: default;
+}

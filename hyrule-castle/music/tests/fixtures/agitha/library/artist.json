@@ -2,6 +2,7 @@
   "albums": [
     {
       "cover_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/cover",
+      "empty": false,
       "match": null,
       "name": "(1999) Ecliptica",
       "path": "S/Sonata Arctica/(1999) Ecliptica",
@@ -309,6 +310,7 @@
     },
     {
       "cover_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/cover",
+      "empty": false,
       "match": {
         "drop": "20261001-193000",
         "n": "01"

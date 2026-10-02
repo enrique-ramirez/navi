@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import log
 from .paths import ALBUM_NUMBER, DROP_ID, climbs
 
 if TYPE_CHECKING:
@@ -94,6 +95,9 @@ def create(request: Handler, match: re.Match[str], config: Config) -> None:
     (config.inbox / drop / "raw").mkdir()
     write_record(config.inbox / drop, {"started": now.isoformat(), "items": body["items"], "done": False})
     request.server.touch(drop)
+    listed = [entry for item in body["items"] for entry in item["files"]]
+    log.write("create-drop", drop, items=len(body["items"]), files=len(listed),
+              bytes=sum(entry["size"] for entry in listed))
     request.send_json(201, {"drop": drop})
 
 

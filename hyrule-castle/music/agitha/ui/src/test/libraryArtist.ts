@@ -1,3 +1,4 @@
+import { fireEvent } from "@testing-library/react";
 import type {
 	Draft,
 	JobAlbum,
@@ -10,7 +11,6 @@ import type {
 	PreviewAlbum,
 	PreviewTrack,
 } from "@/shared/api/types";
-
 import {
 	ECLIPTICA,
 	fixtures,
@@ -19,6 +19,7 @@ import {
 	type Writes,
 } from "./library";
 import { closeAlbum, openAlbum, TITLES } from "./libraryAlbum";
+
 import { screen, type userEvent, within } from "./render";
 
 type User = ReturnType<typeof userEvent.setup>;
@@ -80,6 +81,7 @@ function revenge(): LibraryAlbumSummary {
 	return {
 		path: REVENGE,
 		name: "(2006) For the Sake of Revenge",
+		empty: false,
 		year: "2006",
 		title: "For the Sake of Revenge",
 		cover_url: null,
@@ -167,11 +169,16 @@ export const closeArtist = closeAlbum;
 export const allBox = () =>
 	screen.getByRole("checkbox", { name: "Select all tracks" });
 
-/** The page once the artist and its albums are on it. */
+/**
+ * The page once the artist and its albums are on it, with every tag of the
+ * selection on show: the panel that lists them is folded away until asked for.
+ */
 export async function shownArtist() {
 	// The app's first render in a file can pass the default second on a busy machine.
 	await screen.findByRole("heading", { name: ARTIST }, { timeout: 3000 });
 	await screen.findByRole("checkbox", { name: "Select all tracks" });
+	const tags = screen.queryByRole("button", { name: "Show all tags" });
+	if (tags) fireEvent.click(tags);
 }
 
 /**
@@ -229,6 +236,19 @@ export const queryTrackBox = (album: AlbumTitle, title: string) =>
 
 /** A tag's row in the panel, once the panel has it. */
 export const findTag = (name: string) => screen.findByRole("group", { name });
+export const tag = (name: string) => screen.getByRole("group", { name });
+export const queryTag = (name: string) => screen.queryByRole("group", { name });
+
+/** The panel's mark on a tag the draft changes. */
+export const marked = (name: string) =>
+	within(tag(name)).queryByText("changed");
+
+/** One edit from the genres in the artist's header, over the tracks selected: `symphonic metal` leaves them. */
+export async function dropSymphonicMetal(user: User) {
+	await user.click(
+		await screen.findByRole("button", { name: "Remove symphonic metal" }),
+	);
+}
 
 /** Asks for the review and gives its region once the preview is in it. */
 export async function openBatchReview(user: User) {

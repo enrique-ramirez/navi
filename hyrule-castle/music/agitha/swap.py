@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 from musiclib import files
 
-from . import audio, drops
+from . import audio, drops, log
 
 #: Each file of a folder by its path: its SHA-256 and, for audio, its length.
 _Record = dict[str, tuple[str, float | None]]
@@ -366,8 +366,10 @@ def restore_after_crash(library: Path, folder: Path, landed: str | None) -> str 
         shutil.rmtree(folder / "committed", ignore_errors=True)
         if is_committed(folder):
             # `replaced.json` stays: a later start still has the old path to finish the landing from.
+            log.failed("finish-landing", landed or folder, "the old copy could not be deleted")
             return f"the old copy under {folder / 'committed'} could not be deleted"
         (folder / "replaced.json").unlink(missing_ok=True)
+        log.write("finish-landing", landed or folder)
         return None
     saved = _saved(folder)
     if saved is None:
@@ -383,7 +385,9 @@ def restore_after_crash(library: Path, folder: Path, landed: str | None) -> str 
         (library / relative).parent.mkdir(parents=True, exist_ok=True)
         os.rename(aside, library / relative)
     except OSError as exc:
+        log.failed("restore", relative, f"could not be put back from {aside}: {exc.strerror or exc}")
         return f"the library's copy could not be put back from {aside}: {exc.strerror or exc}"
+    log.write("restore", relative)
     if new is not None:
         prune(new.parent, library)
     prune(aside.parent, folder)

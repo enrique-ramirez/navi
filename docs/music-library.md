@@ -144,6 +144,8 @@ An album in the library is changed only through agitha's Library pages, never by
 
 A part whose tag did not change stays as it is. The artist folder is built from the name as written, with the fixed list of leading articles, as for an artist MusicBrainz does not know: a hand edit never looks the name up. The folder's type prefix (`[EP]`, `[Single]`, `[Mixtape]`, `[Live]`) and its edition suffix are MusicBrainz's. A hand edit keeps them as found, and a wrong release is fixed by a match. Artist and letter folders that a move leaves empty are removed, and the album's extras move to the new path.
 
+**Empty folders.** The Library tree removes an artist or album folder only where it holds nothing at all, hidden files included. The letter folder goes with its last artist. A folder that holds anything is refused with `not empty: <path>`.
+
 **Not remembered.** `memory.json` belongs to the review alone. A hand edit, a batch, a cover or a swap leaves it as it was, so a later match plans from MusicBrainz and from what earlier reviews remembered, and shows a hand-edited value as a change like any other.
 
 **Swap.** Two selected tracks trade places, on one disc or across discs, in one format or two. Each file takes the other's track number and disc number (keeping its own totals), title, artist and artist sort name, composer and composer sort name, lyrics, disc subtitle, MusicBrainz recording, track and artist IDs, and file name. The audio stays in its file with its extension, its rating, ReplayGain values and play history. So does every tag not listed: genre, date, album, album artist, comment, picture and `ADDED`.

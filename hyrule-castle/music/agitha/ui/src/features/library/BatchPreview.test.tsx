@@ -12,12 +12,9 @@ import {
 } from "@/test/library";
 import {
 	albumGets,
-	dropSymphonicMetal,
 	LAND,
-	marked,
 	REPLICA,
 	reviewButton,
-	tag,
 	throughPolls,
 } from "@/test/libraryAlbum";
 import {
@@ -26,9 +23,11 @@ import {
 	albumsAround,
 	allBox,
 	closeArtist,
+	dropSymphonicMetal,
 	findTag,
 	genreChange,
 	jobOver,
+	marked,
 	openArtist,
 	openBatchReview,
 	previewAlbum,
@@ -39,6 +38,7 @@ import {
 	sentencesOf,
 	sonata,
 	statesOf,
+	tag,
 	trackOf,
 	unselected,
 	usableOnArtist,

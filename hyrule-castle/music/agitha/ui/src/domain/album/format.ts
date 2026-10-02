@@ -28,4 +28,4 @@ export const formatKilohertz = (hertz: number) =>
 export const formatKbps = (bitsPerSecond: number) =>
 	`${Math.round(bitsPerSecond / 1000)} kbps`;
 
-export const formatValues = (values: string[]) => values.join("; ");
+export { formatValues } from "@/shared/ui/tagRow";

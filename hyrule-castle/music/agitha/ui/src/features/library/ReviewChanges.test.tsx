@@ -15,7 +15,6 @@ import {
 	albumOf,
 	BLANK,
 	closeAlbum,
-	dropSymphonicMetal,
 	EIGHTH,
 	LAND,
 	marked,
@@ -23,6 +22,7 @@ import {
 	openReview,
 	REPLICA,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	tag,
 } from "@/test/libraryAlbum";
@@ -48,7 +48,7 @@ const clean = (over: Partial<PreviewAlbum> = {}) =>
 async function reviewOf(preview: LibraryPreview) {
 	const { user } = openAlbum({ writes: { preview } });
 	await shown();
-	await dropSymphonicMetal(user);
+	await setPowerMetal(user);
 	const review = await openReview(user);
 	return {
 		review,
@@ -204,12 +204,12 @@ describe("ReviewChanges", () => {
 			const answer = held(clean());
 			const { calls, user } = openAlbum({ writes: { preview: answer.answer } });
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(reviewButton());
 			await waitFor(() => expect(posted(calls, PREVIEW)).toHaveLength(1));
 
 			await user.click(screen.getByRole("button", { name: "Remove Date" }));
-			await within(tag("Date")).findByText("changed");
+			await within(tag("Date")).findByText("edited by you");
 			answer.release();
 
 			// Review changes can be pressed again only once the first answer is in.
@@ -238,7 +238,7 @@ describe("ReviewChanges", () => {
 				writes: { preview: refusal(409, STALE) },
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(reviewButton());
 
 			expect(await screen.findByText(STALE)).toBeVisible();
@@ -266,7 +266,7 @@ describe("ReviewChanges", () => {
 				writes: { preview: refusal(400, NO_UPLOAD) },
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(reviewButton());
 
 			expect(await screen.findByText(NO_UPLOAD)).toBeVisible();
@@ -283,7 +283,7 @@ describe("ReviewChanges", () => {
 				writes: { preview: () => new Response(null, { status: 500 }) },
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(reviewButton());
 
 			expect(await screen.findByText(GENERIC)).toBeVisible();
@@ -301,7 +301,7 @@ describe("ReviewChanges", () => {
 				},
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(reviewButton());
 			await screen.findByText(NO_UPLOAD);
 

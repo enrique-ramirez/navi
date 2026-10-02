@@ -2,6 +2,7 @@ import { getJson } from "./getJson";
 import type {
 	CoverUpload,
 	Draft,
+	FolderRemoved,
 	GenreList,
 	LibraryAlbum,
 	LibraryArtist,
@@ -93,3 +94,15 @@ export async function putLibraryCover(file: File): Promise<CoverUpload> {
 /** The drop album a library album is matched in: a new one, or the one already open. */
 export const postMatch = (path: string) =>
 	postJson<MatchRef>("/api/library/match", { path });
+
+/** Removes an empty artist or album folder; the server refuses one that holds anything, with its sentence. */
+export async function deleteLibraryFolder(
+	parts: string[],
+): Promise<FolderRemoved> {
+	const response = await fetch(`/api/library/${parts.map(segment).join("/")}`, {
+		method: "DELETE",
+	});
+	const answer = await response.json().catch(() => null);
+	if (!response.ok) throw new Refused(response.status, answer?.error ?? null);
+	return answer as FolderRemoved;
+}

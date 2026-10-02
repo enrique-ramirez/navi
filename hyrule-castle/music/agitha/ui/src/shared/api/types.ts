@@ -619,7 +619,18 @@ export interface LibraryRoot {
 
 /** `GET /api/library/<letter>`. */
 export interface LibraryLetter {
-	artists: { name: string }[];
+	artists: LibraryFolder[];
+}
+
+export interface LibraryFolder {
+	name: string;
+	/** Whether the folder holds nothing at all, which is the only kind the page may remove. */
+	empty: boolean;
+}
+
+/** `DELETE /api/library/<letter>/<artist>[/<album>]`: every folder removed, relative to the library root. */
+export interface FolderRemoved {
+	removed: string[];
 }
 
 /** `GET /api/library/<letter>/<artist>`. */
@@ -635,6 +646,8 @@ export interface LibraryAlbumSummary {
 	path: string;
 	/** The album folder's name. */
 	name: string;
+	/** As on `LibraryFolder`. */
+	empty: boolean;
 	year: string;
 	title: string;
 	/** `.../cover`; `null` with no cover. */

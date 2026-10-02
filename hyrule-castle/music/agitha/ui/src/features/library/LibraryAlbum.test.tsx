@@ -17,17 +17,18 @@ import {
 	BLANK,
 	box,
 	closeAlbum,
-	dropSymphonicMetal,
 	EIGHTH,
 	inPathOrder,
 	LAND,
 	marked,
+	newValue,
 	openAlbum,
 	openReview,
 	queryBox,
 	queryTag,
 	REPLICA,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	TITLES,
 	tag,
@@ -218,8 +219,8 @@ describe("LibraryAlbum", () => {
 	});
 
 	describe("selection", () => {
-		it("opens with every track selected and the panel over all of them", async () => {
-			openAlbum();
+		it("opens with every track selected and the table over all of them", async () => {
+			const { user } = openAlbum();
 			await shown();
 
 			for (const title of TITLES) expect(box(title)).toBeChecked();
@@ -227,10 +228,15 @@ describe("LibraryAlbum", () => {
 				screen.getByRole("checkbox", { name: "Select all tracks" }),
 			).toBeChecked();
 			expect(tag("Genre")).toHaveTextContent("power metal 3/4");
-			expect(tag("TXXX:RIPPER")).toHaveTextContent("EAC 0.99 1/4");
+			// A tag one track alone carries is under that track, not among the album's.
+			expect(queryTag("TXXX:RIPPER")).toBeNull();
+			await user.click(
+				screen.getByRole("button", { name: /^8th Commandment/ }),
+			);
+			expect(tag("TXXX:RIPPER")).toHaveTextContent("EAC 0.99");
 		});
 
-		it("shows the panel over the tracks left selected", async () => {
+		it("shows the table over the tracks left selected", async () => {
 			const { user } = openAlbum();
 			await shown();
 
@@ -270,9 +276,11 @@ describe("LibraryAlbum", () => {
 			expect(reviewButton()).toBeDisabled();
 			expect(marked("Genre")).toBeNull();
 
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 
-			expect(await within(tag("Genre")).findByText("changed")).toBeVisible();
+			expect(
+				await within(tag("Genre")).findByText("edited by you"),
+			).toBeInTheDocument();
 			expect(marked("Date")).toBeNull();
 			expect(reviewButton()).toBeEnabled();
 			// The edit is on the page alone until the review is asked for.
@@ -285,7 +293,7 @@ describe("LibraryAlbum", () => {
 			const { calls, user } = openAlbum({ writes: { preview: previewOf() } });
 			await shown();
 
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await openReview(user);
 
 			expect(posted(calls, PREVIEW).map(inPathOrder)).toEqual([
@@ -297,7 +305,7 @@ describe("LibraryAlbum", () => {
 						sent(eighth!, { Genre: ["power metal"] }),
 						sent(replica!, { Genre: null }),
 					],
-					edits: [edit(tracks, { remove: { Genre: ["symphonic metal"] } })],
+					edits: [edit(tracks, { set: { Genre: ["power metal"] } })],
 					swaps: [],
 					cover: null,
 					batch: false,
@@ -313,12 +321,10 @@ describe("LibraryAlbum", () => {
 
 			// Replica is never selected for an edit.
 			await user.click(box("Replica"));
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await user.click(box("8th Commandment"));
-			await user.type(
-				screen.getByRole("combobox", { name: "Add value, Genre" }),
-				"heavy metal{Enter}",
-			);
+			await user.clear(newValue("Genre"));
+			await user.type(newValue("Genre"), "power metal; heavy metal{Enter}");
 			await user.click(box("Blank File"));
 			await user.click(box("My Land"));
 			await user.click(box("8th Commandment"));
@@ -331,7 +337,7 @@ describe("LibraryAlbum", () => {
 				{
 					tracks: [
 						sent(blank!, { Genre: ["power metal"] }),
-						// What the file holds, though the first edit took a value before the second named the tag again.
+						// What the file holds, though the first edit set the tag before the second named it again.
 						sent(land!, { Genre: ["power metal", "symphonic metal"] }),
 						// Two tags were edited on this track and one on the others.
 						sent(eighth!, {
@@ -340,11 +346,10 @@ describe("LibraryAlbum", () => {
 						}),
 					],
 					edits: [
-						edit(only(tracks, BLANK, LAND, EIGHTH), {
-							remove: { Genre: ["symphonic metal"] },
-						}),
+						// The first edit named three tracks; the second took two of them over.
+						edit(only(tracks, EIGHTH), { set: { Genre: ["power metal"] } }),
 						edit(only(tracks, BLANK, LAND), {
-							add: { Genre: ["heavy metal"] },
+							set: { Genre: ["power metal", "heavy metal"] },
 						}),
 						edit(only(tracks, EIGHTH), { set: { "TXXX:RIPPER": null } }),
 					],
@@ -355,9 +360,9 @@ describe("LibraryAlbum", () => {
 			]);
 		});
 
-		// The server reads `GENRE` as the `genre` a FLAC holds. A page that sends
-		// `null` for what it saw has every later save refused as changed since it loaded.
-		it("posts what a FLAC holds as seen under the key as typed, where a Vorbis key is typed in capitals", async () => {
+		// A Vorbis field name has no case: `GENRE` typed in is the `genre` a FLAC
+		// holds, so it gets no second row and its edit goes out under the row's name.
+		it("lands a Vorbis key typed in capitals on the row of the tag the files hold", async () => {
 			const tracks = albumTracks();
 			const [blank, land] = tracks;
 			const { calls, user } = openAlbum({ writes: { preview: previewOf() } });
@@ -367,13 +372,11 @@ describe("LibraryAlbum", () => {
 
 			await user.type(
 				screen.getByRole("textbox", { name: "Tag key" }),
-				"GENRE",
+				"GENRE{Enter}",
 			);
-			await user.type(
-				screen.getByRole("textbox", { name: "Tag value" }),
-				"heavy metal",
-			);
-			await user.click(screen.getByRole("button", { name: "Add tag" }));
+			expect(queryTag("GENRE")).toBeNull();
+			await user.clear(newValue("Genre"));
+			await user.type(newValue("Genre"), "heavy metal{Enter}");
 			await openReview(user);
 
 			expect(
@@ -383,12 +386,12 @@ describe("LibraryAlbum", () => {
 			).toEqual([
 				{
 					tracks: [
-						sent(blank!, { GENRE: ["power metal"] }),
-						sent(land!, { GENRE: ["power metal", "symphonic metal"] }),
+						sent(blank!, { Genre: ["power metal"] }),
+						sent(land!, { Genre: ["power metal", "symphonic metal"] }),
 					],
 					edits: [
 						edit(only(tracks, BLANK, LAND), {
-							add: { GENRE: ["heavy metal"] },
+							set: { Genre: ["heavy metal"] },
 						}),
 					],
 				},
@@ -412,8 +415,8 @@ describe("LibraryAlbum", () => {
 				},
 			});
 			await shown();
-			await dropSymphonicMetal(user);
-			await within(tag("Genre")).findByText("changed");
+			await setPowerMetal(user);
+			await within(tag("Genre")).findByText("edited by you");
 
 			// Everything is asked for again, as after a save. The client tells the
 			// page of the answers a timer tick after the last one is in.
@@ -427,7 +430,7 @@ describe("LibraryAlbum", () => {
 			expect(place()).toBe(`/library/${ECLIPTICA}`);
 			expect(screen.getByRole("heading", { name: /Ecliptica/ })).toBeVisible();
 			expect(marked("Genre")).toBeVisible();
-			expect(tag("Genre")).not.toHaveTextContent("symphonic metal");
+			expect(newValue("Genre")).toHaveValue("power metal");
 			expect(reviewButton()).toBeEnabled();
 		});
 
@@ -447,8 +450,8 @@ describe("LibraryAlbum", () => {
 				},
 			});
 			await shown();
-			await dropSymphonicMetal(user);
-			await within(tag("Genre")).findByText("changed");
+			await setPowerMetal(user);
+			await within(tag("Genre")).findByText("edited by you");
 
 			root.fails = true;
 			await act(async () => {
@@ -460,7 +463,7 @@ describe("LibraryAlbum", () => {
 			expect(place()).toBe(`/library/${ECLIPTICA}`);
 			expect(screen.getByRole("heading", { name: /Ecliptica/ })).toBeVisible();
 			expect(marked("Genre")).toBeVisible();
-			expect(tag("Genre")).not.toHaveTextContent("symphonic metal");
+			expect(newValue("Genre")).toHaveValue("power metal");
 			expect(reviewButton()).toBeEnabled();
 			// The folders stay beside it, and nothing says the library failed.
 			expect(
@@ -473,14 +476,14 @@ describe("LibraryAlbum", () => {
 			const tracks = albumTracks();
 			const { calls, user } = openAlbum({ writes: { preview: previewOf() } });
 			await shown();
-			await dropSymphonicMetal(user);
-			await within(tag("Genre")).findByText("changed");
-			expect(tag("Genre")).not.toHaveTextContent("symphonic metal");
+			await setPowerMetal(user);
+			await within(tag("Genre")).findByText("edited by you");
+			expect(newValue("Genre")).toHaveValue("power metal");
 
 			await user.click(screen.getByRole("button", { name: "Discard changes" }));
 
 			await waitFor(() => expect(marked("Genre")).toBeNull());
-			expect(tag("Genre")).toHaveTextContent("symphonic metal 1/4");
+			expect(newValue("Genre")).toHaveValue("");
 			expect(reviewButton()).toBeDisabled();
 
 			// A draft that was only hidden would still send the discarded edit.
@@ -510,7 +513,7 @@ describe("LibraryAlbum", () => {
 		it("asks before leaving with a draft, and Cancel stays on the album with the draft", async () => {
 			const { place, user } = openAlbum();
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 
 			await user.click(
 				screen.getByRole("treeitem", { name: "Sabaton, folder" }),
@@ -529,7 +532,7 @@ describe("LibraryAlbum", () => {
 		it("asks before following the Drop link with a draft, and leaves once confirmed", async () => {
 			const { place, user } = openAlbum();
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 
 			await user.click(screen.getByRole("link", { name: "Drop" }));
 
@@ -546,7 +549,7 @@ describe("LibraryAlbum", () => {
 				shelves: { albums: { [SILENCE]: songsOfSilence() } },
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 
 			await user.click(
 				screen.getByRole("treeitem", {

@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from . import albums, approve, archives, drops, state
+from . import albums, approve, archives, drops, log, state
 
 if TYPE_CHECKING:
     from .server import Config, Handler
@@ -129,6 +129,7 @@ class Queue:
 
     def _fail(self, drop: str, n: str, command: str, exc: Exception) -> None:
         text = f"{type(exc).__name__}: {exc}"
+        log.failed(command, f"{drop}/{n}", text)
         folder = self.config.inbox / drop / n
         job = self.config.jobs / f"agitha-{drop}-{n}"
         # `write_album` would recreate a folder that landing removed, so a landed album is left as it is.
@@ -170,12 +171,18 @@ class Queue:
                 approve.land(self.config, drop, n)
             else:
                 drops.write_album(folder, state="apply failed", stderr=tail, error=f"apply exited with status {code}")
+                log.failed("apply", f"{drop}/{n}", f"apply exited with status {code}")
         elif state.plan_entry(self.config, drop, n) is not None:
             # A refused decision leaves the earlier plan in place and says why on the album.
             drops.write_album(folder, state="ready", stderr="", error=tail if code else None)
+            if code:
+                log.failed("identify", f"{drop}/{n}", f"identify exited with status {code}; the earlier plan stays")
+            else:
+                log.write("identify", f"{drop}/{n}", state="ready")
         else:
             error = f"identify exited with status {code}" if code else "identify left no album in its plan"
             drops.write_album(folder, state="identify failed", stderr=tail, error=error)
+            log.failed("identify", f"{drop}/{n}", error)
 
 
 def _report(path: str, exc: Exception) -> None:
@@ -234,12 +241,13 @@ def done(request: Handler, match: re.Match[str], config: Config) -> None:
             request.fail(409, "The drop is already finished.")
             return
         listed = sum(len({f["path"] for f in item["files"]}) for item in record["items"])
-        received = (drops.read_drop(config, drop) or {"received": {"files": 0}})["received"]["files"]
-        if received < listed:
-            request.fail(409, f"The drop has {received} of its {listed} files.")
+        received = (drops.read_drop(config, drop) or {"received": {"files": 0, "bytes": 0}})["received"]
+        if received["files"] < listed:
+            request.fail(409, f"The drop has {received['files']} of its {listed} files.")
             return
         record["done"] = True
         drops.write_record(folder, record)
+        log.write("finish-upload", drop, files=received["files"], bytes=received["bytes"])
     request.server.uploading.discard(drop)
 
     server = request.server
@@ -250,26 +258,28 @@ def done(request: Handler, match: re.Match[str], config: Config) -> None:
         # `raw/` is still there, so the drop lists as `incomplete`; the sentence tells the owner why.
         record["error"] = f"{type(exc).__name__}: {exc}"
         drops.write_record(folder, record)
+        log.failed("stage-drop", drop, record["error"])
         request.fail(500, record["error"])
         return
     finally:
         server.extracting.discard(drop)
+    log.write("stage-drop", drop, albums=",".join(staged), refused=len(record["refused"]))
     for n in staged:
         server.queue.enqueue(drop, n, "identify")
     request.send_json(202, state.drop(config, drop, server.queue, server.uploading_now(), server.extracting))
 
 
 def retry(request: Handler, match: re.Match[str], config: Config) -> None:
-    _identify_again(request, match, config, RETRYABLE, "retried")
+    _identify_again(request, match, config, RETRYABLE, "retried", "retry")
 
 
 def reidentify(request: Handler, match: re.Match[str], config: Config) -> None:
     """Identify a ready album again under its own decision, or none, so a changed engine or MusicBrainz shows."""
-    _identify_again(request, match, config, ("ready",), "identified again")
+    _identify_again(request, match, config, ("ready",), "identified again", "reidentify")
 
 
 def _identify_again(request: Handler, match: re.Match[str], config: Config,
-                    allowed: tuple[str, ...], verb: str) -> None:
+                    allowed: tuple[str, ...], verb: str, why: str) -> None:
     drop, n = match.group(1), match.group(2)
     queue = request.server.queue
     found = state.album(config, drop, n, queue) if _known(config, drop) is not None else None
@@ -282,4 +292,5 @@ def _identify_again(request: Handler, match: re.Match[str], config: Config,
     else:
         drops.write_album(config.inbox / drop / n, name=found["name"], state="queued", stderr="", error=None)
         queue.enqueue(drop, n, "identify")
+        log.write("queue-identify", f"{drop}/{n}", why=why)
         request.send_json(202, {"state": "queued"})

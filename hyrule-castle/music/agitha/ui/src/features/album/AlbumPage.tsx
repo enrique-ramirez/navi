@@ -10,7 +10,7 @@ import { hasKeepChoice } from "@/domain/album/keepChoice";
 import type { AlbumView, GameChoice, Hold } from "@/shared/api/types";
 import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import styles from "./AlbumPage.module.css";
+import styles from "@/shared/styles/albumPage.module.css";
 import { AlbumSide } from "./AlbumSide";
 import { missingWords } from "./approveReason";
 import { Duplicate } from "./Duplicate";

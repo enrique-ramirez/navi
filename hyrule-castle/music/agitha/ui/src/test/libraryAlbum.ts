@@ -111,7 +111,7 @@ export async function throughPolls(check: () => void, polls = 8) {
 	check();
 }
 
-/** The page once the album and its panel are on it. */
+/** The page once the album and the table of its tags are on it. */
 export async function shown(title = "Ecliptica") {
 	await screen.findByRole("heading", { name: new RegExp(title) });
 	await screen.findByRole("textbox", { name: "Tag key" });
@@ -123,7 +123,7 @@ export async function shown(title = "Ecliptica") {
  */
 export async function shownWithTags(title = "Ecliptica") {
 	await screen.findByRole("heading", { name: new RegExp(title) });
-	await screen.findByRole("group", { name: "Genre" });
+	await screen.findByRole("rowheader", { name: /^Genre/ });
 }
 
 /** A track's checkbox. */
@@ -132,26 +132,41 @@ export const box = (title: string) =>
 export const queryBox = (title: string) =>
 	screen.queryByRole("checkbox", { name: `Select ${title}` });
 
-/** A tag's row in the panel. */
-export const tag = (name: string) => screen.getByRole("group", { name });
-export const queryTag = (name: string) => screen.queryByRole("group", { name });
+// A row's header is its tag's name, then the mark of an edit where it has one.
+const rowsOf = (name: string) =>
+	screen
+		.queryAllByRole("rowheader")
+		.filter((header) => header.firstChild?.textContent === name)
+		.map((header) => header.closest("tr") as HTMLElement);
 
-/** The panel's mark on a tag the draft changes. */
+/** A tag's row, in the album's table or the one of the track on show. */
+export const queryTag = (name: string) => {
+	const [row, ...rest] = rowsOf(name);
+	if (rest.length > 0) throw new Error(`${name} has more than one row`);
+	return row ?? null;
+};
+export const tag = (name: string) => {
+	const row = queryTag(name);
+	if (!row) throw new Error(`no row for ${name}`);
+	return row;
+};
+
+/** The table's mark on a tag the draft changes. */
 export const marked = (name: string) =>
-	within(tag(name)).queryByText("changed");
+	within(tag(name)).queryByText("edited by you");
+
+/** The field a tag's new values are typed into. */
+export const newValue = (name: string) =>
+	within(tag(name)).getByRole("textbox", { name: `New ${name}` });
 
 export const reviewButton = () =>
 	screen.getByRole("button", { name: "Review changes" });
 
-/** One edit through the panel, over the tracks selected: `symphonic metal` leaves Genre. */
-export async function dropSymphonicMetal(
-	user: ReturnType<typeof userEvent.setup>,
-) {
-	await user.click(
-		await screen.findByRole("button", {
-			name: "Remove symphonic metal from Genre",
-		}),
-	);
+/** One edit through the table, over the tracks selected: their Genre becomes `power metal` alone. */
+export async function setPowerMetal(user: ReturnType<typeof userEvent.setup>) {
+	const field = await screen.findByRole("textbox", { name: "New Genre" });
+	await user.clear(field);
+	await user.type(field, "power metal{Enter}");
 }
 
 /** Asks for the review and gives its region once the preview is in it. */
@@ -197,10 +212,11 @@ function editingControls() {
 			...TITLES.flatMap((title) => queryBox(title) ?? []),
 			...screen.queryAllByRole("checkbox", { name: "Select all tracks" }),
 		],
-		panel: [
-			...screen.queryAllByRole("button", { name: /^Remove / }),
-			...screen.queryAllByRole("textbox", { name: /^(Set |Add value, |Tag )/ }),
-			...screen.queryAllByRole("combobox", { name: /^(Set |Add value, )/ }),
+		tags: [
+			...screen.queryAllByRole("button", {
+				name: /^(Remove |Undo your edit of |Keep the current )/,
+			}),
+			...screen.queryAllByRole("textbox", { name: /^(New |Tag key)/ }),
 			...screen.queryAllByRole("button", { name: "Add tag" }),
 		],
 		review: screen.queryAllByRole("button", { name: "Review changes" }),

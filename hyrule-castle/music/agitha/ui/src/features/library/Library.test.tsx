@@ -10,7 +10,7 @@ import {
 	requested,
 	type Shelves,
 } from "@/test/library";
-import { screen, userEvent, waitFor } from "@/test/render";
+import { screen, userEvent, waitFor, within } from "@/test/render";
 import { renderApp } from "@/test/renderApp";
 
 let server: ReturnType<typeof fakeFetch> | undefined;
@@ -21,9 +21,14 @@ afterEach(() => {
 });
 
 // The page through the app's own routes, so the address reaches it as a browser's does.
-function openAt(address: string, shelves?: Shelves) {
+function openAt(
+	address: string,
+	shelves?: Shelves,
+	// Routes the reading handlers do not have, spread before them.
+	more: Parameters<typeof fakeFetch>[0] = {},
+) {
 	server?.restore();
-	server = fakeFetch(libraryHandlers(shelves));
+	server = fakeFetch({ ...more, ...libraryHandlers(shelves) });
 	const router = renderApp(address);
 	return {
 		router,
@@ -109,7 +114,14 @@ const UEMATSU = "植松伸夫";
 // fragment, and the artist goes out as UTF-8.
 const ODD_NAMES: Shelves = {
 	root: { root: "/srv/music/library", readable: true, letters: ["B", "#"] },
-	letters: { "#": { artists: [{ name: "10cc" }, { name: UEMATSU }] } },
+	letters: {
+		"#": {
+			artists: [
+				{ name: "10cc", empty: false },
+				{ name: UEMATSU, empty: false },
+			],
+		},
+	},
 	artists: { [`#/${UEMATSU}`]: fixtures.artist },
 };
 
@@ -345,5 +357,200 @@ describe("the library's states", () => {
 		other.release();
 
 		expect(await folder("Nightwish")).toBeVisible();
+	});
+});
+
+describe("folding the tree by hand", () => {
+	it("folds an open folder on a second click and unfolds it on a third, the address staying where it was", async () => {
+		const { place } = openAt(libraryAddress());
+
+		await userEvent.click(await folder("S"));
+		await folder("Stratovarius");
+		await userEvent.click(await folder("S"));
+
+		const folded = [closed("A"), closed("N"), here(closed("S")), closed("#")];
+		await waitFor(() => expect(rows(folded)).toEqual(folded));
+		expect(place()).toBe("/library/S");
+
+		await userEvent.click(await folder("S"));
+
+		await folder("Stratovarius");
+		expect(rows(AT_S)).toEqual(AT_S);
+	});
+
+	it("folds the artist the page is at on a click, and leaves the page on it", async () => {
+		const { place } = openAt(libraryAddress("S", "Sonata Arctica"));
+		await folder("(2002) Songs of Silence");
+
+		await userEvent.click(await folder("Sonata Arctica"));
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("treeitem", {
+					name: "(2002) Songs of Silence, folder",
+				}),
+			).toBeNull(),
+		);
+		expect(place()).toBe("/library/S/Sonata Arctica");
+		expect(await folder("Sonata Arctica")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		);
+	});
+
+	it("leaves one letter open when another is opened beside it", async () => {
+		openAt(libraryAddress("S"), {
+			letters: { N: { artists: [{ name: "Nightwish", empty: false }] } },
+		});
+		await folder("Stratovarius");
+
+		await userEvent.click(await folder("N"));
+
+		await folder("Nightwish");
+		expect(await folder("Stratovarius")).toBeVisible();
+		expect(await folder("S")).toHaveAttribute("aria-expanded", "true");
+	});
+
+	it("moves through the items with the arrow keys, and opens and folds a folder with right and left", async () => {
+		openAt(libraryAddress());
+		(await folder("A")).focus();
+
+		await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+		expect(await folder("S")).toHaveFocus();
+
+		await userEvent.keyboard("{ArrowRight}");
+		await folder("Stratovarius");
+		await userEvent.keyboard("{ArrowDown}");
+		expect(await folder("Sabaton")).toHaveFocus();
+
+		await userEvent.keyboard("{ArrowLeft}");
+		expect(await folder("S")).toHaveFocus();
+		await userEvent.keyboard("{ArrowLeft}");
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("treeitem", { name: "Sabaton, folder" }),
+			).toBeNull(),
+		);
+	});
+});
+
+describe("removing an empty folder", () => {
+	const REMOVE = "Remove the empty folder Sabaton";
+
+	// The letter S with Sabaton holding nothing, until `gone` says it was removed.
+	function withEmptySabaton(remove: () => Response) {
+		const state = { gone: false };
+		const page = openAt(
+			libraryAddress("S"),
+			{
+				letters: {
+					S: () =>
+						Response.json({
+							artists: [
+								...(state.gone ? [] : [{ name: "Sabaton", empty: true }]),
+								{ name: "Sonata Arctica", empty: false },
+							],
+						}),
+				},
+			},
+			{
+				"DELETE /api/library/:letter/:artist": () => {
+					const answer = remove();
+					if (answer.ok) state.gone = true;
+					return answer;
+				},
+			},
+		);
+		return page;
+	}
+
+	it("offers it on a folder that holds nothing, and on no other", async () => {
+		withEmptySabaton(() => Response.json({ removed: ["S/Sabaton"] }));
+
+		expect(await screen.findByRole("button", { name: REMOVE })).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: /Remove the empty folder Sonata/ }),
+		).toBeNull();
+	});
+
+	it("asks first, and Cancel removes nothing", async () => {
+		const { calls } = withEmptySabaton(() =>
+			Response.json({ removed: ["S/Sabaton"] }),
+		);
+
+		await userEvent.click(await screen.findByRole("button", { name: REMOVE }));
+		const dialog = await screen.findByRole("alertdialog");
+		expect(dialog).toHaveTextContent("S/Sabaton");
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: "Cancel" }),
+		);
+
+		expect(screen.queryByRole("alertdialog")).toBeNull();
+		expect(
+			requested(calls).filter((call) => call.startsWith("DELETE")),
+		).toEqual([]);
+		expect(await folder("Sabaton")).toBeVisible();
+	});
+
+	it("removes it once confirmed, and lists the letter again without it", async () => {
+		const { calls, place } = withEmptySabaton(() =>
+			Response.json({ removed: ["S/Sabaton"] }),
+		);
+
+		await userEvent.click(await screen.findByRole("button", { name: REMOVE }));
+		await userEvent.click(
+			within(await screen.findByRole("alertdialog")).getByRole("button", {
+				name: "Remove",
+			}),
+		);
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("treeitem", { name: "Sabaton, folder" }),
+			).toBeNull(),
+		);
+		expect(requested(calls)).toContain("DELETE /api/library/S/Sabaton");
+		expect(await folder("Sonata Arctica")).toBeVisible();
+		expect(place()).toBe("/library/S");
+	});
+
+	it("shows the server's refusal as served, and the folder stays", async () => {
+		withEmptySabaton(() =>
+			Response.json({ error: "not empty: S/Sabaton" }, { status: 409 }),
+		);
+
+		await userEvent.click(await screen.findByRole("button", { name: REMOVE }));
+		await userEvent.click(
+			within(await screen.findByRole("alertdialog")).getByRole("button", {
+				name: "Remove",
+			}),
+		);
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"not empty: S/Sabaton",
+		);
+		expect(await folder("Sabaton")).toBeVisible();
+	});
+});
+
+describe("with nothing picked", () => {
+	it.each([
+		["the library", libraryAddress()],
+		["a letter", libraryAddress("S")],
+	])(
+		"says to select an album at the address of %s",
+		async (_place, address) => {
+			openAt(address);
+
+			expect(await screen.findByText("Select an album")).toBeVisible();
+		},
+	);
+
+	it("says nothing of the kind once an artist is open", async () => {
+		openAt(libraryAddress("S", "Sonata Arctica"));
+
+		await folder("(2002) Songs of Silence");
+		await screen.findByRole("heading", { name: "Sonata Arctica" });
+		expect(screen.queryByText("Select an album")).toBeNull();
 	});
 });

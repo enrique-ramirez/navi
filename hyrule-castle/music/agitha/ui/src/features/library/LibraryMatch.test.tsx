@@ -23,11 +23,11 @@ import {
 	albumGets,
 	albumOf,
 	closeAlbum,
-	dropSymphonicMetal,
 	EIGHTH,
 	openAlbum,
 	REPLICA,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	shownWithTags,
 	tag,
@@ -161,7 +161,7 @@ type Page = ReturnType<typeof openAlbum>;
 
 // The three ways a page comes to hold a draft.
 const DRAFTS: [string, (page: Page) => Promise<void>][] = [
-	["an edit", ({ user }) => dropSymphonicMetal(user)],
+	["an edit", ({ user }) => setPowerMetal(user)],
 	[
 		"a swap",
 		async ({ user }) => {
@@ -328,7 +328,7 @@ describe("Match to MusicBrainz on the album page", () => {
 		it("is enabled again once the draft is discarded", async () => {
 			const page = serve(openAlbum(), { match: made(NEW, 201), review: NEW });
 			await shown();
-			await dropSymphonicMetal(page.user);
+			await setPowerMetal(page.user);
 			await waitFor(() => expect(matchButton()).toBeDisabled());
 
 			await page.user.click(
@@ -383,7 +383,8 @@ describe("Match to MusicBrainz on the album page", () => {
 			// 8th Commandment carries the genre and the ripper frame; Replica neither.
 			expect(tag("Genre")).toHaveTextContent("power metal 1/2");
 			expect(tag("Album")).toHaveTextContent("Ecliptica");
-			expect(tag("TXXX:RIPPER")).toHaveTextContent("EAC 0.99 1/2");
+			// The ripper frame is one track's own, so it is under that track, the first and the one on show.
+			expect(tag("TXXX:RIPPER")).toHaveTextContent("EAC 0.99");
 			expect(usable()).toEqual([]);
 			expect(alsoUsable()).toEqual([]);
 		});

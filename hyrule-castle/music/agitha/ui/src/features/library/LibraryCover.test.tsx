@@ -24,11 +24,11 @@ import {
 	albumGets,
 	albumOf,
 	closeAlbum,
-	dropSymphonicMetal,
 	inPathOrder,
 	openAlbum,
 	openReview,
 	reviewButton,
+	setPowerMetal,
 	shown,
 	throughPolls,
 } from "@/test/libraryAlbum";
@@ -225,7 +225,7 @@ describe("LibraryCover", () => {
 	});
 
 	describe("Replace cover", () => {
-		it("uploads a picked image as its own bytes and type, and shows it beside the current cover with its own size", async () => {
+		it("uploads a picked image as its own bytes and type, and shows it with its own size, the current cover one press away", async () => {
 			const { calls, uploads, user } = open();
 			await shown();
 			expect(reviewButton()).toBeDisabled();
@@ -236,15 +236,17 @@ describe("LibraryCover", () => {
 			expect(uploads).toEqual([
 				{ type: "image/png", bytes: "PNG bytes of the reissue" },
 			]);
-			// Both are on the page, and they are not the same picture.
-			expect(current()).toHaveAttribute("src", SMALL.url);
 			expect(added.getAttribute("src")).toBeTruthy();
 			expect(added).not.toHaveAttribute("src", SMALL.url);
-			expect(screen.getByText("480 × 480")).toBeVisible();
 			expect(screen.getByText("1200 × 1200")).toBeVisible();
-			// The new image passes: the one warning is still the current cover's.
-			expect(warnings(SMALL.problem!)).toHaveLength(1);
+			// The new image passes, so nothing warns beside it.
+			expect(warnings(SMALL.problem!)).toEqual([]);
 			expect(reviewButton()).toBeEnabled();
+			// The cover the album has is still there to look at, with its own size and warning.
+			await user.click(screen.getByRole("button", { name: "Current" }));
+			expect(current()).toHaveAttribute("src", SMALL.url);
+			expect(screen.getByText("480 × 480")).toBeVisible();
+			expect(warnings(SMALL.problem!)).toHaveLength(1);
 			// The image is uploaded when picked; the draft goes nowhere until the review.
 			expect(posted(calls, PREVIEW)).toEqual([]);
 		});
@@ -263,7 +265,7 @@ describe("LibraryCover", () => {
 			expect(reviewButton()).toBeEnabled();
 		});
 
-		it("takes an image dropped where the album has no cover, and shows it beside No cover", async () => {
+		it("takes an image dropped where the album has no cover, and still says No cover for the current one", async () => {
 			const { uploads } = open({ cover: null });
 			await shown();
 
@@ -271,8 +273,9 @@ describe("LibraryCover", () => {
 
 			await fresh();
 			expect(uploads).toHaveLength(1);
-			expect(screen.getByText("No cover")).toBeVisible();
 			expect(screen.getByText("1200 × 1200")).toBeVisible();
+			fireEvent.click(screen.getByRole("button", { name: "Current" }));
+			expect(screen.getByText("No cover")).toBeVisible();
 		});
 
 		it("accepts an image that fails the cover test, and shows that image's warning with its size", async () => {
@@ -289,8 +292,12 @@ describe("LibraryCover", () => {
 			await fresh();
 			expect(uploads).toHaveLength(1);
 			expect(screen.getByText("1000 × 1400")).toBeVisible();
-			expect(screen.getByText("600 × 600")).toBeVisible();
 			expect(warnings(TALL.problem!)).toHaveLength(1);
+			// The warning is the new image's: the current cover has none.
+			await user.click(screen.getByRole("button", { name: "Current" }));
+			expect(screen.getByText("600 × 600")).toBeVisible();
+			expect(warnings(TALL.problem!)).toEqual([]);
+			await user.click(screen.getByRole("button", { name: "New" }));
 			// Accepted: it is in the draft, failing or not.
 			expect(reviewButton()).toBeEnabled();
 		});
@@ -333,10 +340,10 @@ describe("LibraryCover", () => {
 				const { calls, user } = open();
 				await shown();
 
-				if (editFirst) await dropSymphonicMetal(user);
+				if (editFirst) await setPowerMetal(user);
 				await user.upload(picker(), png());
 				await fresh();
-				if (!editFirst) await dropSymphonicMetal(user);
+				if (!editFirst) await setPowerMetal(user);
 				await openReview(user);
 
 				// The edit has not taken the new image off the page either.
@@ -347,9 +354,9 @@ describe("LibraryCover", () => {
 						edits: [
 							{
 								tracks: refsOf(tracks),
-								set: {},
+								set: { Genre: ["power metal"] },
 								add: {},
-								remove: { Genre: ["symphonic metal"] },
+								remove: {},
 							},
 						],
 						swaps: [],
@@ -398,7 +405,7 @@ describe("LibraryCover", () => {
 			expect(reviewButton()).toBeDisabled();
 
 			// A cover that was only hidden would still go with the next edit.
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 			await openReview(user);
 			expect(posted(calls, PREVIEW).map((draft) => draft.cover)).toEqual([
 				null,
@@ -471,6 +478,36 @@ describe("LibraryCover", () => {
 			expect(posted(calls, SAVE)[0]!.cover).toBe(UPLOADED.cover);
 		});
 
+		it("shows the cover the album has and the one it will get side by side, each named", async () => {
+			const { user } = open({ preview: coverOnly(UPLOADED) });
+			await shown();
+			await user.upload(picker(), png());
+			const added = await fresh();
+
+			const review = await openReview(user);
+
+			const pictureOf = (caption: string) =>
+				within(review)
+					.getByText(caption)
+					.closest("figure")
+					?.querySelector("img")
+					?.getAttribute("src");
+			expect(pictureOf("Current cover")).toBe(SMALL.url);
+			expect(pictureOf("Cover once saved")).toBe(added.getAttribute("src"));
+		});
+
+		it("shows only the new cover in the review where the album has none", async () => {
+			const { user } = open({ cover: null, preview: coverOnly(UPLOADED) });
+			await shown();
+			await user.upload(picker(), png());
+			await fresh();
+
+			const review = await openReview(user);
+
+			expect(within(review).getByText("Cover once saved")).toBeVisible();
+			expect(within(review).queryByText("Current cover")).toBeNull();
+		});
+
 		it("shows the warning of a new cover that fails the cover test before Save, and Save is still offered", async () => {
 			const { user } = open({
 				cover: SQUARE,
@@ -502,7 +539,7 @@ describe("LibraryCover", () => {
 				},
 			});
 			await shown();
-			await dropSymphonicMetal(user);
+			await setPowerMetal(user);
 
 			const review = await openReview(user);
 

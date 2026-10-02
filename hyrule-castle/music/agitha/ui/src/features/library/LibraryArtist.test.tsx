@@ -2,15 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { LibraryTrack } from "@/shared/api/types";
 import { ECLIPTICA, posted, SONATA } from "@/test/library";
-import {
-	dropSymphonicMetal,
-	LAND,
-	marked,
-	queryTag,
-	reviewButton,
-	TITLES,
-	tag,
-} from "@/test/libraryAlbum";
+import { LAND, reviewButton, TITLES } from "@/test/libraryAlbum";
 import {
 	ALBUM_TITLES,
 	ALBUMS,
@@ -21,16 +13,20 @@ import {
 	allBox,
 	closeArtist,
 	disclosure,
+	dropSymphonicMetal,
 	expand,
 	findTag,
 	inAlbumOrder,
 	LOCKED,
+	marked,
 	openArtist,
 	openBatchReview,
+	queryTag,
 	queryTrackBox,
 	SILENCE,
 	shownArtist,
 	sonata,
+	tag,
 	trackBox,
 	trackOf,
 	unselected,
@@ -153,16 +149,22 @@ describe("LibraryArtist", () => {
 	});
 
 	describe("selection", () => {
-		it("opens with no track selected and the panel over none", async () => {
+		it("opens with every track selected, as an album's page does, and the tags folded away", async () => {
 			const { user } = openArtist();
-			await shownArtist();
+			await screen.findByRole("heading", { name: ARTIST }, { timeout: 3000 });
 
-			expect(allBox()).not.toBeChecked();
-			for (const title of ALBUM_TITLES)
-				expect(albumBox(title)).not.toBeChecked();
+			expect(allBox()).toBeChecked();
+			for (const title of ALBUM_TITLES) expect(albumBox(title)).toBeChecked();
 			await expand(user, "Ecliptica");
 			for (const title of TITLES)
-				expect(trackBox("Ecliptica", title)).not.toBeChecked();
+				expect(trackBox("Ecliptica", title)).toBeChecked();
+			// Every tag of ten tracks is a long list, so it waits to be asked for.
+			expect(queryTag("Genre")).toBeNull();
+
+			await user.click(screen.getByRole("button", { name: "Show all tags" }));
+
+			expect(tag("Genre")).toHaveTextContent("symphonic metal 1/10");
+			await user.click(screen.getByRole("button", { name: "Hide tags" }));
 			expect(queryTag("Genre")).toBeNull();
 		});
 
@@ -408,6 +410,136 @@ describe("LibraryArtist", () => {
 					batch: true,
 				},
 			]);
+		});
+	});
+
+	describe("the header", () => {
+		const header = () => screen.getByRole("group", { name: "Genres" });
+		const genres = () => within(header()).getAllByRole("listitem");
+		const namesOf = () => genres().map((chip) => chip.textContent);
+
+		it("counts each genre over the tracks selected, most carried first, with no count on one they all carry", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+
+			// Ten tracks: eight carry power metal, two rock, one each of the other two.
+			expect(namesOf()).toEqual([
+				"power metal8/10",
+				"rock2/10",
+				"symphonic metal1/10",
+				"heavy metal1/10",
+			]);
+
+			// Songs of Silence alone: every track carries power metal.
+			await user.click(albumBox("Ecliptica"));
+			await user.click(albumBox("For the Sake of Revenge"));
+
+			expect(namesOf()).toEqual(["power metal", "heavy metal1/4"]);
+		});
+
+		it("says how many albums and tracks are selected, and what they are made of", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+			const region = screen.getByRole("region", { name: ARTIST });
+
+			expect(region).toHaveTextContent(/3 albums/);
+			expect(region).toHaveTextContent(/10 tracks/);
+			expect(region).toHaveTextContent("1999–2006");
+
+			await user.click(albumBox("Ecliptica"));
+
+			expect(region).toHaveTextContent(/2 of 3 albums/);
+			expect(region).toHaveTextContent(/6 tracks/);
+			expect(region).toHaveTextContent("2002–2006");
+			expect(region).toHaveTextContent("FLAC · lossless");
+		});
+
+		it("adds a genre typed in the header to every track selected, as one edit", async () => {
+			const { calls, user } = openArtist();
+			await shownArtist();
+
+			await user.type(
+				within(header()).getByRole("combobox", { name: "Add genre" }),
+				"jazz{Enter}",
+			);
+
+			expect(namesOf()).toContain("jazz");
+			await openBatchReview(user);
+			const [draft] = posted(calls, PREVIEW);
+			expect(draft!.batch).toBe(true);
+			expect(draft!.tracks).toHaveLength(10);
+			expect(
+				draft!.edits.map(({ tracks, ...change }) => ({
+					...change,
+					tracks: tracks.length,
+				})),
+			).toEqual([
+				{ tracks: 10, set: {}, add: { Genre: ["jazz"] }, remove: {} },
+			]);
+		});
+
+		it("refuses a genre that is not on the list, by name, and adds nothing", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+
+			await user.type(
+				within(header()).getByRole("combobox", { name: "Add genre" }),
+				"polka{Enter}",
+			);
+
+			expect(await screen.findByRole("alert")).toHaveTextContent(
+				"polka is not a genre on the list",
+			);
+			expect(reviewButton()).toBeDisabled();
+		});
+
+		it("takes a genre off the tracks that carry it and leaves it struck through until the draft goes", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+
+			await dropSymphonicMetal(user);
+
+			const struck = genres().find((chip) =>
+				chip.textContent?.startsWith("symphonic metal"),
+			);
+			expect(struck).toHaveAttribute("data-dropped");
+			expect(within(struck!).queryByRole("button")).toBeNull();
+
+			await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+			expect(namesOf()).toContain("symphonic metal1/10");
+		});
+	});
+
+	describe("the tags, once shown", () => {
+		it("lists what says which album and track a file is under Album data, and every other tag under Metadata", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+
+			expect(screen.getByRole("tab", { name: "Album data" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+			expect(tag("Genre")).toBeVisible();
+			expect(tag("Album")).toBeVisible();
+			expect(queryTag("MusicBrainz release id")).toBeNull();
+
+			await user.click(screen.getByRole("tab", { name: "Metadata" }));
+
+			expect(tag("MusicBrainz release id")).toBeVisible();
+			expect(queryTag("Genre")).toBeNull();
+		});
+
+		it("says what a raw frame is beside its key", async () => {
+			const { user } = openArtist();
+			await shownArtist();
+			await user.click(screen.getByRole("tab", { name: "Metadata" }));
+
+			// The row keeps the key as its name; the words are beside it.
+			expect(tag("APIC:")).toHaveTextContent("APIC: (embedded picture)");
+			expect(tag("POPM:Windows Media Player 9 Series")).toHaveTextContent(
+				"(rating)",
+			);
 		});
 	});
 

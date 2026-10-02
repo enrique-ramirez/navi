@@ -1,11 +1,9 @@
-const BYTES = /\((\d+) bytes\)\s*$/;
+import { BYTES, bytesOf, type Locked } from "@/shared/ui/tagRow";
 
-export const bytesOf = (value: string) => BYTES.exec(value)?.[1];
+export { bytesOf, type Locked };
 
 /** Keys of embedded pictures, which show in the cover card rather than as rows. */
 export const PICTURE = /^(APIC|covr|METADATA_BLOCK_PICTURE|WM\/Picture)/;
-
-export type Locked = "id" | "rating" | "binary" | "added";
 
 // The tags the owner cannot change: the six MusicBrainz IDs (they come from the release),
 // ratings (the library's rule), binary frames, and ADDED, which the import stamps.

@@ -89,6 +89,8 @@ ROUTES: list[Route] = [
     Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/cover"), library.cover),
     Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/order"), order.show),
     Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/audio/(.+)"), library.audio),
+    Route("DELETE", re.compile(r"/api/library/([^/]+)/([^/]+)"), library.remove),
+    Route("DELETE", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)"), library.remove),
     Route("GET", re.compile(r"/api/genres"), library.genre_list),
 ]
 
@@ -103,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         self._dispatch()
 
-    do_HEAD = do_POST = do_PUT = do_GET
+    do_HEAD = do_POST = do_PUT = do_DELETE = do_GET
 
     def log_message(self, format: str, *args: Any) -> None:
         sys.stderr.write(f"{self.address_string()} {format % args}\n")
@@ -179,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
         return int(header) if header.isascii() and header.isdigit() else None
 
     def _body_unread(self) -> bool:
-        return self.command in ("POST", "PUT") and not self._consumed and self.body_length > 0
+        return self.command in ("POST", "PUT", "DELETE") and not self._consumed and self.body_length > 0
 
     def send_json(self, status: int, body: Any) -> None:
         self.send_bytes(status, JSON, json.dumps(body).encode("utf-8"))

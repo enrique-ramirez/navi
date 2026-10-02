@@ -110,3 +110,13 @@
 	color: var(--muted);
 	font-size: 0.8125rem;
 }
+
+.check {
+	width: 1%;
+	white-space: nowrap;
+}
+
+.artist {
+	color: var(--muted);
+	font-size: 0.8125rem;
+}

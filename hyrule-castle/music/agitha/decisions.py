@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from musiclib import strays
 from musiclib.genres import NEITHER, SOUNDTRACK, VIDEO_GAME_MUSIC
 
-from . import covers, drops, state
+from . import covers, drops, log, state
 from .refusal import BUSY, Refusal
 
 if TYPE_CHECKING:
@@ -90,6 +90,8 @@ def decide(request: Handler, match: re.Match[str], config: Config) -> None:
     drops.replace_json(job / "decisions.json", {"job": job.name, "albums": {entry["source"]: body}})
     drops.write_album(config.inbox / drop / n, state="queued", stderr="", error=None)
     request.server.queue.enqueue(drop, n, "identify")
+    log.write("record-decision", f"{drop}/{n}", action=body["action"],
+              release=body.get("release_id") if body["action"] == "accept" else body.get("release"))
     request.send_json(202, {"state": "queued"})
 
 
@@ -104,4 +106,5 @@ def upload_cover(request: Handler, match: re.Match[str], config: Config) -> None
     # changed file under a path an accepted plan already names.
     name = f"cover-{hashlib.sha256(data).hexdigest()[:8]}.{extension}"
     drops.replace_bytes(owner / name, data)
+    log.write("store-review-cover", f"{drop}/{n}", path=f"owner/{name}", bytes=len(data))
     request.send_json(200, {**checked, "path": f"owner/{name}"})

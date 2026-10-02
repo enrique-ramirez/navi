@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from musiclib import check, files, images, tagwrite, walk
 
-from . import covers, drops, editor, library, swap
+from . import covers, drops, editor, library, log, swap
 from .albumplan import AlbumPlan
 from .refusal import ALBUM_CHANGED, BEING_SAVED, OPEN_IN_REVIEW, Refusal
 
@@ -133,7 +133,7 @@ def save(request: Handler, match: re.Match[str], config: Config) -> None:
         raise Refusal(409, NOTHING_TO_SAVE)
     job, entries = server.save_jobs.add(todo)
     base = config.jobs / WORK / job
-    calls = [(plan.path, partial(run, config, server.save_jobs, plan, entry, base / str(n)))
+    calls = [(plan.path, partial(run, config, server.save_jobs, plan, entry, base / str(n), len(draft.swaps)))
              for n, (plan, entry) in enumerate(zip(todo, entries))]
     if not server.queue.enqueue_library(calls):
         server.save_jobs.forget(job)
@@ -148,7 +148,19 @@ def show(request: Handler, match: re.Match[str], config: Config) -> None:
     request.send_json(200, found)
 
 
-def run(config: Config, jobs: Jobs, plan: AlbumPlan, entry: JobAlbum, work: Path) -> None:
+def _logged(plan: AlbumPlan, swaps: int) -> dict[str, Any]:
+    """What a save of `plan` changes, as the write log tells it: counts and the names of the tags, never a value."""
+    changed = [changes for track in plan.tracks if (changes := track.changes())]
+    tags = sorted({change["key"] for changes in changed for change in changes})
+    return {
+        "to": plan.new_path if plan.new_path != plan.path else None,
+        "tracks": len(changed), "tags": ",".join(tags) or None,
+        "renamed": sum(track.new_path != track.path for track in plan.tracks) or None,
+        "swaps": swaps or None, "cover": "replaced" if plan.cover_token is not None else "kept",
+    }
+
+
+def run(config: Config, jobs: Jobs, plan: AlbumPlan, entry: JobAlbum, work: Path, swaps: int = 0) -> None:
     """Saves one album on the queue's worker and records how it went in the job.
 
     Only `Exception` is caught, and `work` is not deleted in a `finally`: the
@@ -162,17 +174,20 @@ def run(config: Config, jobs: Jobs, plan: AlbumPlan, entry: JobAlbum, work: Path
     except Failed as failed:
         if failed.clean:
             _clear(config, work)
+        log.failed("save", plan.path, failed)
         jobs.settle(entry, FAILED, str(failed))
     except Exception as exc:
         reason = f"{type(exc).__name__}: {exc}"
         if (why := _restore(config, work)) is not None:
             reason = f"{reason}; {why}"
+        log.failed("save", plan.path, reason)
         jobs.settle(entry, FAILED, reason)
     else:
         # The album is in the library either way, so the work folder and the cover upload have done their part.
         _clear(config, work)
         if plan.cover_token is not None:
             covers.discard(config, plan.cover_token)
+        log.write("save", plan.path, **_logged(plan, swaps), note=extras)
         jobs.settle(entry, DONE if extras is None else FAILED, extras)
 
 

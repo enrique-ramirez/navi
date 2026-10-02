@@ -484,6 +484,45 @@ class Approving(ApproveCase):
         self.assertTrue((self.job("01") / "plan.json").is_file())
 
 
+class LogsWhatLands(ApproveCase):
+    def test_an_approved_album_logs_the_apply_queued_and_then_its_path_in_the_library(self) -> None:
+        entry = self.stage("01", "Clean Album", CLEAN, accept=True)
+        with self.assertLogs("agitha.writes") as logged:
+            self.assertEqual(self.approve("01")[0], 202)
+            self.watch((DROP, "01"), lambda album: album is None)
+        self.assertEqual(logged.output[:2], [
+            f"INFO:agitha.writes:write queue-apply {DROP}/01",
+            f"INFO:agitha.writes:write land {DROP}/01 path={entry['destination']}",
+        ])
+
+    def test_an_apply_that_fails_logs_the_album_and_its_exit_status(self) -> None:
+        self.stage("01", "Clean Album", CLEAN, accept=True)
+        (self.control / "fail").write_text("apply")
+        with self.assertLogs("agitha.writes") as logged:
+            self.approve("01")
+            self.watch((DROP, "01"), lambda album: album is None or album["state"] not in ("queued", "applying"))
+        self.assertEqual(logged.output, [
+            f"INFO:agitha.writes:write queue-apply {DROP}/01",
+            f"WARNING:agitha.writes:write apply {DROP}/01 failed: apply exited with status 1",
+        ])
+
+    def test_a_discarded_album_and_the_drop_it_was_the_last_of_are_a_line_each(self) -> None:
+        self.stage("01", "Clean Album", CLEAN, accept=True)
+        with self.assertLogs("agitha.writes") as logged:
+            self.request("POST", f"/api/drops/{DROP}/albums/01/discard", {})
+        self.assertEqual(logged.output, [f"INFO:agitha.writes:write discard-album {DROP}/01",
+                                         f"INFO:agitha.writes:write clear-drop {DROP}"])
+
+    def test_a_discarded_drop_logs_each_album_and_then_the_drop(self) -> None:
+        self.stage("01", "Clean Album", CLEAN, accept=True)
+        self.stage("02", "Other Album", OTHER, accept=False)
+        with self.assertLogs("agitha.writes") as logged:
+            self.request("POST", f"/api/drops/{DROP}/discard", {})
+        self.assertEqual(sorted(logged.output[:2]), [f"INFO:agitha.writes:write discard-album {DROP}/01",
+                                                     f"INFO:agitha.writes:write discard-album {DROP}/02"])
+        self.assertEqual(logged.output[2:], [f"INFO:agitha.writes:write discard-drop {DROP} albums=2"])
+
+
 class Discarding(ApproveCase):
     def test_discard_of_the_album_and_of_its_drop_is_refused_while_its_apply_runs(self) -> None:
         self.stage("01", "Clean Album", CLEAN, accept=True)

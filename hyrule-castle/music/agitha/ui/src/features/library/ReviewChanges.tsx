@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { useId } from "react";
 
 import { formatValues } from "@/domain/album/format";
@@ -31,10 +32,13 @@ export function RefusedKeys({ refused }: { refused: RefusedKey[] }) {
 export function AlbumChanges({
 	preview,
 	was,
+	covers,
 }: {
 	preview: PreviewAlbum;
 	/** The cover the album has now, `null` where it has none. */
 	was?: CoverCheck | null;
+	/** Where the two covers can be shown from, each left out where there is no image to show. */
+	covers?: { was?: string | null; next?: string | null };
 }) {
 	const { t } = useTranslate();
 	return (
@@ -47,6 +51,19 @@ export function AlbumChanges({
 
 			{preview.cover && (
 				<div className={styles.cover}>
+					{(covers?.was || covers?.next) && (
+						<div className={styles.covers}>
+							{covers.was && was && (
+								<CoverThumb src={covers.was} alt={t("library.coverNow")} />
+							)}
+							{covers.was && was && covers.next && (
+								<ArrowRight size={18} aria-hidden="true" />
+							)}
+							{covers.next && (
+								<CoverThumb src={covers.next} alt={t("library.coverNext")} />
+							)}
+						</div>
+					)}
 					<p>
 						{was
 							? t("library.reviewCoverFrom", {
@@ -112,14 +129,27 @@ export function AlbumChanges({
 	);
 }
 
+// The sizes are in the sentence under the two; each image is named by which cover it is.
+function CoverThumb({ src, alt }: { src: string; alt: string }) {
+	return (
+		<figure className={styles.thumb}>
+			<img src={src} alt="" />
+			<figcaption>{alt}</figcaption>
+		</figure>
+	);
+}
+
 export function ReviewChanges({
 	preview,
 	was,
+	covers,
 	onSave,
 }: {
 	preview: PreviewAlbum;
 	/** The cover the album has now, `null` where it has none. */
 	was?: CoverCheck | null;
+	/** As on `AlbumChanges`. */
+	covers?: { was?: string | null; next?: string | null };
 	onSave: () => void;
 }) {
 	const { t } = useTranslate();
@@ -132,7 +162,7 @@ export function ReviewChanges({
 				{t("library.review")}
 			</h3>
 
-			<AlbumChanges preview={preview} was={was} />
+			<AlbumChanges preview={preview} was={was} covers={covers} />
 
 			{nothing && <p>{t("library.nothing")}</p>}
 

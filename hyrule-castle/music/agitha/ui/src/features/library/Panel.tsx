@@ -2,6 +2,7 @@ import { Plus, X } from "lucide-react";
 import { useId, useState } from "react";
 
 import { lockedKind } from "@/domain/album/tagModel";
+import { glossOf } from "@/domain/library/gloss";
 import {
 	applyEdits,
 	changedTags,
@@ -37,6 +38,7 @@ export function Panel({
 	genres,
 	locked = [],
 	readOnly = false,
+	shows = () => true,
 	onEdit,
 }: {
 	tracks: PanelTrack[];
@@ -45,6 +47,8 @@ export function Panel({
 	edits: DraftEdit[];
 	genres: string[];
 	locked?: string[];
+	/** Which tags are listed, by the name of their row; all of them where left out. */
+	shows?: (key: string) => boolean;
 	/** The tags and their values stay on show with nothing to change them by. */
 	readOnly?: boolean;
 	onEdit: (edit: DraftEdit) => void;
@@ -60,7 +64,9 @@ export function Panel({
 	);
 	const now = applyEdits(chosen, edits, names);
 	const changed = changedTags(chosen, edits, names);
-	const rows = panelRows(chosen, now, changed, names);
+	const rows = panelRows(chosen, now, changed, names).filter((row) =>
+		shows(row.key),
+	);
 
 	function report(
 		change: Partial<Pick<DraftEdit, "set" | "add" | "remove">>,
@@ -149,6 +155,7 @@ export function Panel({
 		<div className={styles.panel}>
 			{rows.map((row, at) => {
 				const fixed = readOnly || row.readonly || locked.includes(row.key);
+				const gloss = glossOf(row.key);
 				return (
 					<fieldset
 						key={row.key}
@@ -156,8 +163,9 @@ export function Panel({
 						aria-labelledby={`${uid}-${at}`}
 						data-changed={changed.has(row.key) || undefined}
 					>
-						<span id={`${uid}-${at}`} className={styles.name}>
-							{row.key}
+						<span className={styles.name}>
+							<span id={`${uid}-${at}`}>{row.key}</span>
+							{gloss && <span className={styles.gloss}> ({t(gloss)})</span>}
 						</span>
 						{changed.has(row.key) && (
 							<span className={styles.mark}>{t("tags.changed")}</span>
