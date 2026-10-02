@@ -435,6 +435,11 @@ describe("LibraryArtist", () => {
 			await user.click(albumBox("For the Sake of Revenge"));
 
 			expect(namesOf()).toEqual(["power metal", "heavy metal1/4"]);
+			// The one they all carry is marked as such, and no other.
+			expect(genres().map((chip) => chip.hasAttribute("data-all"))).toEqual([
+				true,
+				false,
+			]);
 		});
 
 		it("says how many albums and tracks are selected, and what they are made of", async () => {

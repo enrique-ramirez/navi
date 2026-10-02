@@ -88,6 +88,11 @@
 	padding-right: var(--space-3);
 }
 
+/* A genre every selected track carries; the mark of an unsaved change wins over it. */
+.chip[data-all] {
+	border-color: color-mix(in oklch, var(--positive) 60%, transparent);
+}
+
 .chip[data-changed] {
 	border-color: var(--caution);
 }

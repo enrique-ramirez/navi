@@ -248,6 +248,7 @@ export function LibraryArtist({
 							<li
 								key={value}
 								className={styles.chip}
+								data-all={count === after.length || undefined}
 								data-changed={count !== countWas(value) || undefined}
 							>
 								<span>{value}</span>
