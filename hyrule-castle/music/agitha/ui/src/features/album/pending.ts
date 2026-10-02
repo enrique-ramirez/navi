@@ -1,6 +1,7 @@
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
 
+import { withEdit, withoutEdit } from "@/domain/album/neutral";
 import type {
 	AcceptDecision,
 	AlbumView,
@@ -12,6 +13,8 @@ import type {
 
 interface Store {
 	draft: Decision | null;
+	/** Suggestions the owner dismissed, for the preview with this digest. */
+	dismissed: { digest: string | null; keys: string[] };
 	version: number;
 	listeners: Set<() => void>;
 }
@@ -27,13 +30,33 @@ function storeFor(client: QueryClient, view: AlbumView): Store {
 	const key = `${view.drop}/${view.n}`;
 	let store = byAlbum.get(key);
 	if (!store) {
-		store = { draft: null, version: 0, listeners: new Set() };
+		store = {
+			draft: null,
+			dismissed: { digest: null, keys: [] },
+			version: 0,
+			listeners: new Set(),
+		};
 		byAlbum.set(key, store);
 	}
 	return store;
 }
 
-function notify(store: Store) {
+export function useAlbumStore(view: AlbumView) {
+	const client = useQueryClient();
+	const store = storeFor(client, view);
+	useSyncExternalStore(
+		(listener) => {
+			store.listeners.add(listener);
+			return () => {
+				store.listeners.delete(listener);
+			};
+		},
+		() => store.version,
+	);
+	return store;
+}
+
+export function notify(store: Store) {
 	store.version += 1;
 	for (const listener of store.listeners) listener();
 }
@@ -127,17 +150,7 @@ export interface Pending {
 }
 
 export function usePending(view: AlbumView): Pending {
-	const client = useQueryClient();
-	const store = storeFor(client, view);
-	useSyncExternalStore(
-		(listener) => {
-			store.listeners.add(listener);
-			return () => {
-				store.listeners.delete(listener);
-			};
-		},
-		() => store.version,
-	);
+	const store = useAlbumStore(view);
 
 	const start = useMemo(() => startOf(view), [view]);
 	const draft = store.draft ?? start;
@@ -162,22 +175,15 @@ export function usePending(view: AlbumView): Pending {
 		draft,
 		dirty: !same(draft, start),
 		setEdit: (position, key, values) =>
-			onAccept((current) => {
-				const edits: Edits = { ...current.edits };
-				for (const each of targets(position))
-					edits[each] = { ...edits[each], [key]: values };
-				return { ...current, edits };
-			}),
+			onAccept((current) => ({
+				...current,
+				edits: withEdit(current.edits, view, targets(position), key, values),
+			})),
 		removeEdit: (position, key) =>
-			onAccept((current) => {
-				const edits: Edits = { ...current.edits };
-				for (const each of targets(position)) {
-					const { [key]: _gone, ...rest } = edits[each] ?? {};
-					if (Object.keys(rest).length > 0) edits[each] = rest;
-					else delete edits[each];
-				}
-				return { ...current, edits };
-			}),
+			onAccept((current) => ({
+				...current,
+				edits: withoutEdit(current.edits, view, targets(position), key),
+			})),
 		setGame: (game) => onAccept((current) => ({ ...current, game })),
 		setCandidate: (releaseId) =>
 			change((current) =>

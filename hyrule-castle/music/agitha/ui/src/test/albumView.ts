@@ -47,6 +47,8 @@ export function albumView(over: Partial<AlbumView> = {}): AlbumView {
 		cover_now: null,
 		duplicate: null,
 		approvable: { ok: true, reason: null, code: null, hold: null },
+		replaces: null,
+		suggestions: [],
 		...over,
 	};
 }
@@ -71,6 +73,51 @@ export function facts(
 		audio_url: `${ALBUM_URL}/audio/${position}.mp3`,
 		...over,
 	};
+}
+
+/**
+ * Turns the view's first track into a FLAC in place, the rest staying MP3s: its
+ * tags go by their Vorbis keys, and the readable names cover the ones a case
+ * reaches for. The album artist is `albumartist` there and `TPE2` in the MP3s.
+ */
+export function flacFirst(view: AlbumView): AlbumView {
+	const [file] = view.preview?.files ?? [];
+	if (!file) throw new Error("the view has no track to turn into a FLAC");
+	file.source = file.source.replace(/\.mp3$/, ".flac");
+	file.destination = file.destination.replace(/\.mp3$/, ".flac");
+	file.before = { album: ["Clean Album"], title: ["one"], tracknumber: ["1"] };
+	file.after = {
+		album: ["Clean Album"],
+		albumartist: ["Clean Band"],
+		artist: ["Clean Band"],
+		date: ["2010-05-24"],
+		genre: ["rock"],
+		title: ["One"],
+		tracknumber: ["1"],
+	};
+	view.files = view.files.map((each) =>
+		each.position === file.position
+			? facts(file.position, {
+					path_now: `Clean Album/${file.position}.flac`,
+					path_after: `C/Clean Band/(2010) Clean Album/${file.position}.flac`,
+					format: "FLAC",
+					family: "vorbis",
+					lossless: true,
+					bit_depth: 16,
+					audio_url: `${ALBUM_URL}/audio/${file.position}.flac`,
+				})
+			: each,
+	);
+	view.names.vorbis = {
+		title: "Title",
+		album: "Album",
+		artist: "Artist",
+		albumartist: "Album artist",
+		tracknumber: "Track number",
+		date: "Date",
+		genre: "Genre",
+	};
+	return view;
 }
 
 export function candidate(over: Partial<Candidate> = {}): Candidate {

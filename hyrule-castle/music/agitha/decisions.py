@@ -16,17 +16,16 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from musiclib import images, strays
+from musiclib import strays
 from musiclib.genres import NEITHER, SOUNDTRACK, VIDEO_GAME_MUSIC
 
-from . import drops, state
+from . import covers, drops, state
 from .refusal import BUSY, Refusal
 
 if TYPE_CHECKING:
     from .server import Config, Handler
 
 GAMES = (VIDEO_GAME_MUSIC, SOUNDTRACK, NEITHER)
-EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
 OWNER_COVER = re.compile(r"owner/[^/\\]+")
 
 
@@ -98,20 +97,11 @@ def upload_cover(request: Handler, match: re.Match[str], config: Config) -> None
     drop, n = match.group(1), match.group(2)
     data = request.read_body()
     _ready(request, config, drop, n)
-    content_type = request.headers.get("Content-Type", "").split(";")[0].strip().lower()
-    if content_type not in EXTENSIONS:
-        request.fail(415, "The cover must be a JPEG, PNG, WebP or GIF image.")
-        return
-    try:
-        width, height, passes, problem = images.cover_check(data)
-    except (OSError, ValueError, SyntaxError):
-        request.fail(400, "Those bytes are not an image.")
-        return
+    extension, checked = covers.judge(data, request.headers.get("Content-Type", ""))
     owner = config.jobs / f"agitha-{drop}-{n}" / "owner"
     owner.mkdir(parents=True, exist_ok=True)
     # A name of its own per image, so a second upload is a new path the draft must send and never a
     # changed file under a path an accepted plan already names.
-    name = f"cover-{hashlib.sha256(data).hexdigest()[:8]}.{EXTENSIONS[content_type]}"
+    name = f"cover-{hashlib.sha256(data).hexdigest()[:8]}.{extension}"
     drops.replace_bytes(owner / name, data)
-    request.send_json(200, {"width": width, "height": height, "passes": passes, "problem": problem,
-                            "path": f"owner/{name}"})
+    request.send_json(200, {**checked, "path": f"owner/{name}"})

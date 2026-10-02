@@ -2,7 +2,12 @@ import { Play, Square } from "lucide-react";
 import { useState } from "react";
 
 import { uploadedValues } from "@/domain/album/albumTags";
-import { formatKbps, formatLength, formatSize } from "@/domain/album/format";
+import {
+	formatKbps,
+	formatLength,
+	formatSize,
+	formatValues,
+} from "@/domain/album/format";
 import { bytesOf } from "@/domain/album/tagModel";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
 import type { AlbumView, UploadedFile } from "@/shared/api/types";
@@ -44,14 +49,14 @@ function Tags({ view, file }: { view: AlbumView; file: UploadedFile }) {
 							{names[key] ?? key}
 						</th>
 						<td>
-							{(file.tags[key] ?? [])
-								.map((value) => {
+							{formatValues(
+								(file.tags[key] ?? []).map((value) => {
 									const size = bytesOf(value);
 									return size
 										? t("tags.binary", { kind: key.split(":")[0] ?? key, size })
 										: value;
-								})
-								.join("; ")}
+								}),
+							)}
 						</td>
 					</tr>
 				))}

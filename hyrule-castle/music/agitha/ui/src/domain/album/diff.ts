@@ -1,5 +1,6 @@
 import type { AlbumView, Edits, PlanFile } from "@/shared/api/types";
-import { familyOf, genreKeyOf } from "./albumTags";
+import { familyOf } from "./albumTags";
+import { GENRE, type Neutral, neutralFor } from "./neutral";
 import { type Locked, lockedKind, PICTURE } from "./tagModel";
 
 export type Side = string[] | null | "differs";
@@ -33,16 +34,16 @@ function common(sides: (string[] | null)[]): Side {
 		: "differs";
 }
 
-// Genres are edited under the neutral name `genre`, whatever the family calls them.
 function editOf(
 	edits: Edits,
 	file: PlanFile,
 	key: string,
-	genreKey: string,
+	neutral: (file: PlanFile) => Neutral,
 ): string[] | null | undefined {
 	const own = edits[file.position] ?? {};
 	if (key in own) return own[key] ?? null;
-	if (key === genreKey && "genre" in own) return own.genre ?? null;
+	const name = neutral(file)[key];
+	if (name !== undefined && name in own) return own[name] ?? null;
 	return undefined;
 }
 
@@ -50,9 +51,9 @@ function nextOf(
 	edits: Edits,
 	file: PlanFile,
 	key: string,
-	genreKey: string,
+	neutral: (file: PlanFile) => Neutral,
 ): string[] | null {
-	const edit = editOf(edits, file, key, genreKey);
+	const edit = editOf(edits, file, key, neutral);
 	return edit === undefined ? present(file.after[key]) : present(edit ?? []);
 }
 
@@ -74,8 +75,8 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 	const first = files[0];
 	if (!first) return { album: [], tracks: {} };
 	const family = familyOf(view, first);
-	const genreKey = genreKeyOf(family);
-	const neutral = family !== "vorbis";
+	// By each file's own family: a plan may hold a FLAC before MP3s.
+	const neutralKeys = (file: PlanFile) => neutralFor(familyOf(view, file));
 	const residue = view.preview?.residue ?? [];
 
 	const keys: string[] = [];
@@ -86,8 +87,9 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 		for (const key of Object.keys(file.before)) add(key);
 		for (const key of Object.keys(file.after)) add(key);
 		// A lower-case key on a family whose keys are not is a neutral field, already in `after`.
+		const lowerIsNeutral = familyOf(view, file) !== "vorbis";
 		for (const key of Object.keys(edits[file.position] ?? {}))
-			if (key !== "genre" && !(neutral && /^[a-z_]+$/.test(key))) add(key);
+			if (key !== GENRE && !(lowerIsNeutral && /^[a-z_]+$/.test(key))) add(key);
 	}
 
 	const names = Object.keys(view.names[family] ?? {});
@@ -98,9 +100,11 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 
 	const rowFor = (key: string, of: PlanFile[]): DiffRow | null => {
 		const now = common(of.map((file) => present(file.before[key])));
-		const next = common(of.map((file) => nextOf(edits, file, key, genreKey)));
+		const next = common(
+			of.map((file) => nextOf(edits, file, key, neutralKeys)),
+		);
 		const edited = of.some(
-			(file) => editOf(edits, file, key, genreKey) !== undefined,
+			(file) => editOf(edits, file, key, neutralKeys) !== undefined,
 		);
 		// A removed tag the files never had keeps its row while the edit stands, so it can be undone.
 		if (now === null && next === null && !edited) return null;
@@ -134,9 +138,15 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 				a.key.localeCompare(b.key),
 		);
 
+	// The neutral name is no tag of a file whose own key is another: its edit shows on that row.
+	const hidden = (file: PlanFile, key: string) =>
+		familyOf(view, file) !== "vorbis" &&
+		Object.values(neutralFor(familyOf(view, file))).includes(key);
+
 	const shared = (key: string) =>
-		common(files.map((file) => nextOf(edits, file, key, genreKey))) !==
-		"differs";
+		!files.some((file) => hidden(file, key)) &&
+		common(files.map((file) => nextOf(edits, file, key, neutralKeys))) !==
+			"differs";
 
 	const album = order(
 		keys
@@ -148,7 +158,7 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 	for (const file of files)
 		tracks[file.position] = order(
 			keys
-				.filter((key) => !shared(key))
+				.filter((key) => !shared(key) && !hidden(file, key))
 				.map((key) => rowFor(key, [file]))
 				.filter((row) => row !== null),
 		);
@@ -156,7 +166,9 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 }
 
 export function editKeyOf(view: AlbumView, key: string): string {
-	const first = view.preview?.files[0];
-	if (!first) return key;
-	return key === genreKeyOf(familyOf(view, first)) ? "genre" : key;
+	for (const file of view.preview?.files ?? []) {
+		const name = neutralFor(familyOf(view, file))[key];
+		if (name !== undefined) return name;
+	}
+	return key;
 }

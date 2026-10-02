@@ -26,6 +26,7 @@ function album(
 		year: null,
 		destination: null,
 		duplicate_of: null,
+		replaces: null,
 		stderr: "",
 		error: null,
 		busy: false,
@@ -515,5 +516,166 @@ describe("Drops", () => {
 				expect(gets(calls)).toBe(2);
 			},
 		);
+	});
+});
+
+// A match is an album copied out of the library to be identified again; its summary names
+// the library album it replaces.
+describe("Drops, for a match", () => {
+	const REPLACES = "S/Sonata Arctica/(1999) Ecliptica";
+	const LABEL = "Match: Sonata Arctica, Ecliptica";
+
+	// The label is made of the summary's `artist` and `title`, the two the list shows for any album.
+	const match = (n: string, over: Partial<AlbumSummary> = {}) =>
+		album(n, "(1999) Ecliptica", {
+			title: "Ecliptica",
+			artist: "Sonata Arctica",
+			year: "1999",
+			replaces: REPLACES,
+			...over,
+		});
+
+	// The album's row, found by the address its link opens, whatever the row reads.
+	async function rowAt(id: string, n: string): Promise<HTMLElement> {
+		const links = await screen.findAllByRole("link", { name: /^Open/ });
+		const link = links.find(
+			(each) => each.getAttribute("href") === `/drops/${id}/albums/${n}`,
+		);
+		const row = link?.closest<HTMLElement>(
+			'li, tr, [role="listitem"], [role="row"]',
+		);
+		if (!row) throw new Error(`no row opens album ${n}`);
+		return row;
+	}
+
+	it("labels the album Match with its artist and album, and leaves a new upload beside it as it was", async () => {
+		serve(() => [
+			drop(BUSY, {
+				albums: [
+					match("01"),
+					album("02", "Pariahs Child rip", {
+						title: "Pariah's Child",
+						artist: "Sonata Arctica",
+						year: "2014",
+					}),
+				],
+			}),
+		]);
+		renderWithProviders(<Drops />);
+
+		const row = await rowAt(BUSY, "01");
+		expect(row).toHaveTextContent(LABEL);
+
+		const upload = rowOf("Pariahs Child rip");
+		expect(upload).not.toHaveTextContent("Match");
+		expect(upload).toHaveTextContent("Pariah's Child");
+		expect(upload).toHaveTextContent("Sonata Arctica");
+	});
+
+	// One match per state the list has buttons or notes for, each with what any album in that state shows.
+	it("shows a match's state and offers its actions as for any album", async () => {
+		const { calls } = serve(() => [
+			drop(BUSY, {
+				actions: [],
+				albums: [
+					match("01"),
+					match("02", {
+						state: "written, not moved",
+						title: "Silence",
+						actions: ["move", "discard"],
+					}),
+					match("03", {
+						state: "apply failed",
+						title: "Winterheart's Guild",
+						error: "apply stopped: the disk is full",
+						actions: ["discard"],
+					}),
+					match("04", {
+						state: "applying",
+						title: "Reckoning Night",
+						busy: true,
+						actions: [],
+					}),
+				],
+			}),
+		]);
+		renderWithProviders(<Drops />);
+
+		const ready = await rowAt(BUSY, "01");
+		expect(ready).toHaveTextContent(LABEL);
+		expect(within(ready).getByText("ready")).toBeInTheDocument();
+		expect(
+			within(ready)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Discard"]);
+
+		const written = await rowAt(BUSY, "02");
+		expect(written).toHaveTextContent("Match: Sonata Arctica, Silence");
+		expect(within(written).getByText("written, not moved")).toBeInTheDocument();
+		expect(
+			within(written).getByRole("button", { name: DISCARD }),
+		).toBeInTheDocument();
+
+		const failed = await rowAt(BUSY, "03");
+		expect(failed).toHaveTextContent(
+			"Match: Sonata Arctica, Winterheart's Guild",
+		);
+		expect(within(failed).getByText("apply failed")).toBeInTheDocument();
+		expect(failed).toHaveTextContent("apply stopped: the disk is full");
+
+		const applying = await rowAt(BUSY, "04");
+		expect(applying).toHaveTextContent(
+			"Match: Sonata Arctica, Reckoning Night",
+		);
+		expect(within(applying).getByText("applying")).toBeInTheDocument();
+		expect(within(applying).queryAllByRole("button")).toEqual([]);
+
+		await userEvent.click(
+			within(written).getByRole("button", { name: /^Move into the library/ }),
+		);
+		await waitFor(() =>
+			expect(posted(calls)).toEqual([`/api/drops/${BUSY}/albums/02/move`]),
+		);
+	});
+
+	it("discards a match as any album, after asking", async () => {
+		const { calls } = serve(() => [drop(BUSY, { albums: [match("01")] })]);
+		renderWithProviders(<Drops />);
+
+		const row = await rowAt(BUSY, "01");
+		expect(row).toHaveTextContent(LABEL);
+		await userEvent.click(within(row).getByRole("button", { name: DISCARD }));
+		expect(posted(calls)).toEqual([]);
+		await confirmDiscard();
+
+		await waitFor(() =>
+			expect(posted(calls)).toEqual([`/api/drops/${BUSY}/albums/01/discard`]),
+		);
+	});
+
+	// Identify has not planned it yet, so the summary has neither artist nor album. What follows
+	// `Match:` then is not settled, so only the mark is looked for.
+	it("marks a match that identify has not named yet", async () => {
+		serve(() => [
+			drop(BUSY, {
+				actions: [],
+				albums: [
+					match("01", {
+						state: "identifying",
+						title: null,
+						artist: null,
+						year: null,
+						busy: true,
+						actions: [],
+					}),
+				],
+			}),
+		]);
+		renderWithProviders(<Drops />);
+
+		const row = await rowAt(BUSY, "01");
+		expect(row).toHaveTextContent(/Match:/);
+		expect(within(row).getByText("identifying")).toBeInTheDocument();
 	});
 });

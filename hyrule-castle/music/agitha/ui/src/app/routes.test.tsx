@@ -1,12 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { createAppRouter } from "@/app/router";
 import type { AlbumView, Drop } from "@/shared/api/types";
 import { fakeFetch } from "@/test/fakeFetch";
-import { screen, userEvent, waitFor } from "@/test/render";
+import { libraryAddress, libraryHandlers } from "@/test/library";
+import { screen, userEvent, waitFor, within } from "@/test/render";
+import { renderApp } from "@/test/renderApp";
 
 const DROP = "20260929-210000";
 
@@ -27,6 +25,7 @@ const listed: Drop = {
 			year: "2014",
 			destination: null,
 			duplicate_of: null,
+			replaces: null,
 			stderr: "",
 			error: null,
 			busy: false,
@@ -61,6 +60,8 @@ const album: AlbumView = {
 	cover_now: null,
 	duplicate: null,
 	approvable: { ok: false, reason: null, code: "busy", hold: null },
+	replaces: null,
+	suggestions: [],
 };
 
 let server: ReturnType<typeof fakeFetch> | undefined;
@@ -70,37 +71,18 @@ afterEach(() => {
 	server = undefined;
 });
 
-// The app's own routes, so this renders the router itself; the test helper
-// brings a router of its own and cannot take these.
 function openAt(address: string) {
 	server = fakeFetch({
 		"GET /api/drops": () => Response.json([listed]),
 		[`GET /api/drops/${DROP}/albums/07`]: () => Response.json(album),
+		...libraryHandlers(),
 	});
-	// jsdom has no matchMedia, and the shell's theme asks it for the system's choice.
-	vi.stubGlobal("matchMedia", (query: string) => ({
-		matches: false,
-		media: query,
-		addEventListener: () => {},
-		removeEventListener: () => {},
-		addListener: () => {},
-		removeListener: () => {},
-		onchange: null,
-		dispatchEvent: () => false,
-	}));
-	const router = createAppRouter(
-		createMemoryHistory({ initialEntries: [address] }),
-	);
-	render(
-		<QueryClientProvider
-			client={
-				new QueryClient({ defaultOptions: { queries: { retry: false } } })
-			}
-		>
-			<RouterProvider router={router} />
-		</QueryClientProvider>,
-	);
-	return router;
+	return renderApp(address);
+}
+
+function barLink(name: string) {
+	const bar = within(screen.getByRole("banner"));
+	return within(bar.getByRole("navigation")).getByRole("link", { name });
 }
 
 // Album 07, so the number cannot be read out of the drop's id.
@@ -154,5 +136,53 @@ describe("routes", () => {
 		expect(
 			screen.queryByRole("region", { name: "Drop music here" }),
 		).toBeNull();
+	});
+
+	it.each([
+		["the library", libraryAddress()],
+		["a letter", libraryAddress("S")],
+		["an artist", libraryAddress("S", "Sonata Arctica")],
+		["an album", libraryAddress("S", "Sonata Arctica", "(1999) Ecliptica")],
+	])(
+		"opens the library's tree at the address of %s (%s)",
+		async (_place, address) => {
+			openAt(address);
+
+			expect(await screen.findByRole("tree")).toBeInTheDocument();
+			expect(screen.queryByText(/not found/i)).toBeNull();
+			expect(
+				screen.queryByRole("region", { name: "Drop music here" }),
+			).toBeNull();
+		},
+	);
+
+	it("opens the library from the bar's Library link, and marks it current", async () => {
+		const router = openAt("/");
+		await screen.findByRole("region", { name: "Drop music here" });
+
+		await userEvent.click(barLink("Library"));
+
+		expect(await screen.findByRole("tree")).toBeInTheDocument();
+		expect(router.state.location.pathname).toBe("/library");
+		expect(
+			screen.queryByRole("region", { name: "Drop music here" }),
+		).toBeNull();
+		expect(barLink("Library")).toHaveAttribute("aria-current", "page");
+		expect(barLink("Drop")).not.toHaveAttribute("aria-current");
+	});
+
+	it("returns to the drop page from the bar's Drop link, and marks it current", async () => {
+		const router = openAt(libraryAddress("S", "Sonata Arctica"));
+		await screen.findByRole("tree");
+
+		await userEvent.click(barLink("Drop"));
+
+		expect(
+			await screen.findByRole("region", { name: "Drop music here" }),
+		).toBeInTheDocument();
+		expect(router.state.location.pathname).toBe("/");
+		expect(screen.queryByRole("tree")).toBeNull();
+		expect(barLink("Drop")).toHaveAttribute("aria-current", "page");
+		expect(barLink("Library")).not.toHaveAttribute("aria-current");
 	});
 });

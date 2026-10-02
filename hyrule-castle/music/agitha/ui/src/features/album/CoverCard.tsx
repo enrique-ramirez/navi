@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { putCover } from "@/shared/api/album";
 import type { AlbumView } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
+import { droppedFile } from "@/shared/ui/droppedFile";
 import { Parasol } from "@/shared/ui/Parasol";
 import styles from "./CoverCard.module.css";
 import type { Pending } from "./pending";
@@ -86,13 +87,7 @@ export function CoverCard({
 				onDrop={(event) => {
 					event.preventDefault();
 					setOver(false);
-					const { files, items } = event.dataTransfer;
-					const first =
-						files?.[0] ??
-						Array.from(items ?? [])
-							.find((item) => item.kind === "file")
-							?.getAsFile();
-					void take(first);
+					void take(droppedFile(event.dataTransfer));
 				}}
 			>
 				{shown ? (

@@ -1016,5 +1016,71 @@ class Keeping(unittest.TestCase):
                          {name: digest for name, digest in self.expected.items() if name != "01. One.flac"})
 
 
+class StopsWhileDeletingTheOldCopy(unittest.TestCase):
+    """Keep the new one, with agitha stopped while it deletes the copy set aside.
+
+    The new folder has verified by then and the old copy has lost a track.
+    The thread that runs the swap is ended with `SystemExit`, which no
+    `except Exception` catches, the nearest a test comes to agitha dying
+    there. The album then reads `written, not moved` and offers Move alone,
+    so the next steps driven here are the two the owner has: agitha starts
+    again, and Move.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        Keeping.setUpClass.__func__(cls)
+
+    setUp = Keeping.setUp
+    lay_library = Keeping.lay_library
+
+    def assertWhole(self, when: str) -> None:
+        """The library holds the old album as it was, or the new one alone as apply wrote it. Nothing between."""
+        library = self.setting.library
+        now = builders.tree(library)
+        as_new = {"Y": None, f"Y/{ARTIST}": None, DESTINATION: None,
+                  **{f"{DESTINATION}/{name}": (library / DESTINATION / name).read_bytes() for name in self.expected}}
+        landed = hashes(library / DESTINATION) == self.expected and sorted(now) == sorted(as_new)
+        self.assertTrue(now == self.before or landed,
+                        f"{when} the library holds neither the old album as it was nor the new one alone: "
+                        f"{sorted(name for name, data in now.items() if data is not None)}")
+
+    def test_a_delete_of_the_old_copy_cut_short_leaves_one_whole_album_after_a_start_and_a_move(self) -> None:
+        self.lay_library("(1999) Chrono Cross")
+        inbox = os.path.realpath(self.setting.album_root) + os.sep
+        real = shutil.rmtree
+        stopped = threading.Event()
+        cut: list[Path] = []
+        workers: list[threading.Thread] = []
+
+        def rmtree(path, *args, **kwargs):
+            # The first delete under the album's inbox folder that holds a track of the old copy, which is MP3.
+            tracks = sorted(Path(path).rglob("*.mp3")) if os.path.realpath(path).startswith(inbox) else []
+            if tracks and not cut:
+                tracks[0].unlink()
+                cut.append(tracks[0])
+                workers.append(threading.current_thread())
+                stopped.set()
+                raise SystemExit("the test stopped the swap here")
+            return real(path, *args, **kwargs)
+
+        with mock.patch("shutil.rmtree", rmtree):
+            status, body = self.served.approve({"keep": "new"})
+            self.assertTrue(200 <= status < 300, (status, body))
+            self.assertTrue(stopped.wait(DEADLINE), "the copy set aside was never deleted with `shutil.rmtree`")
+            workers[0].join(10)
+
+        self.served.close()
+        self.served = Served(self.setting)
+        self.assertWhole("after the start")
+
+        # Move is the only action the album offers. If it is refused, the refusal changes nothing and the
+        # library is judged as the start left it.
+        status, body = self.served.request("POST", f"/api/drops/{DROP}/albums/{N}/move", {})
+        # Taken or refused, Move is answered: a handler that died here would leave the owner no way on.
+        self.assertTrue(200 <= status < 500, (status, body))
+        self.assertWhole("after Move")
+
+
 if __name__ == "__main__":
     unittest.main()

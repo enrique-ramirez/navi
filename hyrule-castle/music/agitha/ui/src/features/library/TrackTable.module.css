@@ -1,0 +1,59 @@
+/* A table wider than the screen scrolls here, not the page. */
+.scroll {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.tracks {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+.tracks th {
+	padding: var(--space-2);
+	color: var(--muted);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-align: left;
+	text-transform: uppercase;
+	border-bottom: 1px solid var(--border);
+}
+
+.tracks td {
+	padding: var(--space-1) var(--space-2);
+	vertical-align: middle;
+}
+
+.tracks tbody tr + tr td {
+	border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.number {
+	width: 1%;
+	font-family: var(--font-numeric);
+	color: var(--muted);
+	white-space: nowrap;
+}
+
+.right {
+	text-align: right;
+}
+
+.name,
+.artist,
+.file {
+	display: block;
+}
+
+.artist,
+.file {
+	color: var(--muted);
+	font-size: 0.8125rem;
+	overflow-wrap: anywhere;
+}
+
+.play {
+	cursor: pointer;
+}

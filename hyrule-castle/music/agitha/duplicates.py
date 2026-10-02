@@ -1,15 +1,12 @@
 """An album already in the library: finding it, comparing the copies, keeping the new one.
 
 `find` and `compare` are read-only. `replace` is the moves of Keep the new
-one; it renames with `os.rename` and never copies, so a failure leaves each
-folder whole on one side or the other.
+one, by `swap`'s five steps.
 """
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -18,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from musiclib import files, images, units
 from musiclib.mapping import PICARD
 
-from . import audio, drops
+from . import audio, drops, swap
 
 if TYPE_CHECKING:
     from .server import Config
@@ -324,178 +321,20 @@ def find(config: Config, entry: dict[str, Any], new_folder: Path | None = None,
     return compare(new_folder, found, cover_url)
 
 
-#: Each file of a folder by its path: its SHA-256 and, for audio, its length.
-_Record = dict[str, tuple[str, float | None]]
+def replace(config: Config, drop: str, n: str, entry: dict[str, Any], library_folder: Path | None,
+            unchanged: swap.Unchanged | None = None) -> dict[str, Any] | None:
+    """Swaps the library's copy `library_folder` for the finished folder of album `n`, by `swap.swap`.
 
-
-class _Problem(Exception):
-    def __init__(self, step: int, file: Path, reason: str) -> None:
-        super().__init__(reason)
-        self.step, self.file, self.reason = step, file, reason
-
-
-def _length(path: Path) -> float | None:
-    found = audio.facts(path) if path.suffix.lower() in files.AUDIO_EXTENSIONS else None
-    return found.length if found else None
-
-
-def _record(folder: Path) -> _Record:
-    """Step 1: every file's SHA-256 by its path in `folder`, and an audio file's length as mutagen reads it now."""
-    return {p.relative_to(folder).as_posix(): (drops.file_sha256(p), _length(p))
-            for p in sorted(folder.rglob("*")) if p.is_file()}
-
-
-def stranded(folder: Path) -> bool:
-    """Whether the album folder `folder` holds a library copy set aside, which only Move may settle."""
-    aside = folder / "replaced"
-    return aside.is_dir() and any(p.is_file() for p in aside.rglob("*"))
-
-
-def _saved(folder: Path) -> tuple[str, _Record] | None:
-    """The library copy's path and the step 1 record an earlier run left in `replaced.json`, where it is stranded."""
-    body = drops.read_json(folder / "replaced.json")
-    if body is None or not stranded(folder):
-        return None
-    try:
-        return body["copy"], {name: (digest, length) for name, (digest, length) in body["files"].items()}
-    except (KeyError, TypeError, ValueError):
-        return None
-
-
-def _verify(folder: Path, recorded: _Record) -> None:
-    """Step 4: the names, the hashes, and that each audio file opens with the length step 1 read, within 0.1 s.
-
-    The plan holds no length per file, so the length compared is the finished
-    folder's own, taken before it moved.
-    """
-    now = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
-    for name in sorted(set(recorded) - now):
-        raise _Problem(4, folder / name, "the file is missing after the move")
-    for name in sorted(now - set(recorded)):
-        raise _Problem(4, folder / name, "the file was not in the finished folder")
-    for name, (digest, length) in sorted(recorded.items()):
-        path = folder / name
-        try:
-            if drops.file_sha256(path) != digest:
-                raise _Problem(4, path, "its SHA-256 differs from the finished folder's")
-        except OSError as exc:
-            raise _Problem(4, path, f"could not be read: {exc.strerror or exc}") from exc
-        if path.suffix.lower() in files.AUDIO_EXTENSIONS:
-            found = _length(path)
-            if found is None or length is None or abs(found - length) > 0.1:
-                raise _Problem(4, path, "it does not open, or its length changed")
-
-
-def _prune(start: Path, stop: Path) -> None:
-    """Removes the empty folders from `start` up to, not including, `stop`."""
-    for parent in (start, *start.parents):
-        if parent == stop:
-            return
-        try:
-            parent.rmdir()
-        except OSError:
-            return
-
-
-def _fail(folder: Path, source: Path, problem: _Problem, outcome: str) -> dict[str, Any]:
-    error = f"Step {problem.step} failed at {problem.file}: {problem.reason}. {outcome}"
-    drops.write_album(folder, state="written, not moved", error=error, step=problem.step, file=str(problem.file))
-    return {"state": "written, not moved", "path": str(source), "error": error,
-            "step": problem.step, "file": str(problem.file)}
-
-
-def _set_aside(library_folder: Path, aside: Path) -> None:
-    """Step 2."""
-    try:
-        aside.parent.mkdir(parents=True, exist_ok=True)
-        os.rename(library_folder, aside)
-    except OSError as exc:
-        raise _Problem(2, library_folder, f"could not be set aside: {exc.strerror or exc}") from exc
-
-
-def _begin(folder: Path, source: Path, library_folder: Path, aside: Path, relative: str) -> _Record:
-    """Steps 1 and 2: the record of the new folder, saved, and then the library's copy set aside."""
-    try:
-        recorded = _record(source)
-        drops.replace_json(folder / "replaced.json", {"copy": relative, "files": recorded})
-    except OSError as exc:
-        raise _Problem(1, Path(exc.filename) if exc.filename else source,
-                       f"could not be read or recorded: {exc.strerror or exc}") from exc
-    _set_aside(library_folder, aside)
-    return recorded
-
-
-def _move_in(source: Path, target: Path) -> None:
-    """Step 3."""
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        os.rename(source, target)
-    except OSError as exc:
-        raise _Problem(3, target, f"could not be moved into the library: {exc.strerror or exc}") from exc
-
-
-def _put_back(folder: Path, source: Path, aside: Path, library_folder: Path, problem: _Problem) -> dict[str, Any]:
-    """The undo of step 2, and the answer for `problem`."""
-    try:
-        os.rename(aside, library_folder)
-    except OSError as exc:
-        return _fail(folder, source, problem,
-                     f"The library's copy could not be put back and is at {aside}: {exc.strerror or exc}.")
-    _prune(aside.parent, folder)
-    (folder / "replaced.json").unlink(missing_ok=True)
-    return _fail(folder, source, problem, "The library's copy is back where it was.")
-
-
-def replace(config: Config, drop: str, n: str, entry: dict[str, Any],
-            library_folder: Path | None) -> dict[str, Any] | None:
-    """Swaps the library's copy `library_folder` for the finished folder of album `n`, in five steps.
-
-    1 records the new folder's hashes and lengths in `replaced.json`, 2 sets
-    the library's copy aside, 3 renames the new folder in, 4 verifies it, 5
-    deletes the copy set aside. Where an earlier run left the copy set aside
-    (`stranded`), this one resumes at step 3 against that record and
-    `library_folder` is not used.
+    `unchanged` is `swap.swap`'s check that the library's copy is still as it was.
 
     None where the new folder is in the library and the old copy is deleted.
     Otherwise the answer of a `written, not moved` album, already written to
-    its `album.json`, with the library's copy back where it was where it could
-    be put back.
+    its `album.json`.
     """
     folder = config.inbox / drop / n
     source = folder / entry["destination"]
-    target = config.library / entry["destination"]
-    saved = _saved(folder)
-    if saved is not None:
-        relative, recorded = saved
-        library_folder = config.library / relative
-        aside = folder / "replaced" / relative
-    else:
-        assert library_folder is not None
-        relative = library_folder.relative_to(config.library).as_posix()
-        aside = folder / "replaced" / relative
-        try:
-            recorded = _begin(folder, source, library_folder, aside, relative)
-        except _Problem as problem:
-            _prune(aside.parent, folder)
-            (folder / "replaced.json").unlink(missing_ok=True)
-            return _fail(folder, source, problem, "Nothing was moved.")
-
-    try:
-        _move_in(source, target)
-    except _Problem as problem:
-        return _put_back(folder, source, aside, library_folder, problem)
-
-    try:
-        _verify(target, recorded)
-    except _Problem as problem:
-        try:
-            os.rename(target, source)
-        except OSError as exc:
-            return _fail(folder, source, problem,
-                         f"The new album could not be moved out of the library ({exc.strerror or exc}); "
-                         f"the library's copy stays at {aside}.")
-        return _put_back(folder, source, aside, library_folder, problem)
-
-    shutil.rmtree(folder / "replaced", ignore_errors=True)
-    (folder / "replaced.json").unlink(missing_ok=True)
-    return None
+    failed = swap.swap(config.library, folder, source, config.library / entry["destination"], library_folder,
+                       unchanged)
+    if failed is None:
+        return None
+    return drops.write_not_moved(folder, str(source), failed.sentence, *failed.at)

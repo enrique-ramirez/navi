@@ -15,9 +15,9 @@ from typing import TYPE_CHECKING, Any
 from musiclib.batch.decisions import decisions_sha256
 from musiclib.batch.job import Job
 
-from . import drops, duplicates
+from . import drops, swap
 from .paths import ALBUM_NUMBER, DROP_ID
-from .refusal import Refusal
+from .refusal import MATCH_CHANGED, Refusal
 
 if TYPE_CHECKING:
     from .queue import Queue
@@ -142,16 +142,23 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
     if not folder.is_dir():
         return None
     record = drops.read_album(folder) or {}
+    replaces = drops.replaces_of(record)
     entry = plan_entry(config, drop, n)
     staged = staged_name(folder)
     busy = queue is not None and queue.busy(drop, n)
     state = _settle(record.get("state"), busy, _written(folder), staged is not None, entry is not None)
     if busy:
         actions: list[str] = []
+    elif state == "ready" and replaces and entry is not None and entry.get("status") == "unidentified":
+        # A match that found no release has nothing to approve, and identify would find the same again.
+        actions = ["discard"]
     elif state == "ready":
         actions = (["approve"] if approvable(config, drop, n, entry)["ok"] else []) + ["reidentify", "discard"]
-    elif state == "written, not moved" and duplicates.stranded(folder):
+    elif state == "written, not moved" and swap.unsettled(folder):
         actions = ["move"]
+    elif state == "written, not moved" and replaces and record.get("error") == MATCH_CHANGED:
+        # Move would meet the same changed copy.
+        actions = ["discard"]
     else:
         actions = ACTIONS.get(state, ["discard"])
     return {
@@ -160,6 +167,7 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "state": state,
         **_preview(entry),
         "duplicate_of": None,
+        "replaces": replaces,
         "stderr": record.get("stderr", ""),
         "error": record.get("error"),
         "busy": busy,

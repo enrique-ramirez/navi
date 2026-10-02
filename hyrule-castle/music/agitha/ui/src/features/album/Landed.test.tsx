@@ -19,6 +19,7 @@ function summary(n: string, state: AlbumSummary["state"]): AlbumSummary {
 		year: null,
 		destination: null,
 		duplicate_of: null,
+		replaces: null,
 		stderr: "",
 		error: null,
 		busy: false,

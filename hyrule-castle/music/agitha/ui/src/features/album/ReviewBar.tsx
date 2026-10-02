@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
 	LoaderCircle,
@@ -9,6 +10,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { isRunning } from "@/domain/album/albumQuery";
 import { albumTags } from "@/domain/album/albumTags";
+import { hasKeepChoice } from "@/domain/album/keepChoice";
 import type { AlbumView } from "@/shared/api/types";
 import { albumStatePhrase } from "@/shared/i18n/albumState";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -37,6 +39,7 @@ export function ReviewBar({
 }) {
 	const { t } = useTranslate();
 	const navigate = useNavigate();
+	const client = useQueryClient();
 	const [asking, setAsking] = useState(false);
 	const {
 		refusal,
@@ -70,7 +73,7 @@ export function ReviewBar({
 	const tags = albumTags(view);
 	const title = tags.title || view.name;
 
-	const duplicateChoice = view.duplicate !== null && view.state === "ready";
+	const duplicateChoice = hasKeepChoice(view) && view.state === "ready";
 	const primary: Primary =
 		awaiting !== null
 			? awaiting.then.kind === "approve"
@@ -243,7 +246,10 @@ export function ReviewBar({
 					onConfirm={() => {
 						setAsking(false);
 						void submit("discard", {}).then(async (ok) => {
-							if (ok) await navigate({ to: "/" });
+							if (!ok) return;
+							// Discarding a match ends the open match its library album shows.
+							void client.invalidateQueries({ queryKey: ["library"] });
+							await navigate({ to: "/" });
 						});
 					}}
 				/>

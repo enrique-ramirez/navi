@@ -9,10 +9,10 @@ import {
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AlbumView, Hold } from "@/shared/api/types";
-import { ALBUM_URL, albumView, DROP } from "@/test/albumView";
-import { fakeFetch } from "@/test/fakeFetch";
-import { screen } from "@/test/render";
+import type { AcceptDecision, AlbumView, Hold } from "@/shared/api/types";
+import { ALBUM_URL, albumView, DROP, flacFirst } from "@/test/albumView";
+import { type Call, fakeFetch } from "@/test/fakeFetch";
+import { screen, userEvent, waitFor, within } from "@/test/render";
 
 import { AlbumPage } from "./AlbumPage";
 
@@ -70,10 +70,13 @@ function viewWith(missing: Hold[]): AlbumView {
 
 // The profile's helper mounts the page at a catch-all route, which gives it no
 // `drop` and `n`; this router gives it the album route's parameters (as in Strays.test.tsx).
-function renderAlbumPage(page: typeof AlbumPage = AlbumPage) {
-	const queryClient = new QueryClient({
+// A case that looks at what the page keeps of other routes passes its own client.
+function renderAlbumPage(
+	page: typeof AlbumPage = AlbumPage,
+	queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
-	});
+	}),
+) {
 	const rootRoute = createRootRoute();
 	const album = createRoute({
 		getParentRoute: () => rootRoute,
@@ -283,6 +286,281 @@ describe("the album page, for an album with a track it cannot read", () => {
 
 		expect(screen.queryAllByRole("alert")).toEqual([]);
 		expect(screen.queryByText(DISCARD)).toBeNull();
+	});
+});
+
+// An album the owner has accepted, so an edit turns Approve into Save & re-preview.
+const ACCEPTED: AcceptDecision = {
+	action: "accept",
+	release_id: "6f1a2b3c-0000-4000-8000-000100000001",
+	edits: {},
+	game: null,
+	cover: null,
+};
+
+const POSITIONS = ["1-1", "1-2", "1-3"];
+
+const posts = (calls: Call[], path: string) =>
+	calls.filter(
+		(call) =>
+			call.method === "POST" &&
+			new URL(call.url).pathname === `${ALBUM_URL}/${path}`,
+	);
+
+// The engine moves the artist folder for the neutral field `albumartist`, and
+// converts what is typed there. An edit under a file's own key (`TPE2` in an
+// MP3) is laid over it as written. A saved review can hold the album artist
+// under the own key, and it would win over a typed one.
+describe("the album artist on the review page", () => {
+	let fake: ReturnType<typeof fakeFetch> | undefined;
+
+	afterEach(() => {
+		fake?.restore();
+		fake = undefined;
+	});
+
+	function serve(view: AlbumView) {
+		fake = fakeFetch({
+			[`GET ${ALBUM_URL}`]: () => Response.json(view),
+			[`POST ${ALBUM_URL}/decision`]: () => Response.json({ state: "queued" }),
+			"GET /api/drops": () => Response.json([]),
+		});
+		renderAlbumPage();
+		return userEvent.setup();
+	}
+
+	// A view whose saved decision names the album artist under `TPE2`, on every track.
+	const savedUnderOwnKey = () =>
+		albumView({
+			decision: {
+				...ACCEPTED,
+				edits: Object.fromEntries(
+					POSITIONS.map((position) => [position, { TPE2: ["Raw A"] }]),
+				),
+			},
+		});
+
+	const table = (name: string) => screen.findByRole("table", { name });
+
+	function rowIn(tags: HTMLElement, tag: string) {
+		const row = within(tags)
+			.getAllByRole("row")
+			.find(
+				(each) =>
+					within(each)
+						.queryByRole("rowheader")
+						?.textContent?.replace("edited by you", "") === tag,
+			);
+		if (!row) throw new Error(`no row for ${tag}`);
+		return row;
+	}
+
+	const albumArtist = (tags: HTMLElement) =>
+		within(tags).getByRole("textbox", { name: "New Album artist" });
+
+	async function typeAlbumArtist(
+		user: ReturnType<typeof userEvent.setup>,
+		tags: HTMLElement,
+		name: string,
+	) {
+		await user.clear(albumArtist(tags));
+		await user.type(albumArtist(tags), `${name}{Enter}`);
+	}
+
+	async function saved(
+		user: ReturnType<typeof userEvent.setup>,
+	): Promise<AcceptDecision> {
+		await user.click(screen.getByRole("button", { name: "Save & re-preview" }));
+		await waitFor(() => expect(posts(fake!.calls, "decision")).toHaveLength(1));
+		return JSON.parse(posts(fake!.calls, "decision")[0]!.body);
+	}
+
+	it("shows a typed album artist over one saved under the files' own key, and sends it under the neutral name with the saved edit gone", async () => {
+		const user = serve(savedUnderOwnKey());
+		const tags = await table("Tags on all 3 tracks");
+		expect(albumArtist(tags)).toHaveValue("Raw A");
+
+		await typeAlbumArtist(user, tags, "Typed B");
+
+		expect(albumArtist(tags)).toHaveValue("Typed B");
+		const decision = await saved(user);
+		// `TPE2` is absent, and not `null`: a `null` there removes the tag.
+		expect(decision.edits).toEqual(
+			Object.fromEntries(
+				POSITIONS.map((position) => [position, { albumartist: ["Typed B"] }]),
+			),
+		);
+	});
+
+	it("leaves no album artist edit after Undo, and the row shows what the plan writes", async () => {
+		const user = serve(savedUnderOwnKey());
+		const tags = await table("Tags on all 3 tracks");
+		await typeAlbumArtist(user, tags, "Typed B");
+
+		await user.click(
+			within(rowIn(tags, "Album artist")).getByRole("button", {
+				name: "Undo your edit of Album artist",
+			}),
+		);
+
+		expect(albumArtist(tags)).toHaveValue("Clean Band");
+		expect(
+			within(rowIn(tags, "Album artist")).queryByText("edited by you"),
+		).toBeNull();
+		// The saved edit went when the name was typed, and Undo took the typed one.
+		const decision = await saved(user);
+		expect(decision.edits).toEqual({});
+	});
+
+	// The first track is a FLAC, whose own key is the neutral name. The MP3
+	// after it holds a saved edit under `TPE2`, which goes by that track's own
+	// format and not by the first file's. The third track is not typed on.
+	it("sends an album artist typed on a track under the neutral name where a FLAC comes before the MP3s, and takes that MP3's saved TPE2 edit out", async () => {
+		const view = flacFirst(albumView());
+		view.decision = {
+			...ACCEPTED,
+			edits: { "1-2": { TPE2: ["Raw A"] }, "1-3": { TPE2: ["Raw A"] } },
+		};
+		const user = serve(view);
+		const tracks = await table("Tracks");
+
+		await user.click(within(tracks).getByRole("button", { name: /^Two/ }));
+		const mp3 = await table("Tags of Two");
+		expect(albumArtist(mp3)).toHaveValue("Raw A");
+		await typeAlbumArtist(user, mp3, "Typed B");
+		expect(albumArtist(mp3)).toHaveValue("Typed B");
+		// One tag, one row: the neutral name is not listed as a tag of the MP3's own.
+		expect(
+			within(mp3)
+				.getAllByRole("rowheader")
+				.map((header) => header.textContent?.replace("edited by you", "")),
+		).not.toContain("albumartist");
+
+		await user.click(within(tracks).getByRole("button", { name: /^One/ }));
+		const flac = await table("Tags of One");
+		await typeAlbumArtist(user, flac, "Typed C");
+		expect(albumArtist(flac)).toHaveValue("Typed C");
+
+		const decision = await saved(user);
+		expect(decision.edits).toEqual({
+			"1-1": { albumartist: ["Typed C"] },
+			"1-2": { albumartist: ["Typed B"] },
+			"1-3": { TPE2: ["Raw A"] },
+		});
+	});
+});
+
+// The library's listings are kept for a while once read. An album that lands
+// changes them, and one that is still being applied has changed nothing yet:
+// a listing read meanwhile would be kept as fresh, without the album.
+describe("the library's listings as the review page keeps them", () => {
+	let fake: ReturnType<typeof fakeFetch> | undefined;
+
+	afterEach(() => {
+		fake?.restore();
+		fake = undefined;
+		vi.useRealTimers();
+	});
+
+	const LISTING = {
+		root: "/srv/music/library",
+		readable: true,
+		letters: ["C"],
+	};
+
+	// A page whose client already holds the library's first listing, and the
+	// album's route answering whatever `served.view` is when it is asked.
+	function open(view: AlbumView, routes: Parameters<typeof fakeFetch>[0]) {
+		// The page asks again every 2 s while the album is being applied.
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const served = { view };
+		fake = fakeFetch({
+			[`GET ${ALBUM_URL}`]: () => Response.json(served.view),
+			"GET /api/drops": () => Response.json([]),
+			...routes,
+		});
+		const client = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		client.setQueryData(["library"], LISTING);
+		renderAlbumPage(AlbumPage, client);
+		return {
+			served,
+			user: userEvent.setup({ advanceTimers: vi.advanceTimersByTime }),
+			// Whether the listing must be asked for again before it is shown.
+			outdated: () => client.getQueryState(["library"])?.isInvalidated,
+		};
+	}
+
+	const landed = (view: AlbumView): AlbumView => ({
+		...view,
+		state: "in the library",
+		approvable: {
+			ok: false,
+			reason: "in the library",
+			code: "in-library",
+			hold: null,
+		},
+	});
+
+	it("keeps them while an approved album is being applied, and asks for them again once it is in the library", async () => {
+		const ready = albumView({ decision: ACCEPTED });
+		const page = open(ready, {
+			[`POST ${ALBUM_URL}/approve`]: () => {
+				page.served.view = { ...ready, state: "applying", busy: true };
+				return Response.json(
+					{
+						state: "applying",
+						path: null,
+						error: null,
+						step: null,
+						file: null,
+					},
+					{ status: 202 },
+				);
+			},
+		});
+
+		await page.user.click(
+			await screen.findByRole("button", { name: "Approve" }),
+		);
+		await waitFor(() => expect(posts(fake!.calls, "approve")).toHaveLength(1));
+		// The page has drawn the answer that followed the 202.
+		expect(await screen.findByText("applying")).toBeVisible();
+		expect(page.outdated()).toBe(false);
+
+		page.served.view = landed(ready);
+		await vi.advanceTimersByTimeAsync(2_100);
+
+		expect(
+			await screen.findByRole("heading", { name: /is in the library$/ }),
+		).toBeVisible();
+		await waitFor(() => expect(page.outdated()).toBe(true));
+	});
+
+	it("asks for them again once Move into the library has put the album there", async () => {
+		const stuck = albumView({
+			decision: ACCEPTED,
+			state: "written, not moved",
+			error: "the disk is full",
+		});
+		const page = open(stuck, {
+			[`POST ${ALBUM_URL}/move`]: () => {
+				page.served.view = landed(stuck);
+				return Response.json({ state: "in the library" });
+			},
+		});
+		const move = await screen.findByRole("button", {
+			name: "Move into the library",
+		});
+		expect(page.outdated()).toBe(false);
+
+		await page.user.click(move);
+
+		expect(
+			await screen.findByRole("heading", { name: /is in the library$/ }),
+		).toBeVisible();
+		await waitFor(() => expect(page.outdated()).toBe(true));
 	});
 });
 

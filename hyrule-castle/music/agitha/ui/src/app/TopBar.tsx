@@ -21,6 +21,14 @@ export function TopBar() {
 					<span>{t("app.title")}</span>
 				</Link>
 			</h1>
+			<nav className={styles.nav}>
+				<Link to="/" activeOptions={{ exact: true }} className={styles.link}>
+					{t("nav.drop")}
+				</Link>
+				<Link to="/library" className={styles.link}>
+					{t("nav.library")}
+				</Link>
+			</nav>
 			<div className={styles.spacer} />
 			<button type="button" className={styles.button} onClick={toggle}>
 				{theme === "dark" ? (

@@ -71,6 +71,11 @@ function refetchInterval(query: { state: { data?: DropList } }) {
 	return running ? 2000 : false;
 }
 
+const matchedName = (album: AlbumSummary, replaces: string) =>
+	album.artist && album.title
+		? `${album.artist}, ${album.title}`
+		: (replaces.split("/").pop() ?? replaces);
+
 function AlbumRow({
 	drop,
 	album,
@@ -103,6 +108,11 @@ function AlbumRow({
 					{t(albumStatePhrase[album.state])}
 				</State>
 			</div>
+			{album.replaces && (
+				<p className={styles.note}>
+					{t("drop.match", { what: matchedName(album, album.replaces) })}
+				</p>
+			)}
 			{album.duplicate_of && (
 				<p className={styles.note}>
 					{t("album.sameFolder", { n: album.duplicate_of })}
@@ -150,6 +160,8 @@ export function Drops() {
 		setError(null);
 		const answer = await post(`/api/drops/${path}`, {});
 		if (!answer.ok) setError(answer.error);
+		// A Move lands albums in the library and a Discard ends a match; its listings are kept for a while.
+		else void client.invalidateQueries({ queryKey: ["library"] });
 		await client.invalidateQueries({ queryKey: dropsKey });
 	}
 

@@ -1,0 +1,113 @@
+{
+  "albums": [
+    {
+      "cover": {
+        "height": 1200,
+        "passes": true,
+        "problem": null,
+        "width": 1200
+      },
+      "new_path": "S/Sonata Arctica/(2008) Ecliptica",
+      "path": "S/Sonata Arctica/(1999) Ecliptica",
+      "problems": [
+        {
+          "detail": "S/Sonata Arctica/(2008) Ecliptica",
+          "rule": "already in the library"
+        }
+      ],
+      "refused": [
+        {
+          "key": "MusicBrainz release id",
+          "reason": "is a MusicBrainz ID"
+        }
+      ],
+      "skip": null,
+      "tracks": [
+        {
+          "changes": [
+            {
+              "after": [
+                "2008"
+              ],
+              "before": [
+                "1999"
+              ],
+              "key": "Date"
+            }
+          ],
+          "new_path": "01. Blank File.flac",
+          "path": "01. Blank File.flac"
+        },
+        {
+          "changes": [
+            {
+              "after": [
+                "2008"
+              ],
+              "before": [
+                "1999"
+              ],
+              "key": "Date"
+            },
+            {
+              "after": [
+                "power metal"
+              ],
+              "before": [
+                "power metal",
+                "symphonic metal"
+              ],
+              "key": "Genre"
+            }
+          ],
+          "new_path": "02. My Land.flac",
+          "path": "02. My Land.flac"
+        },
+        {
+          "changes": [
+            {
+              "after": [
+                "2008"
+              ],
+              "before": [
+                "1999"
+              ],
+              "key": "Date"
+            },
+            {
+              "after": null,
+              "before": [
+                "EAC 0.99"
+              ],
+              "key": "TXXX:RIPPER"
+            }
+          ],
+          "new_path": "03. 8th Commandment.mp3",
+          "path": "03. 8th Commandment.mp3"
+        },
+        {
+          "changes": [
+            {
+              "after": [
+                "2008"
+              ],
+              "before": [
+                "1999"
+              ],
+              "key": "Date"
+            },
+            {
+              "after": [
+                "power metal"
+              ],
+              "before": null,
+              "key": "Genre"
+            }
+          ],
+          "new_path": "04. Replica.mp3",
+          "path": "04. Replica.mp3"
+        }
+      ]
+    }
+  ]
+}

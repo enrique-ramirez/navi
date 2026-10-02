@@ -11,10 +11,11 @@ import json
 import os
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .paths import DROP_ID, climbs
+from .paths import ALBUM_NUMBER, DROP_ID, climbs
 
 if TYPE_CHECKING:
     from .server import Config, Handler
@@ -65,8 +66,9 @@ def _room_problem(config: Config, items: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
-def _claim_folder(config: Config, stem: str) -> str:
-    """Makes `inbox/<stem>` or, where it exists, `inbox/<stem>-2`, `-3` and so on; returns the id."""
+def claim_drop(config: Config, now: datetime) -> str:
+    """Makes the folder of a new drop, `inbox/<YYYYMMDD-HHMMSS>` of `now` or that with `-2`, `-3` and so on; returns the id."""
+    stem = now.strftime("%Y%m%d-%H%M%S")
     drop, number = stem, 1
     while True:
         try:
@@ -78,11 +80,7 @@ def _claim_folder(config: Config, stem: str) -> str:
 
 
 def create(request: Handler, match: re.Match[str], config: Config) -> None:
-    try:
-        body = json.loads(request.read_body())
-    except ValueError:
-        request.fail(400, "The request is not JSON.")
-        return
+    body = request.read_json()
     problem = _invalid(body)
     if problem:
         request.fail(400, problem)
@@ -92,7 +90,7 @@ def create(request: Handler, match: re.Match[str], config: Config) -> None:
         request.send_json(400, no_room)
         return
     now = config.now()
-    drop = _claim_folder(config, now.strftime("%Y%m%d-%H%M%S"))
+    drop = claim_drop(config, now)
     (config.inbox / drop / "raw").mkdir()
     write_record(config.inbox / drop, {"started": now.isoformat(), "items": body["items"], "done": False})
     request.server.touch(drop)
@@ -149,6 +147,41 @@ def write_album(album_dir: Path, **fields: Any) -> None:
     """Merges `fields` into the album's `album.json`, creating it where there is none."""
     album_dir.mkdir(parents=True, exist_ok=True)
     replace_json(album_dir / "album.json", {**(read_album(album_dir) or {}), **fields})
+
+
+def write_not_moved(album_dir: Path, path: str | None, error: str, step: int | None = None,
+                    file: str | None = None) -> dict[str, Any]:
+    """Records the album as `written, not moved` and answers with the same."""
+    write_album(album_dir, state="written, not moved", error=error, step=step, file=file)
+    return {"state": "written, not moved", "path": path, "error": error, "step": step, "file": file}
+
+
+def replaces_of(record: dict[str, Any] | None) -> str | None:
+    """The library path the `album.json` content `record` says the album replaces, or `None` for an upload."""
+    replaces = (record or {}).get("replaces")
+    return replaces if isinstance(replaces, str) else None
+
+
+def open_matches(config: Config) -> dict[str, dict[str, str]]:
+    """The `{drop, n}` of each open match, by the library path it replaces.
+
+    A match is open while its album folder is in the inbox, as `album.json`
+    says what it replaces; a restart forgets nothing.
+    """
+    found: dict[str, dict[str, str]] = {}
+    if not config.inbox.is_dir():
+        return found
+    for drop in sorted(p for p in config.inbox.iterdir() if p.is_dir() and DROP_ID.fullmatch(p.name)):
+        for album in sorted(p for p in drop.iterdir() if p.is_dir() and ALBUM_NUMBER.fullmatch(p.name)):
+            replaces = replaces_of(read_album(album))
+            if replaces is not None:
+                found.setdefault(replaces, {"drop": drop.name, "n": album.name})
+    return found
+
+
+def open_match(config: Config, path: str) -> dict[str, str] | None:
+    """`{drop, n}` of the match open for the library album at `path`, or `None`."""
+    return open_matches(config).get(path)
 
 
 def drop_dir(config: Config, drop: str) -> Path | None:

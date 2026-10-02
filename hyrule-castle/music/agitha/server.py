@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, NamedTuple
 from urllib.parse import unquote, urlsplit
 
-from . import approve, decisions, drops, queue, ranges, review, state
+from . import approve, covers, decisions, drops, editor, library, matches, order, queue, ranges, review, saves, state
 from .paths import climbs, names_nothing_real
 from .refusal import Refusal
 
@@ -43,6 +43,8 @@ class Config:
     #: Seconds without a PUT after which an unfinished drop stops reading `uploading`.
     upload_idle: float = 60.0
     now: Callable[[], datetime] = field(default=datetime.now)
+    #: How MusicBrainz is reached, `(url, headers) -> (status, body)`; `None` is the real network.
+    mb_transport: Callable[[str, dict[str, str]], tuple[int, bytes]] | None = None
 
 
 CHUNK = 1 << 20
@@ -75,6 +77,19 @@ ROUTES: list[Route] = [
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/move"), approve.move),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/discard"), approve.discard_album),
     Route("POST", re.compile(r"/api/drops/([^/]+)/discard"), approve.discard_drop),
+    Route("PUT", re.compile(r"/api/library/covers"), covers.upload),
+    Route("POST", re.compile(r"/api/library/preview"), editor.preview),
+    Route("POST", re.compile(r"/api/library/save"), saves.save),
+    Route("POST", re.compile(r"/api/library/match"), matches.start),
+    Route("GET", re.compile(r"/api/library/jobs/([^/]+)"), saves.show),
+    Route("GET", re.compile(r"/api/library"), library.root_view),
+    Route("GET", re.compile(r"/api/library/([^/]+)"), library.letter),
+    Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)"), library.artist),
+    Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)"), library.album),
+    Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/cover"), library.cover),
+    Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/order"), order.show),
+    Route("GET", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)/audio/(.+)"), library.audio),
+    Route("GET", re.compile(r"/api/genres"), library.genre_list),
 ]
 
 
@@ -179,6 +194,13 @@ class Handler(BaseHTTPRequestHandler):
         self._consumed = True
         return self.rfile.read(self.body_length)
 
+    def read_json(self) -> Any:
+        """The body as JSON; a `Refusal` where it is not."""
+        try:
+            return json.loads(self.read_body())
+        except ValueError:
+            raise Refusal(400, "The request is not JSON.") from None
+
     def copy_body(self, out: BinaryIO, on_chunk: Callable[[], None] | None = None) -> bool:
         """Streams the body into `out`, calling `on_chunk` after each piece; False, with the connection closed, where it ended short."""
         self._consumed = True
@@ -200,6 +222,8 @@ class AgithaServer(ThreadingHTTPServer):
     daemon_threads = True
     config: Config
     queue: queue.Queue
+    save_jobs: saves.Jobs
+    release_lookup: order.Lookup
     #: Ids of the drops this process has created and not yet finished; a restart forgets them.
     uploading: set[str]
     #: Ids of the drops this process is extracting and staging; a finished drop with `raw/` left and not here stopped.
@@ -224,6 +248,15 @@ def make_server(config: Config) -> AgithaServer:
     server = AgithaServer((config.host, config.port), Handler)
     server.config = config
     server.queue = queue.Queue(config)
+    server.save_jobs = saves.Jobs()
+    server.release_lookup = order.Lookup(config)
+    try:
+        saves.recover(config)
+    except OSError:
+        # The socket is bound already; a start that stops here must not leave it held.
+        server.server_close()
+        raise
+    covers.clear(config)
     server.uploading = set()
     server.extracting = set()
     server.touched = {}

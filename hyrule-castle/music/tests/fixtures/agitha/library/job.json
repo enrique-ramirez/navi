@@ -1,0 +1,34 @@
+{
+  "albums": [
+    {
+      "error": null,
+      "new_path": "S/Sonata Arctica/(2008) Ecliptica",
+      "path": "S/Sonata Arctica/(1999) Ecliptica",
+      "state": "done"
+    },
+    {
+      "error": "CD2/01. FullMoon.flac did not read back as written.",
+      "new_path": "S/Sonata Arctica/(2002) Songs of Silence",
+      "path": "S/Sonata Arctica/(2002) Songs of Silence",
+      "state": "failed"
+    },
+    {
+      "error": null,
+      "new_path": "S/Stratovarius/(1997) Visions",
+      "path": "S/Stratovarius/(1997) Visions",
+      "state": "verifying"
+    },
+    {
+      "error": null,
+      "new_path": "S/Sabaton/(2008) The Art of War",
+      "path": "S/Sabaton/(2008) The Art of War",
+      "state": "writing"
+    },
+    {
+      "error": null,
+      "new_path": "N/Nightwish/(2000) Wishmaster",
+      "path": "N/Nightwish/(2000) Wishmaster",
+      "state": "waiting"
+    }
+  ]
+}

@@ -108,6 +108,16 @@ def is_mp4_video(path) -> bool:
         return False
 
 
+def is_track_by_name(path, rel: PurePosixPath) -> bool:
+    """The part of `is_track` that needs no file opened: extension, no AppleDouble sidecar, album or disc folder depth."""
+    path = Path(path)
+    if path.name.startswith("._"):
+        return False
+    if len(rel.parts) not in (1, 2):
+        return False
+    return path.suffix.lower() in AUDIO_EXTENSIONS
+
+
 def is_track(path, rel: PurePosixPath) -> bool:
     """Whether the file at `path` counts as a track of the album `rel` sits under.
 
@@ -118,17 +128,9 @@ def is_track(path, rel: PurePosixPath) -> bool:
     and, since an `.mp4` video reads as good MP4 audio otherwise, never one
     that carries a video track.
     """
-    path = Path(path)
-    if path.name.startswith("._"):
+    if not is_track_by_name(path, rel):
         return False
-    if len(rel.parts) not in (1, 2):
-        return False
-    ext = path.suffix.lower()
-    if ext not in AUDIO_EXTENSIONS:
-        return False
-    if ext == ".mp4" and is_mp4_video(path):
-        return False
-    return True
+    return not (Path(path).suffix.lower() == ".mp4" and is_mp4_video(path))
 
 
 def _family(audio) -> str:

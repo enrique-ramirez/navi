@@ -98,7 +98,7 @@ def _file_genres(unit: Unit) -> list[str]:
 # --- comparing files against a fetched release ------------------------------
 
 
-def _mb_length(mb_track: dict) -> float | None:
+def mb_length(mb_track: dict) -> float | None:
     length_ms = mb_track.get("length")
     if length_ms is None:
         length_ms = mb_track.get("recording", {}).get("length")
@@ -123,8 +123,8 @@ def _pair_fits(p: TrackPair, edited: dict, latin: list[dict] | None = None) -> b
     wanted = [p.mb_track["title"], *edited.get(position_key(p), {}).get("title", [])[:1],
               *_latin_titles(p, latin or [])]
     title = titles.file_title(p.file)
-    mb_length = _mb_length(p.mb_track)
-    return any(titles.pair_passes(title, p.file.length, w, mb_length) for w in wanted)
+    length = mb_length(p.mb_track)
+    return any(titles.pair_passes(title, p.file.length, w, length) for w in wanted)
 
 
 def _failing_pairs(candidate: Candidate, owner_input: dict | None) -> int:
@@ -152,7 +152,7 @@ def _candidate(release_id: str, release: dict, unit: Unit, client: MusicBrainz) 
     pairs = pair(unit, release)
     diff = None
     if pairs is not None:
-        diff = float(sum(abs(p.file.length - length) for p in pairs if (length := _mb_length(p.mb_track)) is not None))
+        diff = float(sum(abs(p.file.length - length) for p in pairs if (length := mb_length(p.mb_track)) is not None))
     latin = client.latin_releases(release) if pairs is not None else []
     return Candidate(release_id, release, pairs is not None, diff, _year(release), pairs, latin=latin)
 

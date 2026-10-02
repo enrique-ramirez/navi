@@ -1,11 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { Info } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { albumQuery } from "@/domain/album/albumQuery";
 import { familyOf } from "@/domain/album/albumTags";
 import { diffOf } from "@/domain/album/diff";
+import { hasKeepChoice } from "@/domain/album/keepChoice";
 import type { AlbumView, GameChoice, Hold } from "@/shared/api/types";
 import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -16,8 +17,10 @@ import { Duplicate } from "./Duplicate";
 import { Landed } from "./Landed";
 import { MatchPicker } from "./MatchPicker";
 import { type Pending, usePending } from "./pending";
+import { Replaces } from "./Replaces";
 import { ReviewBar } from "./ReviewBar";
 import { Strays } from "./Strays";
+import { Suggestions } from "./Suggestions";
 import { TagDiff } from "./TagDiff";
 import { TrackDetail } from "./TrackDetail";
 import { TrackList } from "./TrackList";
@@ -137,6 +140,15 @@ function Holds({ view }: { view: AlbumView }) {
 }
 
 function AlbumBody({ view }: { view: AlbumView }) {
+	const client = useQueryClient();
+	const was = useRef(view.state);
+	// The library's listings are kept for a while, so one read while the album was still being applied would
+	// be kept without it. Watched here because the review's own components are gone once the album has landed.
+	useEffect(() => {
+		if (was.current !== "in the library" && view.state === "in the library")
+			void client.invalidateQueries({ queryKey: ["library"] });
+		was.current = view.state;
+	}, [view.state, client]);
 	if (view.state === "in the library") return <Landed view={view} />;
 	return <Review view={view} />;
 }
@@ -164,9 +176,11 @@ function Review({ view }: { view: AlbumView }) {
 			<Missing view={view} />
 			<Holds view={view} />
 			<Strays view={view} pending={pending} />
-			{view.duplicate && view.state === "ready" && (
+			{view.replaces && <Replaces path={view.replaces} />}
+			{hasKeepChoice(view) && view.state === "ready" && (
 				<Duplicate view={view} pending={pending} />
 			)}
+			<Suggestions view={view} pending={pending} />
 
 			{view.preview && (
 				<>

@@ -1,0 +1,64 @@
+.library {
+	display: grid;
+	grid-template-columns: 18rem 1fr;
+	gap: var(--space-4);
+	max-width: 72rem;
+	margin: 0 auto;
+	padding: var(--space-6) var(--space-4);
+}
+
+.tree,
+.group {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.group {
+	padding-left: var(--space-4);
+}
+
+.item {
+	cursor: pointer;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: var(--space-1) var(--space-2);
+	border-radius: var(--radius-pill);
+}
+
+.item:hover > .row {
+	background: var(--accent-quiet);
+}
+
+.item[aria-current="page"] > .row {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.item[aria-busy="true"] > .row {
+	color: var(--muted);
+}
+
+.chevron {
+	flex: none;
+	transition: transform 0.1s;
+}
+
+.item[aria-expanded="true"] > .row .chevron {
+	transform: rotate(90deg);
+}
+
+.pane {
+	min-width: 0;
+}
+
+/* The tree stacks above the content on a narrow screen instead of squeezing it. */
+@media (max-width: 600px) {
+	.library {
+		grid-template-columns: 1fr;
+	}
+}

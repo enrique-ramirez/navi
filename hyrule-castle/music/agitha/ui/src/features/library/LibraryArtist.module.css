@@ -1,0 +1,63 @@
+.artist {
+	display: grid;
+	gap: var(--space-4);
+	min-width: 0;
+}
+
+.title {
+	margin: 0;
+}
+
+.albums,
+.tracks {
+	display: grid;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tracks {
+	padding-left: var(--space-6, 2rem);
+	font-size: 0.875rem;
+}
+
+.album {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: center;
+}
+
+.cover {
+	width: 3rem;
+	border-radius: var(--radius-sm);
+}
+
+.year,
+.length {
+	color: var(--muted);
+}
+
+.open {
+	cursor: pointer;
+}
+
+.turned {
+	transform: rotate(90deg);
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.actions button {
+	cursor: pointer;
+}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from typing import Sequence
 
 # The fallback article list in docs/music-library.md *Artist folder*, in the
 # order it lists them. L' is handled separately, in _split_leading_article.
@@ -13,6 +14,14 @@ _FALLBACK_CASEFOLD = {article.casefold() for article in _FALLBACK_ARTICLES}
 # One prefix at most, in the table's order: EP, Single, Mixtape, Live.
 _PREFIX_ORDER = ("EP", "Single", "Mixtape/Street", "Live")
 _PREFIX_LABEL = {"EP": "EP", "Single": "Single", "Mixtape/Street": "Mixtape", "Live": "Live"}
+
+
+DISC_DIR_RE = re.compile(r"^CD\d+$")
+#: ` [edition]` at the end of an album folder's name; the group is the text inside.
+EDITION_RE = re.compile(r" \[([^\[\]]+)\]$")
+#: One `[Prefix]` of an album folder's name; the group is the text inside.
+PREFIX_RE = re.compile(r"\[([^\]]+)\]")
+DATED_FOLDER_RE = re.compile(r"\((\d{4})\) (.*)", re.DOTALL)
 
 
 def sanitize(s: str) -> str:
@@ -122,29 +131,40 @@ def album_folder(
 
     A title too long for the folder is cut before the edition, which stays.
     """
-    year = date[:4]
     prefix = None
     for candidate in _PREFIX_ORDER:
         if candidate == primary_type or candidate in secondary_types:
             prefix = _PREFIX_LABEL[candidate]
             break
-    year_part = f"({year}) "
-    prefix_part = f"[{prefix}] " if prefix else ""
-    name = sanitize(f"{year_part}{prefix_part}{title}")
     label = sanitize(edition) if edition else ""
-    return fit(name, suffix=f" [{label}]" if label else "", start=len(year_part) + len(prefix_part))
+    return folder_name(date[:4], [prefix] if prefix else [], title, label or None)
+
+
+def folder_name(year: str, prefixes: Sequence[str], title: str, edition: str | None = None) -> str:
+    """`(YYYY) [Prefix] Title`, then ` [edition]` where given, sanitized and cut to fit.
+
+    `prefixes` and `edition` are the text inside their brackets; `edition` is
+    written as it is given. A title too long for the folder is cut before the edition.
+    """
+    head = f"({year}) " + "".join(f"[{prefix}] " for prefix in prefixes)
+    return fit(sanitize(head + title), suffix=f" [{edition}]" if edition else "", start=len(head))
 
 
 def disc_folder(position: int, medium_count: int) -> str | None:
     """`CDn` for a multi-medium release, or `None` for a single medium."""
     if medium_count <= 1:
         return None
+    return disc_dir(position)
+
+
+def disc_dir(position: int) -> str:
     return f"CD{position}"
 
 
-def track_filename(number: int, title: str, ext: str, tracks_on_medium: int) -> str:
-    """`NN. Title.ext`, with three digits on a medium of 100 tracks or more."""
-    digits = 3 if tracks_on_medium >= 100 else 2
+def track_filename(number: int, title: str, ext: str, tracks_on_medium: int = 0, *, digits: int | None = None) -> str:
+    """`NN. Title.ext`, with three digits on a medium of 100 tracks or more, or the `digits` it is told."""
+    if digits is None:
+        digits = 3 if tracks_on_medium >= 100 else 2
     number_part = f"{number:0{digits}d}. "
     stem = sanitize(f"{number_part}{title}")
     return fit(stem, suffix=f".{ext.lower()}", start=len(number_part))

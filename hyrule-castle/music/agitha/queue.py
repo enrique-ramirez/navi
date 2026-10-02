@@ -10,11 +10,14 @@ import queue as fifo
 import re
 import shutil
 import subprocess
+import sys
 import threading
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from . import albums, approve, archives, drops, state
 
@@ -41,16 +44,37 @@ def added_stamp(record: dict[str, Any] | None) -> str | None:
     return started.strftime("%Y-%m-%dT%H:%M")
 
 
+class _Job(NamedTuple):
+    #: The drop of an album's `identify` or `apply`; `None` for a hand edit of a library album.
+    drop: str | None
+    #: The album's number in its drop, or its library path.
+    key: str
+    call: Callable[[], None]
+    #: Told of an exception `call` lets out, so one failure does not end the worker.
+    on_error: Callable[[Exception], None]
+
+
 class Queue:
-    """FIFO of `(drop, n, command)`, worked off by one daemon thread that starts with the first `enqueue`."""
+    """FIFO of jobs, worked off by one daemon thread that starts with the first `enqueue`.
+
+    A job is `identify` or `apply` of an album of a drop, or, for a hand edit
+    of the library, a function run in this process. That one is busy by the
+    album's library path, so the worker is the only writer of a library folder.
+    """
 
     def __init__(self, config: Config) -> None:
         self.config = config
-        self._work: fifo.Queue[tuple[str, str, str]] = fifo.Queue()
+        self._work: fifo.Queue[_Job] = fifo.Queue()
         self._lock = threading.Lock()
         self._busy: set[tuple[str, str]] = set()
-        self._running: tuple[str, str] | None = None
+        self._busy_library: set[str] = set()
         self._thread: threading.Thread | None = None
+
+    def _start(self) -> None:
+        """Starts the worker once; the caller holds the lock."""
+        if self._thread is None:
+            self._thread = threading.Thread(target=self._loop, name="agitha-queue", daemon=True)
+            self._thread.start()
 
     def enqueue(self, drop: str, n: str, command: str) -> bool:
         """Queues `command` (`identify` or `apply`) for the album; False where it is already queued or running."""
@@ -58,18 +82,32 @@ class Queue:
             if (drop, n) in self._busy:
                 return False
             self._busy.add((drop, n))
-            self._work.put((drop, n, command))
-            if self._thread is None:
-                self._thread = threading.Thread(target=self._loop, name="agitha-queue", daemon=True)
-                self._thread.start()
+            self._work.put(_Job(drop, n, partial(self._run, drop, n, command),
+                                partial(self._fail, drop, n, command)))
+            self._start()
         return True
 
-    def running(self, drop: str, n: str) -> bool:
-        return self._running == (drop, n)
+    def enqueue_library(self, calls: list[tuple[str, Callable[[], None]]]) -> bool:
+        """Queues each `(library path, function)` in order; False, with none queued, where one path is busy.
+
+        A function ends in its own way: an exception it lets out goes to stderr.
+        """
+        with self._lock:
+            if any(path in self._busy_library for path, _call in calls):
+                return False
+            for path, call in calls:
+                self._busy_library.add(path)
+                self._work.put(_Job(None, path, call, partial(_report, path)))
+            self._start()
+        return True
 
     def busy(self, drop: str, n: str) -> bool:
         """Queued or running."""
         return (drop, n) in self._busy
+
+    def busy_library(self, path: str) -> bool:
+        """Whether a save of the library album at `path` is queued or running."""
+        return path in self._busy_library
 
     def busy_drop(self, drop: str) -> bool:
         with self._lock:
@@ -77,17 +115,17 @@ class Queue:
 
     def _loop(self) -> None:
         while True:
-            drop, n, command = self._work.get()
-            self._running = (drop, n)
+            job = self._work.get()
             try:
-                self._run(drop, n, command)
+                job.call()
             except Exception as exc:
-                # One album's failure must not end the worker: the albums behind it would stay busy for good.
-                self._fail(drop, n, command, exc)
+                job.on_error(exc)
             finally:
-                self._running = None
                 with self._lock:
-                    self._busy.discard((drop, n))
+                    if job.drop is None:
+                        self._busy_library.discard(job.key)
+                    else:
+                        self._busy.discard((job.drop, job.key))
 
     def _fail(self, drop: str, n: str, command: str, exc: Exception) -> None:
         text = f"{type(exc).__name__}: {exc}"
@@ -108,7 +146,9 @@ class Queue:
         config = self.config
         job = str(config.jobs / f"agitha-{drop}-{n}")
         if command == "identify":
-            added = added_stamp(drops.read_record(config.inbox / drop))
+            # A match is an album the library already has; it keeps each file's own time.
+            matched = drops.replaces_of(drops.read_album(config.inbox / drop / n)) is not None
+            added = None if matched else added_stamp(drops.read_record(config.inbox / drop))
             return [config.musiclib, "batch", "identify", str(config.inbox / drop / n), "--job", job,
                     "--drop-unreadable", *(["--added", added] if added else [])]
         return [config.musiclib, "batch", "apply", "--job", job,
@@ -136,6 +176,10 @@ class Queue:
         else:
             error = f"identify exited with status {code}" if code else "identify left no album in its plan"
             drops.write_album(folder, state="identify failed", stderr=tail, error=error)
+
+
+def _report(path: str, exc: Exception) -> None:
+    print(f"agitha: the save of {path} ended with {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def _known(config: Config, drop: str) -> Path | None:
@@ -233,6 +277,8 @@ def _identify_again(request: Handler, match: re.Match[str], config: Config,
         request.fail(404, "No such album.")
     elif found["state"] not in allowed or found["busy"]:
         request.fail(409, f"An album that is {found['state']} cannot be {verb}.")
+    elif "reidentify" not in found["actions"] and found["state"] == "ready":
+        request.fail(409, "This match found no release; discard it.")
     else:
         drops.write_album(config.inbox / drop / n, name=found["name"], state="queued", stderr="", error=None)
         queue.enqueue(drop, n, "identify")

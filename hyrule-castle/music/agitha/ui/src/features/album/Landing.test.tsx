@@ -54,6 +54,8 @@ function view(
 		uploaded: [],
 		duplicate: null,
 		approvable: { ok: true, reason: null, code: null, hold: null },
+		replaces: null,
+		suggestions: [],
 		...over,
 	};
 }

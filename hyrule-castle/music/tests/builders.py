@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import dataclasses
 import functools
 import io
 import shutil
@@ -18,7 +19,7 @@ from typing import Any
 
 from mutagen.asf import ASF, ASFByteArrayAttribute
 from mutagen.flac import FLAC, Picture
-from mutagen.id3 import APIC, ID3, PRIV, TXXX, UFID, Frame, Frames, ID3NoHeaderError
+from mutagen.id3 import APIC, ID3, POPM, PRIV, TXXX, UFID, Frame, Frames, ID3NoHeaderError
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggvorbis import OggVorbis
 
@@ -424,6 +425,184 @@ def library_album(root: Path | str, *, ext: str = "flac", letter: str = "N",
     (base / "notes.txt").write_text("Bought at Rough Trade.\n")
     (base / "credits.txt").write_text("Produced by Trent Reznor and Alan Moulder.\n")
     return base
+
+
+#: Stand-in MusicBrainz artist ids of `library`. Each is one artist, whatever its folder is called.
+SONATA_ARCTICA_ID = "5c0a0000-0000-4000-8000-0000000000a1"
+BABASONICOS_ID = "5c0a0000-0000-4000-8000-0000000000a2"
+#: The namesake in `B/Babasonicós`: the same name once accents are folded, another artist.
+BABASONICOS_NAMESAKE_ID = "5c0a0000-0000-4000-8000-0000000000a3"
+LOU_REED_ID = "5c0a0000-0000-4000-8000-0000000000a4"
+METALLICA_ID = "5c0a0000-0000-4000-8000-0000000000a5"
+NINE_INCH_NAILS_ID = "5c0a0000-0000-4000-8000-0000000000a6"
+DAFT_PUNK_ID = "5c0a0000-0000-4000-8000-0000000000a7"
+DREAM_THEATER_ID = "5c0a0000-0000-4000-8000-0000000000a8"
+
+ID_FIELDS = ("release id", "release group id", "recording id", "release track id", "artist id", "album artist id")
+
+#: Every album of `library`, by its handle. `artist` is the tag and the folder
+#: unless `artist_folder` names another folder. `mp3` holds the track numbers
+#: of an otherwise FLAC album that are MP3 files.
+_LIBRARY: dict[str, dict[str, Any]] = {
+    # Sonata Arctica: four albums with ids, three of them `power metal`, and a
+    # fifth folder that never met MusicBrainz. Listed out of name order, and
+    # their titles sort differently from their years.
+    "stones": dict(letter="S", artist="Sonata Arctica", ids=(SONATA_ARCTICA_ID,), date="2012-05-18",
+                   album="Stones Grow Her Name", titles=(("Losing My Insanity", "I Have a Right"),),
+                   genres=("heavy metal", "hard rock")),
+    "ecliptica": dict(letter="S", artist="Sonata Arctica", ids=(SONATA_ARCTICA_ID,), date="1999-11-22",
+                      album="Ecliptica", titles=(("Blank File", "My Land", "8th Commandment"),),
+                      genres=("power metal", "heavy metal")),
+    "winterheart": dict(letter="S", artist="Sonata Arctica", ids=(SONATA_ARCTICA_ID,), date="2003-03-05",
+                        album="Winterheart's Guild", titles=(("Gravenimage", "The Cage"),),
+                        genres=("power metal", "symphonic metal")),
+    "silence": dict(letter="S", artist="Sonata Arctica", ids=(SONATA_ARCTICA_ID,), date="2001-06-21", ext="mp3",
+                    album="Silence", titles=(("Weballergy", "False News Travel Fast"),),
+                    genres=("power metal",)),
+    "fullmoon": dict(letter="S", artist="Sonata Arctica", ids=(), date="1997-01-01", ext="mp3",
+                     album="FullMoon", titles=(("FullMoon", "Letter to Dana"),),
+                     genres=("heavy metal",)),
+    # One artist id under two folders that differ by an accent, and a namesake
+    # with its own id under a third. Never by case: the MacBook's filesystem
+    # would make them one folder.
+    "miami": dict(letter="B", artist="Babasónicos", artist_folder="Babasonicos", ids=(BABASONICOS_ID,),
+                  date="1999-01-01", ext="mp3", album="Miami", titles=(("Desfachatados", "El playboy"),),
+                  genres=("alternative rock", "rock")),
+    "jessico": dict(letter="B", artist="Babasónicos", ids=(BABASONICOS_ID,), date="2001-07-25",
+                    album="Jessico", titles=(("Los calientes", "Fizz"),),
+                    genres=("alternative rock", "electronic")),
+    "namesake": dict(letter="B", artist="Babasonicós", ids=(BABASONICOS_NAMESAKE_ID,), date="2005-01-01",
+                     album="Otro", titles=(("Uno", "Dos"),), genres=("rock",)),
+    "lulu": dict(letter="L", artist="Lou Reed & Metallica", ids=(LOU_REED_ID, METALLICA_ID), date="2011-10-31",
+                 album="Lulu", titles=(("Brandenburg Gate", "The View"),),
+                 genres=("heavy metal", "experimental rock")),
+    "fragile": dict(letter="N", artist="Nine Inch Nails", ids=(NINE_INCH_NAILS_ID,), date="1999-09-21",
+                    album="The Fragile",
+                    titles=(("Somewhat Damaged", "The Day the World Went Away"),
+                            ("The Way Out Is Through", "Into the Void")),
+                    genres=("industrial rock", "electronic")),
+    "broken": dict(letter="N", artist="Nine Inch Nails", ids=(NINE_INCH_NAILS_ID,), date="1992-09-22", ext="mp3",
+                   album="Broken", folder="(1992) [EP] Broken [Japanese edition]", titles=(("Pinion", "Wish"),),
+                   genres=("industrial rock", "industrial metal")),
+    "discovery": dict(letter="D", artist="Daft Punk", ids=(DAFT_PUNK_ID,), date="2001-03-12",
+                      album="Discovery", titles=(("One More Time", "Aerodynamic", "Digital Love"),), mp3=(2,),
+                      genres=("house", "electronic")),
+    "images": dict(letter="D", artist="Dream Theater", ids=(DREAM_THEATER_ID,), date="1992-07-07",
+                   album="Images and Words", titles=(("Pull Me Under", "Another Day"),),
+                   unreadable=("03. Take the Time.flac",), genres=("progressive metal",)),
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class LibraryEntry:
+    """One album of `library`, as it was laid on disk."""
+
+    #: Library-relative and `/`-separated: `S/Sonata Arctica/(1999) Ecliptica`.
+    path: str
+    folder: Path
+    #: Album-relative paths of the tracks that read, in disc and track order.
+    tracks: tuple[str, ...]
+    #: Album-relative paths of the files named like tracks that no reader opens.
+    unreadable: tuple[str, ...]
+    #: Every track carries these, in this order.
+    genres: tuple[str, ...]
+    #: `None` for the album that carries no MusicBrainz id at all.
+    release_id: str | None
+    #: The values of the album artist id tag; empty with no ids.
+    artist_ids: tuple[str, ...]
+    #: `cover.jpg` in pixels, width then height.
+    cover: tuple[int, int]
+
+
+@dataclasses.dataclass(frozen=True)
+class Library:
+    """What `library` laid under `root`: every album by its handle."""
+
+    root: Path
+    albums: dict[str, LibraryEntry]
+
+    def under(self, artist_path: str) -> list[LibraryEntry]:
+        """The albums in the artist folder `artist_path` (`S/Sonata Arctica`), in folder name order."""
+        return sorted((entry for entry in self.albums.values() if entry.path.rsplit("/", 1)[0] == artist_path),
+                      key=lambda entry: entry.path)
+
+    def carrying(self, genre: str) -> list[LibraryEntry]:
+        """The albums whose tracks carry `genre`, in path order."""
+        return sorted((entry for entry in self.albums.values() if genre in entry.genres),
+                      key=lambda entry: entry.path)
+
+
+def library(root: Path | str) -> Library:
+    """A library of thirteen small albums under `root`, one for each case agitha's library pages meet.
+
+    Every album has `cover.jpg` (1500 px square, two tones), `front.jpg` (the
+    tones swapped) and `back.jpg` (a photograph), so no two of its pictures
+    look alike. Every track embeds the cover at 1200 px. The first track of
+    each album carries a rating, and every track of an album with ids carries
+    `ADDED`.
+
+    The handles: `ecliptica`, `silence`, `winterheart` (Sonata Arctica, `power
+    metal`), `stones` (Sonata Arctica, no `power metal`), `fullmoon` (in the
+    same folder, no MusicBrainz ids, MP3), `miami` (`B/Babasonicos`) and
+    `jessico` (`B/Babasónicos`, the same artist id), `namesake`
+    (`B/Babasonicós`, another id), `lulu` (two album artist ids), `fragile`
+    (two discs), `broken` (an `[EP]` folder with an edition suffix, MP3),
+    `discovery` (FLAC with one MP3) and `images` (one unreadable file).
+    """
+    root = Path(root)
+    return Library(root=root, albums={name: _library_entry(root, name, index, row)
+                                      for index, (name, row) in enumerate(_LIBRARY.items(), start=1)})
+
+
+def _library_entry(root: Path, name: str, index: int, row: dict[str, Any]) -> LibraryEntry:
+    discs, artist, ids = row["titles"], row["artist"], row["ids"]
+    ext = row.get("ext", "flac")
+    folder = library_album(root, ext=ext, letter=row["letter"], artist=row.get("artist_folder", artist),
+                           folder=row.get("folder"), album=row["album"], date=row["date"], discs=discs)
+    release_id = f"5c0a0000-0000-4000-8000-0000000{index:03d}b1" if ids else None
+    # Tones no other album has, so two albums never share a picture's bytes.
+    tones = ((240 - 8 * index, 225, 200), (20 + 8 * index, 40, 70))
+    embedded = two_tone(1200, 1200, colours=tones)
+    tracks = []
+    for disc, titles in enumerate(discs, start=1):
+        where = folder / f"CD{disc}" if len(discs) > 1 else folder
+        for number, title in enumerate(titles, start=1):
+            path = where / f"{number:02d}. {title}.{ext}"
+            if number in row.get("mp3", ()):
+                path.unlink()
+                path = path.with_suffix(".mp3")
+                shutil.copyfile(_SOURCE["mp3"], path)
+                write_tags(path, library_tags("mp3", title=title, number=number, total=len(titles), disc=disc,
+                                              discs=len(discs), artist=artist, album=row["album"],
+                                              date=row["date"]), v2_version=4)
+            kind = path.suffix.lstrip(".")
+            fields = {"artist": [artist], "albumartist": [artist], "genre": list(row["genres"])}
+            if ids:
+                fields.update({
+                    "release id": [release_id],
+                    "release group id": [f"5c0a0000-0000-4000-8000-0000000{index:03d}b2"],
+                    "recording id": [f"5c0a0000-0000-4000-8000-000{index:03d}{disc:02d}{number:02d}c1"],
+                    "release track id": [f"5c0a0000-0000-4000-8000-000{index:03d}{disc:02d}{number:02d}c2"],
+                    "artist id": list(ids), "album artist id": list(ids),
+                })
+            else:
+                delete_tags(path, [picard_key(kind, field) for field in ID_FIELDS])
+            tags = picard_tags(kind, fields)
+            if ids:
+                tags["TXXX:ADDED" if kind == "mp3" else "ADDED"] = f"2026-09-{index:02d}T18:30"
+            if (disc, number) == (1, 1):
+                tags.update({"POPM": POPM(email="no@email", rating=196, count=0)} if kind == "mp3"
+                            else {"RATING": "4"})
+            write_tags(path, tags, v2_version=4)
+            embed_picture(path, embedded, replace=True)
+            tracks.append(path.relative_to(folder).as_posix())
+    for broken in row.get("unreadable", ()):
+        (folder / broken).write_bytes(b"not audio, whatever its name says\n")
+    (folder / "cover.jpg").write_bytes(two_tone(1500, 1500, colours=tones))
+    (folder / "front.jpg").write_bytes(two_tone(1400, 1400, colours=(tones[1], tones[0])))
+    return LibraryEntry(path=folder.relative_to(root).as_posix(), folder=folder, tracks=tuple(tracks),
+                        unreadable=tuple(row.get("unreadable", ())), genres=tuple(row["genres"]),
+                        release_id=release_id, artist_ids=tuple(ids), cover=(1500, 1500))
 
 
 # --- MusicBrainz releases and Picard's tag names ---------------------------

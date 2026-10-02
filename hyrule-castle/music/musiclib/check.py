@@ -40,10 +40,7 @@ _REQUIRED = [
     ("artist id", "artist id"), ("recording id", "recording id"),
 ]
 
-_DISC_DIR_RE = re.compile(r"^CD\d+$")
 _ALBUM_FOLDER_RE = re.compile(r"^\((?P<year>[^)]*)\)(?P<prefixes>(?: \[[^\]]+\])*) (?P<title>.+)$")
-_EDITION_RE = re.compile(r" \[[^\[\]]+\]$")
-_PREFIX_RE = re.compile(r"\[([^\]]+)\]")
 _ALLOWED_PREFIXES = {"EP", "Single", "Mixtape", "Live"}
 
 #: `(disc 1)`, `[CD 2]`, `(bonus disc)`, ... anywhere in the album title.
@@ -331,7 +328,7 @@ def _number_violations(family: str, number: int | None, total: int | None,
 
 
 def _filename_violations(state: TrackState, number: int | None, total: int | None) -> list[tuple[str, str]]:
-    """`total` is the tag's own, or the disc's track count when the tag has none (`_track_violations`)."""
+    """`total` is the tag's own, or the disc's track count when the tag has none (`track_violations`)."""
     title = _first(state.track, "title")
     if title is None or number is None or total is None:
         return []
@@ -441,7 +438,7 @@ def _residue_violations(track: files.Track) -> list[tuple[str, str]]:
     return out
 
 
-def _track_violations(state: TrackState, disc_counts: dict[str | None, int]) -> list[tuple[str, str]]:
+def track_violations(state: TrackState, disc_counts: dict[str | None, int]) -> list[tuple[str, str]]:
     """Every rule `state`'s track breaks, each check named for the one rule it judges."""
     track = state.track
     number, total, disc, discs = _numbers(track)
@@ -483,7 +480,7 @@ def _album_date_year(state: AlbumState) -> str | None:
     return None
 
 
-def _disc_track_counts(state: AlbumState) -> dict[str | None, int]:
+def disc_track_counts(state: AlbumState) -> dict[str | None, int]:
     """How many of `state`'s tracks sit in each disc folder (`None` for no disc folder)."""
     counts: dict[str | None, int] = {}
     for track_state in state.tracks:
@@ -493,8 +490,8 @@ def _disc_track_counts(state: AlbumState) -> dict[str | None, int]:
 
 def _has_other_edition(folder: str, siblings: Iterable[str]) -> bool:
     """Whether another of `siblings` has `folder`'s name once each one's trailing ` [..]` is removed, case aside."""
-    bare = _EDITION_RE.sub("", folder).casefold()
-    return any(other != folder and _EDITION_RE.sub("", other).casefold() == bare for other in siblings)
+    bare = names.EDITION_RE.sub("", folder).casefold()
+    return any(other != folder and names.EDITION_RE.sub("", other).casefold() == bare for other in siblings)
 
 
 def _album_folder_violations(state: AlbumState, siblings: Iterable[str],
@@ -505,21 +502,19 @@ def _album_folder_violations(state: AlbumState, siblings: Iterable[str],
         out.append(("album folder", f"{state.folder!r} is not shaped (YYYY) Title"))
     else:
         year = match.group("year")
-        prefixes = _PREFIX_RE.findall(match.group("prefixes"))
+        prefixes = names.PREFIX_RE.findall(match.group("prefixes"))
         album_title = _album_title(state)
         bad = not (len(year) == 4 and year.isdigit())
         bad = bad or len(prefixes) > 1 or any(p not in _ALLOWED_PREFIXES for p in prefixes)
         if album_title is not None:
-            head = f"({year}){''.join(f' [{p}]' for p in prefixes)} "
-            expected = names.fit(names.sanitize(f"{head}{album_title}"), start=len(head))
+            expected = names.folder_name(year, prefixes, album_title)
             # One trailing ` [edition]` is what a job adds to editions that
             # would share a folder; the tags do not say which field it is, so
             # it is believed only beside its other edition (or where a plan
             # has just given it, the other edition not yet on disk).
-            edition = _EDITION_RE.search(state.folder)
+            edition = names.EDITION_RE.search(state.folder)
             believed = suffix_given or _has_other_edition(state.folder, siblings)
-            with_edition = edition and believed and names.fit(
-                names.sanitize(f"{head}{album_title}"), suffix=edition.group(0), start=len(head))
+            with_edition = edition and believed and names.folder_name(year, prefixes, album_title, edition.group(1))
             bad = bad or state.folder not in (expected, with_edition)
         if bad:
             out.append(("album folder", f"{state.folder!r}"))
@@ -567,7 +562,7 @@ def _folder_content_violations(state: AlbumState) -> list[tuple[str, str]]:
     if not state.has_cover_jpg:
         out.append(("cover.jpg", "no cover.jpg"))
     for name in state.subdirs:
-        if not _DISC_DIR_RE.match(name):
+        if not names.DISC_DIR_RE.match(name):
             out.append(("subfolder", name))
     for rel, kind in state.other_files:
         if kind == "delete":
@@ -578,9 +573,36 @@ def _folder_content_violations(state: AlbumState) -> list[tuple[str, str]]:
             out.append(("unexpected file", rel))
         else:
             path = PurePosixPath(rel)
-            if len(path.parts) > 1 and _DISC_DIR_RE.match(path.parts[0]) and path.suffix.lower() in IMAGE_EXTS:
+            if len(path.parts) > 1 and names.DISC_DIR_RE.match(path.parts[0]) and path.suffix.lower() in IMAGE_EXTS:
                 out.append(("image in disc folder", rel))
     return out
+
+
+def _album_head_violations(state: AlbumState, siblings: Iterable[str],
+                           suffix_given: bool) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    expected_letter = names.letter(state.artist)
+    if state.letter != expected_letter:
+        found.append(("letter", f"under {state.letter!r}, expected {expected_letter!r}"))
+    if names.sanitize(state.artist) != state.artist:
+        found.append(("characters", state.artist))
+    found.extend(_album_folder_violations(state, siblings, suffix_given))
+    return found
+
+
+def _album_tail_violations(state: AlbumState) -> list[tuple[str, str]]:
+    found = _folder_content_violations(state)
+    found.extend(("unreadable", f"{rel}: {reason}") for rel, reason in state.unreadable)
+    return found
+
+
+def _violations(state: AlbumState, found: list[tuple[str, str]]) -> list[Violation]:
+    return [Violation(album=state.album, rule=rule, detail=detail) for rule, detail in found]
+
+
+def album_violations(state: AlbumState, siblings: Iterable[str] = (), suffix_given: bool = False) -> list[Violation]:
+    """The rules `state` breaks as an album, apart from its tracks': the letter, the folders and the files beside them."""
+    return _violations(state, _album_head_violations(state, siblings, suffix_given) + _album_tail_violations(state))
 
 
 def check_album(state: AlbumState, siblings: Iterable[str] = (), suffix_given: bool = False) -> list[Violation]:
@@ -590,22 +612,12 @@ def check_album(state: AlbumState, siblings: Iterable[str] = (), suffix_given: b
     artist folder; `suffix_given` is a plan saying the folder's trailing
     ` [..]` is its own, whatever is on disk.
     """
-    found: list[tuple[str, str]] = []
-
-    expected_letter = names.letter(state.artist)
-    if state.letter != expected_letter:
-        found.append(("letter", f"under {state.letter!r}, expected {expected_letter!r}"))
-    if names.sanitize(state.artist) != state.artist:
-        found.append(("characters", state.artist))
-
-    found.extend(_album_folder_violations(state, siblings, suffix_given))
-    disc_counts = _disc_track_counts(state)
+    found = _album_head_violations(state, siblings, suffix_given)
+    disc_counts = disc_track_counts(state)
     for track_state in state.tracks:
-        found.extend(_track_violations(track_state, disc_counts))
-    found.extend(_folder_content_violations(state))
-    found.extend(("unreadable", f"{rel}: {reason}") for rel, reason in state.unreadable)
-
-    return [Violation(album=state.album, rule=rule, detail=detail) for rule, detail in found]
+        found.extend(track_violations(track_state, disc_counts))
+    found.extend(_album_tail_violations(state))
+    return _violations(state, found)
 
 
 def check(root: Path | str) -> list[Violation]:

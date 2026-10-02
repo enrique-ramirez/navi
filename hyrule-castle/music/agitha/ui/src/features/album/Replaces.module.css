@@ -1,0 +1,8 @@
+.replaces {
+	margin: var(--space-4) 0 0;
+	padding: var(--space-3);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	font-size: 0.875rem;
+}

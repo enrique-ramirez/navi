@@ -1,0 +1,771 @@
+{
+  "albums": [
+    {
+      "cover_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/cover",
+      "match": null,
+      "name": "(1999) Ecliptica",
+      "path": "S/Sonata Arctica/(1999) Ecliptica",
+      "title": "Ecliptica",
+      "tracks": [
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/audio/01.%20Blank%20File.flac",
+          "bit_depth": 16,
+          "bitrate": 1026301,
+          "channels": 2,
+          "disc": 1,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 245.2,
+          "loaded": {
+            "mtime": 1727712000.5,
+            "size": 31456120
+          },
+          "lossless": true,
+          "number": 1,
+          "path": "01. Blank File.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid",
+            "rating"
+          ],
+          "sample_rate": 44100,
+          "size": 31456120,
+          "tags": {
+            "album": [
+              "Ecliptica"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "1999"
+            ],
+            "discnumber": [
+              "1"
+            ],
+            "genre": [
+              "power metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000001999"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000001999"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000001"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000001"
+            ],
+            "rating": [
+              "5"
+            ],
+            "title": [
+              "Blank File"
+            ],
+            "tracknumber": [
+              "1"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/audio/02.%20My%20Land.flac",
+          "bit_depth": 16,
+          "bitrate": 1016376,
+          "channels": 2,
+          "disc": 1,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 276.44,
+          "loaded": {
+            "mtime": 1727712002.731942,
+            "size": 35120884
+          },
+          "lossless": true,
+          "number": 2,
+          "path": "02. My Land.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid"
+          ],
+          "sample_rate": 44100,
+          "size": 35120884,
+          "tags": {
+            "album": [
+              "Ecliptica"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "1999"
+            ],
+            "discnumber": [
+              "1"
+            ],
+            "genre": [
+              "power metal",
+              "symphonic metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000001999"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000001999"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000002"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000002"
+            ],
+            "title": [
+              "My Land"
+            ],
+            "tracknumber": [
+              "2"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/audio/03.%208th%20Commandment.mp3",
+          "bit_depth": null,
+          "bitrate": 320000,
+          "channels": 2,
+          "disc": 1,
+          "family": "id3",
+          "format": "MP3",
+          "length": 295.13,
+          "loaded": {
+            "mtime": 1727712004.123456,
+            "size": 11846210
+          },
+          "lossless": false,
+          "number": 3,
+          "path": "03. 8th Commandment.mp3",
+          "readonly": [
+            "TXXX:MusicBrainz Album Id",
+            "TXXX:MusicBrainz Release Group Id",
+            "UFID:http://musicbrainz.org",
+            "TXXX:MusicBrainz Release Track Id",
+            "TXXX:MusicBrainz Artist Id",
+            "TXXX:MusicBrainz Album Artist Id",
+            "POPM:Windows Media Player 9 Series",
+            "APIC:"
+          ],
+          "sample_rate": 44100,
+          "size": 11846210,
+          "tags": {
+            "APIC:": [
+              "APIC (48213 bytes)"
+            ],
+            "POPM:Windows Media Player 9 Series": [
+              "rating=196,count=0"
+            ],
+            "TALB": [
+              "Ecliptica"
+            ],
+            "TCON": [
+              "power metal"
+            ],
+            "TDRC": [
+              "1999"
+            ],
+            "TIT2": [
+              "8th Commandment"
+            ],
+            "TPE1": [
+              "Sonata Arctica"
+            ],
+            "TPE2": [
+              "Sonata Arctica"
+            ],
+            "TPOS": [
+              "1/1"
+            ],
+            "TRCK": [
+              "3"
+            ],
+            "TXXX:MusicBrainz Album Artist Id": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "TXXX:MusicBrainz Album Id": [
+              "7d3d4b5f-0000-4000-8000-000000001999"
+            ],
+            "TXXX:MusicBrainz Artist Id": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "TXXX:MusicBrainz Release Group Id": [
+              "8e4e5c6a-0000-4000-8000-000000001999"
+            ],
+            "TXXX:MusicBrainz Release Track Id": [
+              "6c2c3a4e-0000-4000-8000-000000000003"
+            ],
+            "TXXX:RIPPER": [
+              "EAC 0.99"
+            ],
+            "UFID:http://musicbrainz.org": [
+              "5b1b2f3d-0000-4000-8000-000000000003"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%281999%29%20Ecliptica/audio/04.%20Replica.mp3",
+          "bit_depth": null,
+          "bitrate": 320000,
+          "channels": 2,
+          "disc": 1,
+          "family": "id3",
+          "format": "MP3",
+          "length": 221.07,
+          "loaded": {
+            "mtime": 1727712006.0,
+            "size": 8883902
+          },
+          "lossless": false,
+          "number": 4,
+          "path": "04. Replica.mp3",
+          "readonly": [
+            "TXXX:MusicBrainz Album Id",
+            "TXXX:MusicBrainz Release Group Id",
+            "UFID:http://musicbrainz.org",
+            "TXXX:MusicBrainz Release Track Id",
+            "TXXX:MusicBrainz Artist Id",
+            "TXXX:MusicBrainz Album Artist Id"
+          ],
+          "sample_rate": 44100,
+          "size": 8883902,
+          "tags": {
+            "TALB": [
+              "Ecliptica"
+            ],
+            "TDRC": [
+              "1999"
+            ],
+            "TIT2": [
+              "Replica"
+            ],
+            "TPE1": [
+              "Sonata Arctica"
+            ],
+            "TPE2": [
+              "Sonata Arctica"
+            ],
+            "TPOS": [
+              "1/1"
+            ],
+            "TRCK": [
+              "4"
+            ],
+            "TXXX:MusicBrainz Album Artist Id": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "TXXX:MusicBrainz Album Id": [
+              "7d3d4b5f-0000-4000-8000-000000001999"
+            ],
+            "TXXX:MusicBrainz Artist Id": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "TXXX:MusicBrainz Release Group Id": [
+              "8e4e5c6a-0000-4000-8000-000000001999"
+            ],
+            "TXXX:MusicBrainz Release Track Id": [
+              "6c2c3a4e-0000-4000-8000-000000000004"
+            ],
+            "UFID:http://musicbrainz.org": [
+              "5b1b2f3d-0000-4000-8000-000000000004"
+            ]
+          }
+        }
+      ],
+      "year": "1999"
+    },
+    {
+      "cover_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/cover",
+      "match": {
+        "drop": "20261001-193000",
+        "n": "01"
+      },
+      "name": "(2002) Songs of Silence",
+      "path": "S/Sonata Arctica/(2002) Songs of Silence",
+      "title": "Songs of Silence",
+      "tracks": [
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/audio/CD1/01.%20Intro.flac",
+          "bit_depth": 16,
+          "bitrate": 910025,
+          "channels": 2,
+          "disc": 1,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 81.0,
+          "loaded": {
+            "mtime": 1727798400.25,
+            "size": 9214008
+          },
+          "lossless": true,
+          "number": 1,
+          "path": "CD1/01. Intro.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid"
+          ],
+          "sample_rate": 44100,
+          "size": 9214008,
+          "tags": {
+            "album": [
+              "Songs of Silence"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "2002"
+            ],
+            "discnumber": [
+              "1"
+            ],
+            "genre": [
+              "power metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000101"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000101"
+            ],
+            "title": [
+              "Intro"
+            ],
+            "tracknumber": [
+              "1"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/audio/CD1/02.%20Weballergy.flac",
+          "bit_depth": 16,
+          "bitrate": 1040485,
+          "channels": 2,
+          "disc": 1,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 237.6,
+          "loaded": {
+            "mtime": 1727798402.918,
+            "size": 30902416
+          },
+          "lossless": true,
+          "number": 2,
+          "path": "CD1/02. Weballergy.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid",
+            "rating"
+          ],
+          "sample_rate": 44100,
+          "size": 30902416,
+          "tags": {
+            "album": [
+              "Songs of Silence"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "2002"
+            ],
+            "discnumber": [
+              "1"
+            ],
+            "genre": [
+              "power metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000102"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000102"
+            ],
+            "rating": [
+              "4"
+            ],
+            "title": [
+              "Weballergy"
+            ],
+            "tracknumber": [
+              "2"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/audio/CD2/01.%20FullMoon.flac",
+          "bit_depth": 16,
+          "bitrate": 1040981,
+          "channels": 2,
+          "disc": 2,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 310.3,
+          "loaded": {
+            "mtime": 1727798404.0625,
+            "size": 40377052
+          },
+          "lossless": true,
+          "number": 1,
+          "path": "CD2/01. FullMoon.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid"
+          ],
+          "sample_rate": 44100,
+          "size": 40377052,
+          "tags": {
+            "album": [
+              "Songs of Silence"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "2002"
+            ],
+            "discnumber": [
+              "2"
+            ],
+            "genre": [
+              "power metal",
+              "heavy metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000201"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000201"
+            ],
+            "title": [
+              "FullMoon"
+            ],
+            "tracknumber": [
+              "1"
+            ]
+          }
+        },
+        {
+          "audio_url": "/api/library/S/Sonata%20Arctica/%282002%29%20Songs%20of%20Silence/audio/CD2/02.%20Letter%20to%20Dana.flac",
+          "bit_depth": 16,
+          "bitrate": 973084,
+          "channels": 2,
+          "disc": 2,
+          "family": "vorbis",
+          "format": "FLAC",
+          "length": 368.9,
+          "loaded": {
+            "mtime": 1727798406.44,
+            "size": 44871330
+          },
+          "lossless": true,
+          "number": 2,
+          "path": "CD2/02. Letter to Dana.flac",
+          "readonly": [
+            "musicbrainz_albumid",
+            "musicbrainz_releasegroupid",
+            "musicbrainz_trackid",
+            "musicbrainz_releasetrackid",
+            "musicbrainz_artistid",
+            "musicbrainz_albumartistid"
+          ],
+          "sample_rate": 44100,
+          "size": 44871330,
+          "tags": {
+            "album": [
+              "Songs of Silence"
+            ],
+            "albumartist": [
+              "Sonata Arctica"
+            ],
+            "artist": [
+              "Sonata Arctica"
+            ],
+            "date": [
+              "2002"
+            ],
+            "discnumber": [
+              "2"
+            ],
+            "genre": [
+              "power metal"
+            ],
+            "musicbrainz_albumartistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_albumid": [
+              "7d3d4b5f-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_artistid": [
+              "4a0a1e2c-0000-4000-8000-0000000000a1"
+            ],
+            "musicbrainz_releasegroupid": [
+              "8e4e5c6a-0000-4000-8000-000000002002"
+            ],
+            "musicbrainz_releasetrackid": [
+              "6c2c3a4e-0000-4000-8000-000000000202"
+            ],
+            "musicbrainz_trackid": [
+              "5b1b2f3d-0000-4000-8000-000000000202"
+            ],
+            "title": [
+              "Letter to Dana"
+            ],
+            "tracknumber": [
+              "2"
+            ]
+          }
+        }
+      ],
+      "year": "2002"
+    }
+  ],
+  "names": {
+    "asf": {
+      "ADDED": "Added",
+      "ASIN": "ASIN",
+      "Author": "Artist",
+      "Description": "Comment",
+      "MusicBrainz/Album Artist Id": "MusicBrainz album artist id",
+      "MusicBrainz/Album Id": "MusicBrainz release id",
+      "MusicBrainz/Album Release Country": "Release country",
+      "MusicBrainz/Artist Id": "MusicBrainz artist id",
+      "MusicBrainz/Release Group Id": "MusicBrainz release group id",
+      "MusicBrainz/Release Track Id": "MusicBrainz track id",
+      "MusicBrainz/Track Id": "MusicBrainz recording id",
+      "ReplayGain/Album Gain": "ReplayGain album gain",
+      "ReplayGain/Album Peak": "ReplayGain album peak",
+      "ReplayGain/Track Gain": "ReplayGain track gain",
+      "ReplayGain/Track Peak": "ReplayGain track peak",
+      "Title": "Title",
+      "WM/AlbumArtist": "Album artist",
+      "WM/AlbumArtistSortOrder": "Album artist sort order",
+      "WM/AlbumTitle": "Album",
+      "WM/ArtistSortOrder": "Artist sort order",
+      "WM/Barcode": "Barcode",
+      "WM/BeatsPerMinute": "BPM",
+      "WM/CatalogNo": "Catalogue number",
+      "WM/Composer": "Composer",
+      "WM/ComposerSortOrder": "Composer sort order",
+      "WM/Conductor": "Conductor",
+      "WM/Genre": "Genre",
+      "WM/IsCompilation": "Compilation",
+      "WM/Lyrics": "Lyrics",
+      "WM/Media": "Media",
+      "WM/OriginalReleaseTime": "Original release date",
+      "WM/PartOfSet": "Disc number",
+      "WM/Publisher": "Label",
+      "WM/SetSubTitle": "Disc subtitle",
+      "WM/TrackNumber": "Track number",
+      "WM/Writer": "Lyricist",
+      "WM/Year": "Date"
+    },
+    "id3": {
+      "COMM::eng": "Comment",
+      "TALB": "Album",
+      "TBPM": "BPM",
+      "TCMP": "Compilation",
+      "TCOM": "Composer",
+      "TCON": "Genre",
+      "TDOR": "Original release date",
+      "TDRC": "Date",
+      "TEXT": "Lyricist",
+      "TIT2": "Title",
+      "TMED": "Media",
+      "TPE1": "Artist",
+      "TPE2": "Album artist",
+      "TPE3": "Conductor",
+      "TPOS": "Disc number",
+      "TPUB": "Label",
+      "TRCK": "Track number",
+      "TSO2": "Album artist sort order",
+      "TSOC": "Composer sort order",
+      "TSOP": "Artist sort order",
+      "TSST": "Disc subtitle",
+      "TXXX:ADDED": "Added",
+      "TXXX:ASIN": "ASIN",
+      "TXXX:BARCODE": "Barcode",
+      "TXXX:CATALOGNUMBER": "Catalogue number",
+      "TXXX:MusicBrainz Album Artist Id": "MusicBrainz album artist id",
+      "TXXX:MusicBrainz Album Id": "MusicBrainz release id",
+      "TXXX:MusicBrainz Album Release Country": "Release country",
+      "TXXX:MusicBrainz Artist Id": "MusicBrainz artist id",
+      "TXXX:MusicBrainz Release Group Id": "MusicBrainz release group id",
+      "TXXX:MusicBrainz Release Track Id": "MusicBrainz track id",
+      "TXXX:REPLAYGAIN_ALBUM_GAIN": "ReplayGain album gain",
+      "TXXX:REPLAYGAIN_ALBUM_PEAK": "ReplayGain album peak",
+      "TXXX:REPLAYGAIN_TRACK_GAIN": "ReplayGain track gain",
+      "TXXX:REPLAYGAIN_TRACK_PEAK": "ReplayGain track peak",
+      "UFID:http://musicbrainz.org": "MusicBrainz recording id",
+      "USLT::eng": "Lyrics"
+    },
+    "mp4": {
+      "----:com.apple.iTunes:ADDED": "Added",
+      "----:com.apple.iTunes:ASIN": "ASIN",
+      "----:com.apple.iTunes:BARCODE": "Barcode",
+      "----:com.apple.iTunes:CATALOGNUMBER": "Catalogue number",
+      "----:com.apple.iTunes:CONDUCTOR": "Conductor",
+      "----:com.apple.iTunes:DISCSUBTITLE": "Disc subtitle",
+      "----:com.apple.iTunes:LABEL": "Label",
+      "----:com.apple.iTunes:LYRICIST": "Lyricist",
+      "----:com.apple.iTunes:MEDIA": "Media",
+      "----:com.apple.iTunes:MusicBrainz Album Artist Id": "MusicBrainz album artist id",
+      "----:com.apple.iTunes:MusicBrainz Album Id": "MusicBrainz release id",
+      "----:com.apple.iTunes:MusicBrainz Album Release Country": "Release country",
+      "----:com.apple.iTunes:MusicBrainz Artist Id": "MusicBrainz artist id",
+      "----:com.apple.iTunes:MusicBrainz Release Group Id": "MusicBrainz release group id",
+      "----:com.apple.iTunes:MusicBrainz Release Track Id": "MusicBrainz track id",
+      "----:com.apple.iTunes:MusicBrainz Track Id": "MusicBrainz recording id",
+      "----:com.apple.iTunes:ORIGINALDATE": "Original release date",
+      "----:com.apple.iTunes:REPLAYGAIN_ALBUM_GAIN": "ReplayGain album gain",
+      "----:com.apple.iTunes:REPLAYGAIN_ALBUM_PEAK": "ReplayGain album peak",
+      "----:com.apple.iTunes:REPLAYGAIN_TRACK_GAIN": "ReplayGain track gain",
+      "----:com.apple.iTunes:REPLAYGAIN_TRACK_PEAK": "ReplayGain track peak",
+      "aART": "Album artist",
+      "cpil": "Compilation",
+      "disk": "Disc number",
+      "soaa": "Album artist sort order",
+      "soar": "Artist sort order",
+      "soco": "Composer sort order",
+      "tmpo": "BPM",
+      "trkn": "Track number",
+      "©ART": "Artist",
+      "©alb": "Album",
+      "©cmt": "Comment",
+      "©day": "Date",
+      "©gen": "Genre",
+      "©lyr": "Lyrics",
+      "©nam": "Title",
+      "©wrt": "Composer"
+    },
+    "vorbis": {
+      "added": "Added",
+      "album": "Album",
+      "albumartist": "Album artist",
+      "albumartistsort": "Album artist sort order",
+      "artist": "Artist",
+      "artistsort": "Artist sort order",
+      "asin": "ASIN",
+      "barcode": "Barcode",
+      "bpm": "BPM",
+      "catalognumber": "Catalogue number",
+      "comment": "Comment",
+      "compilation": "Compilation",
+      "composer": "Composer",
+      "composersort": "Composer sort order",
+      "conductor": "Conductor",
+      "date": "Date",
+      "discnumber": "Disc number",
+      "discsubtitle": "Disc subtitle",
+      "genre": "Genre",
+      "label": "Label",
+      "lyricist": "Lyricist",
+      "lyrics": "Lyrics",
+      "media": "Media",
+      "musicbrainz_albumartistid": "MusicBrainz album artist id",
+      "musicbrainz_albumid": "MusicBrainz release id",
+      "musicbrainz_artistid": "MusicBrainz artist id",
+      "musicbrainz_releasegroupid": "MusicBrainz release group id",
+      "musicbrainz_releasetrackid": "MusicBrainz track id",
+      "musicbrainz_trackid": "MusicBrainz recording id",
+      "originaldate": "Original release date",
+      "releasecountry": "Release country",
+      "replaygain_album_gain": "ReplayGain album gain",
+      "replaygain_album_peak": "ReplayGain album peak",
+      "replaygain_track_gain": "ReplayGain track gain",
+      "replaygain_track_peak": "ReplayGain track peak",
+      "title": "Title",
+      "tracknumber": "Track number"
+    }
+  }
+}

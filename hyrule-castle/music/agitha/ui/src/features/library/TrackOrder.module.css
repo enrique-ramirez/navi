@@ -1,0 +1,26 @@
+.note {
+	display: flex;
+	gap: var(--space-2);
+	align-items: center;
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.row {
+	display: grid;
+	gap: var(--space-1);
+	font-size: 0.8125rem;
+}
+
+.mark {
+	color: var(--caution);
+}
+
+.flag {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: center;
+	color: var(--caution);
+}

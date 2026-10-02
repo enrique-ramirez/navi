@@ -3,27 +3,26 @@ import { useEffect, useId, useState } from "react";
 
 import type { DiffRow, Side } from "@/domain/album/diff";
 import { editKeyOf } from "@/domain/album/diff";
+import { formatValues } from "@/domain/album/format";
 import { bytesOf, lockedKind } from "@/domain/album/tagModel";
 import type { AlbumView, Family } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import type { Pending } from "./pending";
 import styles from "./TagDiff.module.css";
 
-const SEPARATOR = "; ";
-
 type Translate = ReturnType<typeof useTranslate>["t"];
 
 function text(side: Side, key: string, t: Translate): string {
 	if (side === null) return "";
 	if (side === "differs") return t("tags.differsAcross");
-	return side
-		.map((value) => {
+	return formatValues(
+		side.map((value) => {
 			const size = bytesOf(value);
 			return size
 				? t("tags.binary", { kind: key.split(":")[0] ?? key, size })
 				: value;
-		})
-		.join(SEPARATOR);
+		}),
+	);
 }
 
 const split = (line: string) =>

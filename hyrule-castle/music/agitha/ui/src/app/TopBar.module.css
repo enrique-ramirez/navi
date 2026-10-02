@@ -1,9 +1,10 @@
 .bar {
 	display: flex;
 	align-items: center;
-	gap: var(--space-3);
-	height: var(--topbar-height);
-	padding: 0 var(--space-4);
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-3);
+	min-height: var(--topbar-height);
+	padding: var(--space-2) var(--space-4);
 	background: var(--surface);
 	border-bottom: 1px solid var(--border);
 }
@@ -50,4 +51,27 @@
 
 .button:hover {
 	background: var(--accent-quiet);
+}
+
+.nav {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.link {
+	padding: var(--space-2) var(--space-3);
+	color: var(--text);
+	text-decoration: none;
+	border-radius: var(--radius-pill);
+}
+
+.link:hover {
+	background: var(--accent-quiet);
+}
+
+.link[aria-current="page"] {
+	color: var(--accent);
+	font-weight: 600;
 }

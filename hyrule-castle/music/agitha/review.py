@@ -25,7 +25,7 @@ import mutagen.mp4
 from musiclib import files, images, walk
 from musiclib.mapping import READABLE, readable_name
 
-from . import audio, drops, duplicates, ranges, state
+from . import audio, drops, duplicates, ranges, state, suggest
 from .refusal import BUSY, Refusal
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ FAMILIES = ("id3", "vorbis", "mp4", "asf")
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 
 
-def _names() -> dict[str, dict[str, str]]:
+def names() -> dict[str, dict[str, str]]:
     return {family: {key: readable_name(family, key) for row in READABLE.values()
                      if (key := row.get(family)) is not None} for family in FAMILIES}
 
@@ -225,29 +225,44 @@ def _with_sizes(config: Config, drop: str, n: str, entry: dict[str, Any]) -> dic
     return shown
 
 
-def _uploaded(config: Config, drop: str, n: str) -> list[dict[str, Any]]:
-    folder = ranges.album_folder(config, drop, n)
-    if folder is None:
-        return []
+def read_folder(folder: Path, audio_url: Callable[[str], str],
+                inside: Path | None = None) -> tuple[list[dict[str, Any]], list[str]]:
+    """The tracks of the album `folder` in path order, and the album-relative path of each file whose tags could not be read.
+
+    `audio_url` makes a track's url from its path. Where `inside` is given, a
+    file that is a link, or whose real path is not under it, is neither read
+    nor listed: the library's albums hold no linked track.
+    """
     paths, _unlistable = walk.album_contents(folder)
-    result = []
+    result, unreadable = [], []
     for path in paths:
         rel = path.relative_to(folder).as_posix()
         if not files.is_track(path, PurePosixPath(rel)):
             continue
+        if inside is not None and (path.is_symlink() or not path.resolve().is_relative_to(inside)):
+            continue
         try:
             track = files.read(path)
         except files.Unreadable:
+            unreadable.append(rel)
             continue
         found = audio.facts(path)
         if found is None:
+            unreadable.append(rel)
             continue
         result.append({
             "path": rel, "family": track.family, "tags": _sized(track.tags, _binary_sizes(path)),
             **{key: value for key, value in dataclasses.asdict(found).items() if key != "family"},
-            "audio_url": f"/api/drops/{drop}/albums/{n}/audio/{quote(rel)}",
+            "audio_url": audio_url(rel),
         })
-    return result
+    return result, unreadable
+
+
+def _uploaded(config: Config, drop: str, n: str) -> list[dict[str, Any]]:
+    folder = ranges.album_folder(config, drop, n)
+    if folder is None:
+        return []
+    return read_folder(folder, lambda rel: f"/api/drops/{drop}/albums/{n}/audio/{quote(rel)}")[0]
 
 
 def _landing(entry: dict[str, Any]) -> list[str]:
@@ -279,8 +294,9 @@ def _landed(config: Config, drop: str, n: str) -> dict[str, Any] | None:
     return {
         "drop": drop, "n": n, "name": PurePosixPath(destination).name if destination else n,
         "state": "in the library", "stderr": "", "error": None, "step": None, "file": None, "busy": False,
-        "preview": entry, "files": [], "uploaded": [], "names": _names(), "library_path": landed.get("path"),
+        "preview": entry, "files": [], "uploaded": [], "names": names(), "library_path": landed.get("path"),
         "tree": [], "extras_to": [], "decision": None, "cover": None, "cover_now": None, "duplicate": None,
+        "replaces": None, "suggestions": [],
         "approvable": {"ok": False, "reason": "in the library", "code": "in-library", "hold": None},
     }
 
@@ -328,7 +344,7 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "preview": _with_sizes(config, drop, n, entry) if entry else None,
         "files": _file_facts(config, drop, n, entry) if entry else [],
         "uploaded": _uploaded(config, drop, n),
-        "names": _names(),
+        "names": names(),
         "library_path": str(config.library / destination) if destination else None,
         "tree": _landing(entry) if destination else [],
         # `plan.relocated`'s rule: an extra follows the album's tail under the extras root.
@@ -337,7 +353,9 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "decision": _decision(config, drop, n, entry),
         "cover": _checked(planned_cover(config, drop, n, entry), f"/api/drops/{drop}/albums/{n}/cover"),
         "cover_now": _checked(current_cover(config, drop, n, entry), f"/api/drops/{drop}/albums/{n}/cover/now"),
-        "duplicate": _duplicate(config, drop, n, entry, summary["busy"]),
+        "replaces": summary["replaces"],
+        "duplicate": None if summary["replaces"] else _duplicate(config, drop, n, entry, summary["busy"]),
+        "suggestions": suggest.suggestions(config, entry, drops.replaces_of(record)),
         "approvable": offered,
     }
 

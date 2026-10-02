@@ -2,6 +2,9 @@
 // from these names. `PlanEntry` mirrors one album of the engine's `plan.json`,
 // and `types.test.ts` checks it against the fixtures under tests/fixtures/agitha.
 
+/** Family -> raw key -> readable name; a key not listed shows as itself. */
+export type TagNames = Record<Family, Record<string, string>>;
+
 /** A tag family, as `mapping.py` names them. */
 export type Family = "id3" | "vorbis" | "mp4" | "asf";
 
@@ -304,6 +307,8 @@ export interface AlbumSummary {
 	busy: boolean;
 	/** Retry and Discard after a failed identify, Move and Discard once written, Approve where `approvable.ok`; none while busy or in the library. */
 	actions: AlbumAction[];
+	/** The library album this one is a match for, relative to the library root; `null` where it is not a match. */
+	replaces: string | null;
 }
 
 export interface Drop {
@@ -508,7 +513,7 @@ export interface AlbumView {
 	stderr: string;
 	error: string | null;
 	/** The failed step, as on `MoveResponse`, kept on the album so a reload shows it. */
-	step: 1 | 2 | 3 | 4 | null;
+	step: 1 | 2 | 3 | 4 | 5 | null;
 	/** The file that failed at that step. */
 	file: string | null;
 	busy: boolean;
@@ -519,7 +524,7 @@ export interface AlbumView {
 	/** Every track of the album folder as uploaded, in musiclib's order (disc folder, then path); empty once it has left the inbox. */
 	uploaded: UploadedFile[];
 	/** Family -> raw key -> readable name; a key not listed shows as itself. */
-	names: Record<Family, Record<string, string>>;
+	names: TagNames;
 	/** `/srv/music/library/` plus the destination; `null` with no destination. */
 	library_path: string | null;
 	/** Paths of the album folder as it will land, relative to it, files only. */
@@ -533,7 +538,47 @@ export interface AlbumView {
 	cover_now: AlbumCover | null;
 	duplicate: Comparison | null;
 	approvable: Approvable;
+	/** The library album this one is a match for, relative to the library root; `null` where it is not a match. */
+	replaces: string | null;
+	/** Tags and folders the plan could take from the rest of the library; empty with none. */
+	suggestions: Suggestion[];
 }
+
+/** An artist's other albums carry one genre, and this album's tags give another or none. */
+export interface GenreSuggestion {
+	kind: "genre";
+	genre: string;
+	/** Albums of the artist that carry `genre`. */
+	albums: number;
+	/** Albums of the artist in the library. */
+	of: number;
+	artist: string;
+}
+
+/** As a genre suggestion, for the two soundtrack genres. */
+export interface SoundtrackSuggestion {
+	kind: "soundtrack";
+	genre: "soundtrack" | "video game music";
+	albums: number;
+	of: number;
+	artist: string;
+}
+
+/** The planned artist folder is spelled unlike one the library already has. */
+export interface SpellingSuggestion {
+	kind: "spelling";
+	/** The planned artist name. */
+	artist: string;
+	/** The planned `Letter/Artist` folder. */
+	lands_in: string;
+	/** Existing `Letter/Artist` folders it may be meant for. */
+	folders: { path: string; name: string }[];
+}
+
+export type Suggestion =
+	| GenreSuggestion
+	| SoundtrackSuggestion
+	| SpellingSuggestion;
 
 /** `POST .../decision`; the server keys it as `decisions.json` does. */
 export type DecisionRequest = Decision;
@@ -549,8 +594,8 @@ export interface MoveResponse {
 	/** The album's path in the library, or its finished folder in the inbox where it did not move. */
 	path: string | null;
 	error: string | null;
-	/** The step of criterion 49, 1 to 4, that failed (1 is recording the checksums). */
-	step: 1 | 2 | 3 | 4 | null;
+	/** The step of the move, 1 to 5, that failed (1 is recording the checksums). */
+	step: 1 | 2 | 3 | 4 | 5 | null;
 	/** The file that failed at that step. */
 	file: string | null;
 }
@@ -563,3 +608,236 @@ export type ApproveResponse = MoveResponse;
  * decision then names in `cover`.
  */
 export type CoverUploadResponse = CoverCheck & { path: string };
+
+/** `GET /api/library`. */
+export interface LibraryRoot {
+	root: string;
+	/** Whether the library root could be listed. */
+	readable: boolean;
+	letters: string[];
+}
+
+/** `GET /api/library/<letter>`. */
+export interface LibraryLetter {
+	artists: { name: string }[];
+}
+
+/** `GET /api/library/<letter>/<artist>`. */
+export interface LibraryArtist {
+	albums: LibraryAlbumSummary[];
+	/** As on `AlbumView`. */
+	names: TagNames;
+}
+
+/** An album of an artist's page; every track comes with it, so the page can edit the artist at once. */
+export interface LibraryAlbumSummary {
+	/** Relative to the library root, `/`-separated: `S/Sonata Arctica/(1999) Ecliptica`. */
+	path: string;
+	/** The album folder's name. */
+	name: string;
+	year: string;
+	title: string;
+	/** `.../cover`; `null` with no cover. */
+	cover_url: string | null;
+	match: MatchRef | null;
+	tracks: LibraryTrack[];
+}
+
+/** A track of an album in the library. */
+export interface LibraryTrack extends UploadedFile {
+	/** What the file was when the page read it, sent back with a save to detect a change since. */
+	loaded: {
+		/** Bytes. */
+		size: number;
+		/** `st_mtime`: seconds, a float. */
+		mtime: number;
+	};
+	disc: number;
+	number: number;
+	/** Raw keys of the file's family that may not be edited. */
+	readonly: string[];
+}
+
+/** `GET /api/library/<letter>/<artist>/<album>`. */
+export interface LibraryAlbum {
+	/** Relative to the library root, `/`-separated. */
+	path: string;
+	release_id: string | null;
+	cover: LibraryCover | null;
+	tracks: LibraryTrack[];
+	/** Album-relative paths of files that would not open. */
+	unreadable: string[];
+	/** Family -> raw key -> readable name, as on `AlbumView`. */
+	names: TagNames;
+	/** The drop album that is a match for this one; `null` where there is none. */
+	match: MatchRef | null;
+	/** The save running or last run on this album; `null` where none. */
+	job: AlbumJob | null;
+}
+
+/** The cover of a library album, served at `.../cover`. */
+export interface LibraryCover extends CoverCheck {
+	url: string;
+}
+
+/** The drop album that is a match for a library album. */
+export interface MatchRef {
+	drop: string;
+	n: string;
+}
+
+/** `GET .../order`: two tracks whose lengths fit each other's place in the release, or why it was not checked. */
+export type LibraryOrder =
+	| { checked: true; flags: OrderFlag[] }
+	| {
+			checked: false;
+			/** The sentence to show. */
+			reason: string;
+			/** Whether asking again may help: only where MusicBrainz did not answer. */
+			retry: boolean;
+	  };
+
+/** Two tracks that are probably in each other's place. `a` and `b` are album-relative paths; the numbers are seconds. */
+export interface OrderFlag {
+	a: string;
+	b: string;
+	/** How long `a` runs. */
+	a_runs: number;
+	/** How long the release says the track in `a`'s place runs. */
+	a_wants: number;
+	b_runs: number;
+	b_wants: number;
+}
+
+/** `PUT /api/library/covers`. */
+export interface CoverUpload extends CoverCheck {
+	/** Names the stored image in a `Draft`. */
+	cover: string;
+}
+
+/** `POST /api/library/preview` and `/save`; every member is sent, empty or `null` where unused. */
+export interface Draft {
+	/** Every track an edit, a swap or the cover touches, once each. */
+	tracks: DraftTrack[];
+	/** Applied in order. */
+	edits: DraftEdit[];
+	/** Pairs of track paths that trade places; only with one album. */
+	swaps: [string, string][];
+	/** A `CoverUpload.cover` token; only with one album. */
+	cover: string | null;
+	/** The artist page sends `true`, the album page `false`: the server skips and refuses as a batch by this flag, not by counting albums. */
+	batch: boolean;
+}
+
+/** One change to the tags of the tracks it names. */
+export interface DraftEdit {
+	/** Each must be in `Draft.tracks`. */
+	tracks: TrackRef[];
+	/** Tag -> the values it ends with, or `null` to remove it. A tag is named as `names` reads it, else by its raw key. */
+	set: Record<string, string[] | null>;
+	/** Tag -> values appended where the track lacks them. */
+	add: Record<string, string[]>;
+	/** Tag -> values taken from the tracks that carry them. */
+	remove: Record<string, string[]>;
+}
+
+export interface TrackRef {
+	/** Library-relative album path. */
+	album: string;
+	/** Album-relative track path. */
+	path: string;
+}
+
+export interface DraftTrack {
+	/** Library-relative album path. */
+	album: string;
+	/** Album-relative track path. */
+	path: string;
+	loaded: LibraryTrack["loaded"];
+	/** For each key the draft names, the values the page showed; `null` where the track had none. Tells a changed file from one only re-rated. */
+	seen: Record<string, string[] | null>;
+}
+
+/** The answer of `POST /api/library/preview`. */
+export interface LibraryPreview {
+	albums: PreviewAlbum[];
+}
+
+export interface PreviewAlbum {
+	path: string;
+	/** Equals `path` where nothing moves. */
+	new_path: string;
+	/** Only the tracks that change. */
+	tracks: PreviewTrack[];
+	/** `null` for a draft with no new cover. */
+	cover: CoverCheck | null;
+	problems: PreviewProblem[];
+	/** Tags the draft names that may not be edited. */
+	refused: RefusedKey[];
+	/** Why the album is left out of a batch; `null` where it is saved. */
+	skip: string | null;
+}
+
+export interface PreviewTrack {
+	path: string;
+	/** Equals `path` where nothing moves. */
+	new_path: string;
+	changes: TagChange[];
+}
+
+/** `key` is the readable name where there is one, else the raw key. */
+export interface TagChange {
+	key: string;
+	/** `null` for a tag that is absent. */
+	before: string[] | null;
+	after: string[] | null;
+}
+
+export interface PreviewProblem {
+	rule: string;
+	/** A path where the rule is about one; `detail` of a collision is the path taken. */
+	detail: string;
+}
+
+/** A tag key the draft names and the album refuses to change. */
+export interface RefusedKey {
+	key: string;
+	reason: string;
+}
+
+/** `202` of `POST /api/library/save`: the id to poll at `/api/library/jobs/<id>`. */
+export interface SaveAccepted {
+	job: string;
+}
+
+/** `GET /api/library/jobs/<id>`. */
+export interface LibraryJob {
+	albums: JobAlbum[];
+}
+
+export type JobState = "waiting" | "writing" | "verifying" | "done" | "failed";
+
+export interface JobAlbum {
+	path: string;
+	new_path: string;
+	state: JobState;
+	/** A sentence where `state` is `failed`; `null` otherwise. */
+	error: string | null;
+}
+
+/** An album's job as `LibraryAlbum` carries it. */
+export interface AlbumJob {
+	id: string;
+	state: JobState;
+}
+
+/** `POST /api/library/match`. */
+export interface MatchRequest {
+	/** Library-relative album path. */
+	path: string;
+}
+
+/** `GET /api/genres`. */
+export interface GenreList {
+	genres: string[];
+}

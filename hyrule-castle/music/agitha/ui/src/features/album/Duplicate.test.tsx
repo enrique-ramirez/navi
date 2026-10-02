@@ -157,6 +157,8 @@ function view(over: Partial<AlbumView> = {}): AlbumView {
 		uploaded: [],
 		duplicate: chronoCross(),
 		approvable: { ok: true, reason: null, code: null, hold: null },
+		replaces: null,
+		suggestions: [],
 		...over,
 	};
 }

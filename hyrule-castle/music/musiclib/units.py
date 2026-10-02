@@ -288,7 +288,7 @@ def _disagreement(tracks: list[files.Track]) -> tuple[str | None, str | None]:
     return NEEDS_A_PERSON, f"{DISAGREEMENT}: " + ", ".join(values)
 
 
-def _unit_at(album_path: Path, root: Path) -> Unit:
+def unit_at(album_path: Path, root: Path) -> Unit:
     tracks: list[files.Track] = []
     unreadable: list[tuple[str, str]] = []
     others: list[str] = []
@@ -327,6 +327,6 @@ def _unit_at(album_path: Path, root: Path) -> Unit:
 def units(root: Path) -> list[Unit]:
     """Every album unit under `root` (`Letter/Artist/Album`), sorted by `rel`."""
     root = Path(root)
-    found = [_unit_at(album_dir, root) for album_dir in walk.album_dirs(root)]
+    found = [unit_at(album_dir, root) for album_dir in walk.album_dirs(root)]
     found.sort(key=lambda u: u.rel)
     return found

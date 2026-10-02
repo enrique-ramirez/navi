@@ -67,17 +67,8 @@ def _span(header: str | None, size: int) -> tuple[int, int] | None:
     return start, min(end, size - 1)
 
 
-def audio(request: Handler, match: re.Match[str], config: Config) -> None:
-    drop, n, rel = match.group(1), match.group(2), match.group(3)
-    folder = album_folder(config, drop, n)
-    if folder is None:
-        request.fail(404, "No such album.")
-        return
-    root = folder.resolve()
-    target = (root / rel).resolve()
-    if not target.is_relative_to(root) or not target.is_file():
-        request.fail(404, "No such file.")
-        return
+def serve(request: Handler, target: Path) -> None:
+    """Answers with the file `target`, or the byte range the request asks for."""
     size = target.stat().st_size
     try:
         span = _span(request.headers.get("Range"), size)
@@ -108,6 +99,20 @@ def audio(request: Handler, match: re.Match[str], config: Config) -> None:
                 left -= len(chunk)
     except (BrokenPipeError, ConnectionResetError):
         request.close_connection = True
+
+
+def audio(request: Handler, match: re.Match[str], config: Config) -> None:
+    drop, n, rel = match.group(1), match.group(2), match.group(3)
+    folder = album_folder(config, drop, n)
+    if folder is None:
+        request.fail(404, "No such album.")
+        return
+    root = folder.resolve()
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        request.fail(404, "No such file.")
+        return
+    serve(request, target)
 
 
 def stray(request: Handler, match: re.Match[str], config: Config) -> None:

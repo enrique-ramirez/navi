@@ -1,12 +1,11 @@
+import { getJson } from "./getJson";
 import type { AlbumView, CoverUploadResponse } from "./types";
 
 export const albumUrl = (view: { drop: string; n: string }) =>
 	`/api/drops/${encodeURIComponent(view.drop)}/albums/${encodeURIComponent(view.n)}`;
 
 export async function fetchAlbum(drop: string, n: string): Promise<AlbumView> {
-	const response = await fetch(albumUrl({ drop, n }));
-	if (!response.ok) throw new Error(String(response.status));
-	return response.json();
+	return getJson<AlbumView>(albumUrl({ drop, n }));
 }
 
 type Answer<Body> =

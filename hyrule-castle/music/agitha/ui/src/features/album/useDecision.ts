@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { albumKey, isRunning } from "@/domain/album/albumQuery";
+import { hasKeepChoice } from "@/domain/album/keepChoice";
 import { albumUrl, post } from "@/shared/api/album";
 import type { AlbumView, CopySide } from "@/shared/api/types";
 import type { Pending } from "./pending";
@@ -24,6 +25,9 @@ export function useDecision(view: AlbumView, pending: Pending) {
 
 	const running = isRunning(view.state);
 	const refresh = () => client.invalidateQueries({ queryKey: albumKey(view) });
+	// Move lands the album in the library: its listings are kept for a while and must be asked again.
+	const libraryChanged = () =>
+		client.invalidateQueries({ queryKey: ["library"] });
 
 	async function submit(path: string, body: unknown) {
 		setRefusal(null);
@@ -49,7 +53,10 @@ export function useDecision(view: AlbumView, pending: Pending) {
 	}
 
 	async function move() {
-		if (await submit("move", {})) await refresh();
+		if (await submit("move", {})) {
+			void libraryChanged();
+			await refresh();
+		}
 	}
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when identify finishes, not when the view's other fields change
@@ -76,7 +83,7 @@ export function useDecision(view: AlbumView, pending: Pending) {
 			setChanged(true);
 			return;
 		}
-		if (view.approvable.ok && (!view.duplicate || then.keep))
+		if (view.approvable.ok && (!hasKeepChoice(view) || then.keep))
 			void approve(then.keep);
 	}, [awaiting, running, view]);
 

@@ -1,0 +1,10 @@
+{
+  "letters": [
+    "A",
+    "N",
+    "S",
+    "#"
+  ],
+  "readable": true,
+  "root": "/srv/music/library"
+}

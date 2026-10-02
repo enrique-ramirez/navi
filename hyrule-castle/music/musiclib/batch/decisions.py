@@ -119,7 +119,7 @@ def _is_id3_text_frame(key: str) -> bool:
             and key != "TXXX")
 
 
-def _raw_key_offence(family: str, key: str) -> str | None:
+def raw_key_offence(family: str, key: str) -> str | None:
     """Why an owner may not set or remove `key`, a raw key of `family`, or `None`.
 
     Names are compared case-folded: a Vorbis field name has no case, and an
@@ -238,7 +238,7 @@ def read(job: Job) -> dict | None:
                         continue
                     if field in ID_FIELDS or not (family := families.get(position)):
                         offences.append(f"{key!r}: {field!r} is not a field the page offers")
-                    elif offence := _raw_key_offence(family, field):
+                    elif offence := raw_key_offence(family, field):
                         offences.append(f"{key!r}: {position!r}: {field!r} {offence}")
 
     if offences:

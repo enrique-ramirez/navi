@@ -120,6 +120,8 @@ export function trackTitle(view: AlbumView, file: PlanFile): string {
 
 export const genreKeyOf = (family: Family) => KEYS[family].genre;
 
+export const albumArtistKeyOf = (family: Family) => KEYS[family].artist;
+
 const DISC: Record<Family, string> = {
 	id3: "TPOS",
 	vorbis: "discnumber",

@@ -172,6 +172,54 @@ describe("TagDiff", () => {
 		expect(input("Date")).toHaveValue("2010-05-24");
 	});
 
+	// What the draft holds for a track, whole.
+	const editsOf = (position: string) =>
+		latest?.draft.action === "accept"
+			? latest.draft.edits[position]
+			: undefined;
+
+	// A typed album artist goes out under the neutral name `albumartist`. A
+	// removal goes under `TPE2` alone: identify stops on a neutral field that
+	// has no value, for any file that is not a FLAC.
+	it("removes the album artist of MP3s under TPE2 alone, with nothing under the neutral name", async () => {
+		const user = userEvent.setup();
+		await renderTags();
+
+		await user.click(
+			within(rowOf("Album artist")).getByRole("button", {
+				name: "Remove Album artist",
+			}),
+		);
+
+		expect(ALL.map(editsOf)).toEqual([
+			{ TPE2: null },
+			{ TPE2: null },
+			{ TPE2: null },
+		]);
+		expect(input("Album artist")).toHaveValue("");
+		expect(input("Album artist")).toHaveAttribute("placeholder", "removed");
+	});
+
+	// Emptying the field is the same removal. The name typed before it is
+	// not left behind under the neutral name to name a folder.
+	it("removes the album artist under TPE2 alone when a typed one is emptied", async () => {
+		const user = userEvent.setup();
+		await renderTags();
+		await user.clear(input("Album artist"));
+		await user.type(input("Album artist"), "Other Band{Enter}");
+		expect(input("Album artist")).toHaveValue("Other Band");
+
+		await user.clear(input("Album artist"));
+		await user.keyboard("{Enter}");
+
+		expect(ALL.map(editsOf)).toEqual([
+			{ TPE2: null },
+			{ TPE2: null },
+			{ TPE2: null },
+		]);
+		expect(input("Album artist")).toHaveAttribute("placeholder", "removed");
+	});
+
 	it("offers no field and no remove for a tag that comes from the release", async () => {
 		await renderTags();
 

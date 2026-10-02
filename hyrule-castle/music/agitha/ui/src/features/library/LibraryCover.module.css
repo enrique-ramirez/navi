@@ -1,0 +1,35 @@
+.card {
+	display: grid;
+	gap: var(--space-2);
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.card[data-over] {
+	outline: 2px dashed var(--accent);
+	outline-offset: var(--space-1);
+}
+
+.images {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+}
+
+.image {
+	display: grid;
+	gap: var(--space-1);
+	justify-items: start;
+	margin: 0;
+}
+
+.image img {
+	max-width: 12rem;
+	border-radius: var(--radius-sm);
+}
+
+.warning {
+	margin: 0;
+	color: var(--caution);
+}
