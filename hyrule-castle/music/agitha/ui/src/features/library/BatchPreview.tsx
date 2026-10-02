@@ -1,3 +1,4 @@
+import { Check, CircleAlert, Clock, LoaderCircle } from "lucide-react";
 import { useId } from "react";
 
 import type { JobAlbum, LibraryPreview } from "@/shared/api/types";
@@ -57,24 +58,48 @@ export function BatchPreview({
 	);
 }
 
-/** Each album the job writes, with its state and, where it failed, why. */
-export function BatchProgress({
-	albums,
-	titleOf,
-}: {
-	albums: JobAlbum[];
-	titleOf: (path: string) => string;
-}) {
+const ended = (album: JobAlbum) =>
+	album.state === "done" || album.state === "failed";
+
+const ICONS = {
+	waiting: Clock,
+	writing: LoaderCircle,
+	verifying: LoaderCircle,
+	done: Check,
+	failed: CircleAlert,
+};
+
+/** Where one album of a job stands, for the album's own row. */
+export function JobMark({ album }: { album: JobAlbum }) {
 	const { t } = useTranslate();
+	const Icon = ICONS[album.state];
 	return (
-		<ul className={styles.albums}>
-			{albums.map((album) => (
-				<li key={album.path} className={styles.album}>
-					<span className={styles.name}>{titleOf(album.path)}</span>{" "}
-					<span>{t(`library.job.${album.state}`)}</span>
-					{album.error && <p className={styles.skip}>{album.error}</p>}
-				</li>
-			))}
-		</ul>
+		<span className={styles.mark} data-state={album.state}>
+			<Icon size={14} aria-hidden="true" />
+			<span>{t(`library.job.${album.state}`)}</span>
+		</span>
+	);
+}
+
+/** How far the job is, in one line: each album says its own state on its row. */
+export function BatchProgress({ albums }: { albums: JobAlbum[] }) {
+	const { t } = useTranslate();
+	const done = albums.filter((album) => album.state === "done").length;
+	const failed = albums.filter((album) => album.state === "failed").length;
+	const counts = { done, of: albums.length, failed };
+	return (
+		<div role="status" className={styles.progress}>
+			<span>
+				{albums.every(ended)
+					? t("library.batchEnded", counts)
+					: t("library.batchRunning", counts)}
+			</span>
+			<progress
+				className={styles.bar}
+				max={albums.length}
+				value={done + failed}
+				aria-label={t("library.saving")}
+			/>
+		</div>
 	);
 }

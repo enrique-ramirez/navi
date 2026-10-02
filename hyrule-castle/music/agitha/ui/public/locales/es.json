@@ -427,5 +427,7 @@
 	"artist.tabMeta": "Metadatos",
 	"artist.showTags": "Ver todas las etiquetas",
 	"artist.hideTags": "Ocultar etiquetas",
-	"library.coverNext": "Portada al guardar"
+	"library.coverNext": "Portada al guardar",
+	"library.batchRunning": "Guardando · {done} de {of} álbumes escritos",
+	"library.batchEnded": "{done} de {of} álbumes escritos · {failed} fallaron"
 }

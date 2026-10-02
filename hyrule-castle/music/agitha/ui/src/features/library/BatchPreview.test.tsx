@@ -19,6 +19,7 @@ import {
 } from "@/test/libraryAlbum";
 import {
 	type AlbumTitle,
+	albumBlock,
 	albumBox,
 	albumsAround,
 	allBox,
@@ -386,6 +387,18 @@ describe("BatchPreview", () => {
 				// Read-only is not empty: the tags of the selection stay on the page.
 				expect(tag("Genre")).toHaveTextContent("power metal 8/10");
 			}
+			// Each state is on its album's own row, and one line says how far the batch is.
+			expect(
+				within(albumBlock("Ecliptica")).getByText("done"),
+			).toBeInTheDocument();
+			expect(
+				within(albumBlock("Songs of Silence")).queryByText(
+					/waiting|writing|done/,
+				),
+			).toBeNull();
+			expect(screen.getByRole("status")).toHaveTextContent(
+				"Saving · 1 of 2 albums written",
+			);
 			// The job asked for is the one save answered with.
 			expect(jobGets(page)).toContain(`GET /api/library/jobs/${JOB}`);
 			// An album the job does not write has no state.

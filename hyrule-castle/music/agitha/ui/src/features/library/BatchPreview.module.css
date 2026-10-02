@@ -30,3 +30,73 @@
 	margin: 0;
 	color: var(--muted);
 }
+
+.progress {
+	display: grid;
+	gap: var(--space-2);
+	color: var(--muted);
+	font-size: 0.875rem;
+}
+
+.bar {
+	width: 100%;
+	height: 4px;
+	overflow: hidden;
+	appearance: none;
+	background: var(--border);
+	border: 0;
+	border-radius: var(--radius-pill);
+}
+
+.bar::-webkit-progress-bar {
+	background: var(--border);
+}
+
+.bar::-webkit-progress-value {
+	background: var(--accent);
+	transition: width 0.3s;
+}
+
+.bar::-moz-progress-bar {
+	background: var(--accent);
+}
+
+.mark {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
+	padding: 1px var(--space-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	color: var(--muted);
+	font-size: 0.75rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.mark[data-state="writing"],
+.mark[data-state="verifying"] {
+	border-color: color-mix(in oklch, var(--accent) 50%, transparent);
+	color: var(--accent);
+}
+
+.mark[data-state="writing"] svg,
+.mark[data-state="verifying"] svg {
+	animation: turn 1s linear infinite;
+}
+
+.mark[data-state="done"] {
+	border-color: color-mix(in oklch, var(--positive) 40%, transparent);
+	color: var(--positive);
+}
+
+.mark[data-state="failed"] {
+	border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+	color: var(--danger);
+}
+
+@keyframes turn {
+	to {
+		transform: rotate(360deg);
+	}
+}

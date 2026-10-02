@@ -448,6 +448,8 @@ export const en = {
 	"artist.showTags": "Show all tags",
 	"artist.hideTags": "Hide tags",
 	"library.coverNext": "Cover once saved",
+	"library.batchRunning": "Saving · {done} of {of} albums written",
+	"library.batchEnded": "{done} of {of} albums written · {failed} failed",
 } as const;
 
 export type Phrase = keyof typeof en;

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Tags, Undo2, X } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { formatLength, formatTotalLength } from "@/domain/album/format";
 import { summaryOfFiles } from "@/domain/album/summary";
@@ -20,7 +20,7 @@ import type {
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import bar from "@/shared/styles/reviewBar.module.css";
 import { Parasol } from "@/shared/ui/Parasol";
-import { BatchPreview, BatchProgress } from "./BatchPreview";
+import { BatchPreview, BatchProgress, JobMark } from "./BatchPreview";
 import { isEmpty, toWire } from "./draft";
 import { FlowNotices } from "./FlowNotices";
 import styles from "./LibraryArtist.module.css";
@@ -338,6 +338,7 @@ export function LibraryArtist({
 							edits={draft.edits}
 							isSelected={isSelected}
 							readOnly={readOnly}
+							job={progress?.albums.find((each) => each.path === album.path)}
 							isOpen={open.includes(album.path)}
 							onOpen={() =>
 								setOpen((now) =>
@@ -354,9 +355,7 @@ export function LibraryArtist({
 
 			<footer className={styles.footer}>
 				<div className={styles.drawer}>
-					{progress && (
-						<BatchProgress albums={progress.albums} titleOf={titleOfAlbum} />
-					)}
+					{progress && <BatchProgress albums={progress.albums} />}
 
 					{!readOnly && flow.preview && (
 						<BatchPreview
@@ -460,6 +459,7 @@ function AlbumRow({
 	edits,
 	isSelected,
 	readOnly,
+	job,
 	isOpen,
 	onOpen,
 	setMany,
@@ -471,6 +471,8 @@ function AlbumRow({
 	edits: Parameters<typeof applyEdits>[1];
 	isSelected: (key: string) => boolean;
 	readOnly: boolean;
+	/** Where the batch running, or the one that failed, stands on this album; left out where it does not write it. */
+	job?: JobAlbum;
 	isOpen: boolean;
 	onOpen: () => void;
 	setMany: (keys: string[], on: boolean) => void;
@@ -485,8 +487,19 @@ function AlbumRow({
 	const after = applyEdits(own, edits, names);
 	const genres = genresOf(after, names);
 
+	// The album being written stays in sight while a long batch works down the list.
+	const row = useRef<HTMLLIElement>(null);
+	const busy = job?.state === "writing" || job?.state === "verifying";
+	useEffect(() => {
+		if (busy) row.current?.scrollIntoView?.({ block: "nearest" });
+	}, [busy]);
+
 	return (
-		<li className={styles.album} data-selected={chosen > 0 || undefined}>
+		<li
+			ref={row}
+			className={styles.album}
+			data-selected={chosen > 0 || undefined}
+		>
 			<div className={styles.head}>
 				<input
 					type="checkbox"
@@ -524,19 +537,22 @@ function AlbumRow({
 						{summary && <span>{describeQuality(summary, t)}</span>}
 					</p>
 				</div>
-				<ul className={styles.albumGenres} aria-label={t("editor.genres")}>
-					{genres.map(({ value, count }) => (
-						<li key={value} data-partial={count < after.length || undefined}>
-							{value}
-							{count < after.length && (
-								<span className={styles.count}>
-									{" "}
-									{count}/{after.length}
-								</span>
-							)}
-						</li>
-					))}
-				</ul>
+				<div className={styles.right}>
+					<ul className={styles.albumGenres} aria-label={t("editor.genres")}>
+						{genres.map(({ value, count }) => (
+							<li key={value} data-partial={count < after.length || undefined}>
+								{value}
+								{count < after.length && (
+									<span className={styles.count}>
+										{" "}
+										{count}/{after.length}
+									</span>
+								)}
+							</li>
+						))}
+					</ul>
+					{job && <JobMark album={job} />}
+				</div>
 				<button
 					type="button"
 					className={styles.open}
@@ -551,6 +567,7 @@ function AlbumRow({
 					<span className="visually-hidden">{album.title}</span>
 				</button>
 			</div>
+			{job?.error && <p className={styles.failure}>{job.error}</p>}
 			{isOpen && (
 				<ul className={styles.tracks}>
 					{own.map((track) => {
