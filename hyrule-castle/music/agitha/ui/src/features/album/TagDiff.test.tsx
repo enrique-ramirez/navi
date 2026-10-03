@@ -280,6 +280,20 @@ describe("TagDiff", () => {
 		expect(input("TXXX:MOOD")).toHaveValue("calm");
 	});
 
+	it("takes a typed value for a tag the plan removes, where the tracks hold different ones", async () => {
+		const view = albumView();
+		view.preview!.files.forEach((file, index) => {
+			file.before["TXXX:MOOD"] = [`mood ${index}`];
+		});
+		await renderTags(view);
+		const user = userEvent.setup();
+
+		await user.type(input("TXXX:MOOD"), "calm{Enter}");
+
+		expect(sent("TXXX:MOOD")).toEqual([["calm"], ["calm"], ["calm"]]);
+		expect(input("TXXX:MOOD")).toHaveValue("calm");
+	});
+
 	it("adds a tag by its key", async () => {
 		const user = userEvent.setup();
 		await renderTags();

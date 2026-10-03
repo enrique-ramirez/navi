@@ -89,6 +89,29 @@ describe("diffOf", () => {
 		});
 	});
 
+	it("shows each track its own value where the tracks disagree now and the album's row cannot", () => {
+		const view = albumView();
+		const files = view.preview?.files ?? [];
+		files.forEach((file, index) => {
+			file.before["TXXX:MOOD"] = index === 0 ? ["calm"] : [];
+		});
+		const diff = diffOf(view, {});
+
+		expect(rowOf(diff.album, "TXXX:MOOD")).toMatchObject({
+			now: "differs",
+			next: null,
+			change: "removed",
+		});
+		expect(rowOf(diff.tracks["1-1"] ?? [], "TXXX:MOOD")).toMatchObject({
+			now: ["calm"],
+			next: null,
+			change: "removed",
+		});
+		expect(diff.tracks["1-2"]?.map((row) => row.key)).not.toContain(
+			"TXXX:MOOD",
+		);
+	});
+
 	it("orders rows by the family's names, then the unknown keys, and the locked ones last", () => {
 		const rows = diffOf(albumView(), {}).album;
 		const keys = rows.map((row) => row.key);

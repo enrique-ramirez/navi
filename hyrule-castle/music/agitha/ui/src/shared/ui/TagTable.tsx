@@ -172,6 +172,10 @@ export function TagTable({
 								? differs(side)
 								: text(row[side], row.key, t);
 						const nowText = sideText("now");
+						const removedText =
+							row.removedBy.length > 0
+								? t("tags.removed", { rule: row.removedBy.join(", ") })
+								: t("tags.removedValue");
 						return (
 							<tr
 								key={row.key}
@@ -205,24 +209,23 @@ export function TagTable({
 											<Lock size={12} aria-hidden="true" />
 											{sideText("next") || "—"}
 										</span>
-									) : row.next === null && !row.edited ? (
+									) : row.next === null && !row.edited && !editable ? (
 										<span className={styles.removed}>
 											{nowText}
-											<span className={styles.reason}>
-												{row.removedBy.length > 0
-													? t("tags.removed", {
-															rule: row.removedBy.join(", "),
-														})
-													: t("tags.removedValue")}
-											</span>
+											<span className={styles.reason}>{removedText}</span>
 										</span>
 									) : editable ? (
-										<ValueInput
-											row={row}
-											label={t("tags.newValue", { tag: name })}
-											differs={differs("next")}
-											onCommit={(values) => onSet(row, values)}
-										/>
+										<>
+											<ValueInput
+												row={row}
+												label={t("tags.newValue", { tag: name })}
+												differs={differs("next")}
+												onCommit={(values) => onSet(row, values)}
+											/>
+											{row.next === null && !row.edited && (
+												<span className={styles.reason}>{removedText}</span>
+											)}
+										</>
 									) : (
 										sideText("next")
 									)}
