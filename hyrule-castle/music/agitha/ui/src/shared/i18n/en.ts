@@ -271,6 +271,7 @@ export const en = {
 	"cover.noneNow": "the files have no cover",
 	"cover.replace": "Drop an image or click to replace",
 	"cover.undo": "use the planned cover",
+	"cover.keep": "keep this cover",
 	"summary.title": "Album",
 	"summary.tracks": "Tracks",
 	"summary.tracksOnDiscs": "{n} on {discs} discs",

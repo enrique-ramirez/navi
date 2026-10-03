@@ -259,6 +259,7 @@
 	"cover.noneNow": "los archivos no tienen portada",
 	"cover.replace": "Suelta una imagen o haz clic para cambiarla",
 	"cover.undo": "usar la portada prevista",
+	"cover.keep": "dejar esta portada",
 	"summary.title": "Álbum",
 	"summary.tracks": "Pistas",
 	"summary.tracksOnDiscs": "{n} en {discs} discos",

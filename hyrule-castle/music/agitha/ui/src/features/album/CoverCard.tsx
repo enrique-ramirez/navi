@@ -20,6 +20,7 @@ export function CoverCard({
 }) {
 	const { t } = useTranslate();
 	const [chosen, setChosen] = useState<ShownCover | null>(null);
+	const [kept, setKept] = useState(false);
 	const last = useRef<string | null>(null);
 	last.current = chosen?.url ?? null;
 	useEffect(
@@ -46,7 +47,25 @@ export function CoverCard({
 			height: result.height,
 			problem: result.passes ? null : (result.problem ?? ""),
 		});
+		setKept(false);
 		return null;
+	}
+
+	// The cover the files have is sent as the owner's, as if it had been dropped here.
+	async function keep() {
+		if (!view.cover_now) return null;
+		let file: File;
+		try {
+			const answer = await fetch(view.cover_now.url);
+			if (!answer.ok) return t("cover.failed");
+			const data = await answer.blob();
+			file = new File([data], "cover", { type: data.type });
+		} catch {
+			return t("cover.failed");
+		}
+		const refusal = await take(file);
+		if (refusal === null) setKept(true);
+		return refusal;
 	}
 
 	return (
@@ -61,6 +80,11 @@ export function CoverCard({
 			undo={
 				shownChosen && planned
 					? { label: t("cover.undo"), run: () => pending.setCover(null) }
+					: null
+			}
+			keep={
+				view.cover_now && !(shownChosen && kept)
+					? { label: t("cover.keep"), run: keep }
 					: null
 			}
 			onFile={take}

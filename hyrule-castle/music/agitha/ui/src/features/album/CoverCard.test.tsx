@@ -248,6 +248,65 @@ describe("CoverCard", () => {
 		).toBeInTheDocument();
 	});
 
+	it("keeps the cover the files have as the new one when asked", async () => {
+		const fake = fakeFetch({
+			[`GET ${ALBUM_URL}/cover/now`]: () =>
+				new Response("png bytes", { headers: { "content-type": "image/png" } }),
+			[`PUT ${ALBUM_URL}/cover`]: () =>
+				Response.json({
+					path: OWNER_PATH,
+					width: 300,
+					height: 300,
+					passes: true,
+					problem: null,
+				}),
+		});
+		restore = fake.restore;
+		const user = userEvent.setup();
+		renderWithProviders(
+			<Card view={albumView({ cover: PLANNED, cover_now: NOW })} />,
+		);
+
+		await user.click(await screen.findByRole("button", { name: "Current" }));
+		await user.click(screen.getByRole("button", { name: "keep this cover" }));
+
+		await vi.waitFor(() => expect(latest?.draft.cover).toBe(OWNER_PATH));
+		expect(puts(fake.calls)).toHaveLength(1);
+		expect(
+			fake.calls
+				.filter((c) => c.method === "GET")
+				.map((c) => new URL(c.url).pathname),
+		).toEqual([NOW.url]);
+		expect(screen.getByRole("button", { name: "New" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(image()).toHaveAttribute("src", BLOB);
+
+		await user.click(screen.getByRole("button", { name: "Current" }));
+		expect(
+			screen.queryByRole("button", { name: "keep this cover" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("says so when the cover the files have cannot be fetched to keep", async () => {
+		const fake = fakeFetch({});
+		restore = fake.restore;
+		const user = userEvent.setup();
+		renderWithProviders(
+			<Card view={albumView({ cover: PLANNED, cover_now: NOW })} />,
+		);
+
+		await user.click(await screen.findByRole("button", { name: "Current" }));
+		await user.click(screen.getByRole("button", { name: "keep this cover" }));
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"the cover could not be uploaded",
+		);
+		expect(puts(fake.calls)).toEqual([]);
+		expect(latest?.draft.cover ?? null).toBeNull();
+	});
+
 	it("takes an image dropped on the cover", async () => {
 		const fake = serveUpload({ passes: true, problem: null });
 		restore = fake.restore;

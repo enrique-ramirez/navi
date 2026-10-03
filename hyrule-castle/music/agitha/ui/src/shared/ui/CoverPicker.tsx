@@ -29,6 +29,7 @@ export function CoverPicker({
 	pickLabel,
 	disabled = false,
 	undo,
+	keep,
 	onFile,
 }: {
 	title: string;
@@ -45,6 +46,8 @@ export function CoverPicker({
 	disabled?: boolean;
 	/** The way back from a picked image, shown beside the new cover's size. */
 	undo?: { label: string; run: () => void } | null;
+	/** Makes the cover the album has now the new one, shown beside its size; answers as `onFile` does. */
+	keep?: { label: string; run: () => Promise<string | null> } | null;
 	/** Takes the image; answers the sentence to show where it was refused, else `null`. */
 	onFile: (file: File | null | undefined) => Promise<string | null>;
 }) {
@@ -56,12 +59,16 @@ export function CoverPicker({
 	const side = sides ? chosenSide : "next";
 	const shown = side === "now" ? now : next;
 
-	async function take(file: File | null | undefined) {
-		if (disabled) return;
+	async function settle(taking: Promise<string | null>) {
 		setError(null);
-		const refusal = await onFile(file);
+		const refusal = await taking;
 		if (refusal !== null) setError(refusal);
 		else setSide("next");
+	}
+
+	async function take(file: File | null | undefined) {
+		if (disabled) return;
+		await settle(onFile(file));
 	}
 
 	return (
@@ -149,6 +156,18 @@ export function CoverPicker({
 							{" · "}
 							<button type="button" className={styles.link} onClick={undo.run}>
 								{undo.label}
+							</button>
+						</>
+					)}
+					{side === "now" && now && keep && !disabled && (
+						<>
+							{" · "}
+							<button
+								type="button"
+								className={styles.link}
+								onClick={() => void settle(keep.run())}
+							>
+								{keep.label}
 							</button>
 						</>
 					)}
