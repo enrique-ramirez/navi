@@ -436,8 +436,8 @@ def edition_fields(release: dict) -> list[str]:
 
 
 def folder_artist_name(credit: list[dict], mb) -> str:
-    """The name the artist folder is built from: the artist's own, not the credited one, converted to ASCII."""
-    return ascii_.to_ascii(artists.own_name(credit, mb))
+    """The name the artist folder is built from: the credited one, as `ALBUMARTIST` holds it, converted to ASCII."""
+    return ascii_.to_ascii(artists.credited_name(credit, mb))
 
 
 def _archive_hold(failures: Sequence[tuple[str, str]], image_plan: images.ImagePlan) -> str:

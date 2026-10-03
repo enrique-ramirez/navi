@@ -103,9 +103,9 @@ def _rederive_destination(plan: Plan, release: dict, release_group: dict, pairs:
     artist folder falls back to `release` at all, and only when an edit
     touched `albumartist` or `albumartistsort`.
 
-    `artist_name` is the name `plan_album` builds the folder from, which
-    `ALBUMARTIST` (the credited name) is not always. An edit to
-    `albumartistsort` alone pairs the edited sort name with it.
+    `artist_name` is the name `plan_album` builds the folder from, the
+    credited one. An edit to `albumartistsort` alone pairs the edited sort
+    name with it.
     """
     first = plan.files[0]
     family0 = family_by_source[first.source]
@@ -159,7 +159,7 @@ def lay_edits(plan: Plan, edits: dict, release: dict, release_group: dict, pairs
     with the tag it is supposed to follow.
 
     `edition` is the folder suffix the plan already carries, kept when an
-    edit re-derives the folder. `artist_name` is the artist's current name,
+    edit re-derives the folder. `artist_name` is the credited name,
     ASCII-converted as `plan_album` does (see `_rederive_destination`).
     `created` is the earlier job's images `plan_album` was given, so the
     second sort deletes them as the first did. The second sort lays

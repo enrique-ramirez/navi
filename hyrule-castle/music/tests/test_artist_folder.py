@@ -1,11 +1,10 @@
-"""The artist folder is the artist's own name, the artist tags the credited one, both romanized.
+"""The artist folder and the artist tags are the credited name, romanized.
 
-The folder is built from each credited artist's current MusicBrainz name,
-joined by the credit's join phrases, and not from the name the release
-credits them under. `ARTIST` and `ALBUMARTIST` keep the credited name. A
-name not in the Latin script is replaced by the artist's primary alias with
-locale `en`, artist by artist, in the folder and in both artist tags. The
-sort fields stay as MusicBrainz gives them.
+The folder is built from the name the release credits, joined by the
+credit's join phrases, as `ALBUMARTIST` holds it, and not from the artist's
+current MusicBrainz name. A name not in the Latin script is replaced by the
+artist's primary alias with locale `en`, artist by artist, in the folder and
+in both artist tags. The sort fields stay as MusicBrainz gives them.
 
 Everything goes through `plan_album` against `test_check`'s fake MusicBrainz
 and Cover Art Archive, which here also answers artist lookups. Aliases are
@@ -149,41 +148,51 @@ class _ArtistPlanning(_Planning):
         self.assertEqual(plan.files[0].target["artistsort"], [artistsort])
 
 
-class TheArtistsOwnName(_ArtistPlanning):
-    """Criterion 51: the folder is the artist's current name, the tags the name on the credit."""
+class TheCreditedName(_ArtistPlanning):
+    """Criterion 51: the folder is the name on the credit, as the album artist tag is."""
 
-    def test_red_and_blue_credited_to_stefani_goes_under_lady_gaga_and_its_tags_say_stefani(self):
+    def test_red_and_blue_credited_to_stefani_goes_under_stefani_as_its_tags_say(self):
         plan = self.plan_credit(
             credit(("Stefani", "", GAGA)), [GAGA], title="Red and Blue", date="2006",
             **{"release-group": {"id": builders.RELEASE_GROUP_ID, "title": "Red and Blue",
                                  "first-release-date": "2006", "primary-type": "EP",
                                  "secondary-types": []}})
-        self.assertPlanned(plan, "L/Lady Gaga/(2006) [EP] Red and Blue",
+        self.assertPlanned(plan, "S/Stefani/(2006) [EP] Red and Blue",
                            artist="Stefani", albumartist="Stefani", artistsort="Lady Gaga")
 
-    def test_two_artists_are_each_named_by_their_own_name_joined_by_the_credits_join_phrase(self):
+    def test_two_artists_are_each_named_as_credited_joined_by_the_credits_join_phrase(self):
         # Only the first artist is credited under another name, so a folder
-        # built from the credited names shows as `Stefani feat. ...`.
+        # built from the artists' own names shows as `Lady Gaga feat. ...`.
         plan = self.plan_credit(
             credit(("Stefani", " feat. ", GAGA), ("Beyoncé", "", BEYONCE)), [GAGA, BEYONCE])
-        self.assertPlanned(plan, "L/Lady Gaga feat. Beyoncé/(2010) Disintegration",
+        self.assertPlanned(plan, "S/Stefani feat. Beyoncé/(2010) Disintegration",
                            artist="Stefani feat. Beyoncé", albumartist="Stefani feat. Beyoncé",
                            artistsort="Lady Gaga feat. Beyoncé")
 
-    def test_the_article_rule_reads_the_artists_own_name_and_sort_name(self):
-        # Credited without the article: only the artist's own name,
-        # `Die Toten Hosen`, is its sort name with the article moved.
-        plan = self.plan_credit(credit(("Toten Hosen", "", HOSEN)), [HOSEN])
-        self.assertPlanned(plan, "T/Toten Hosen, Die/(2010) Disintegration",
-                           artist="Toten Hosen", albumartist="Toten Hosen", artistsort="Toten Hosen, Die")
+    def test_the_article_rule_reads_the_credited_name_against_the_sort_name(self):
+        # The sort name moves the article of the band's own name. Credited
+        # with the article, the folder takes the sort name; credited
+        # without, the credit has no article to move.
+        cases = {
+            "Die Toten Hosen": "T/Toten Hosen, Die/(2010) Disintegration",
+            "Toten Hosen": "T/Toten Hosen/(2010) Disintegration",
+        }
+        for credited, destination in cases.items():
+            with self.subTest(credited):
+                plan = self.plan_credit(credit((credited, "", HOSEN)), [HOSEN])
+                self.assertPlanned(plan, destination,
+                                   artist=credited, albumartist=credited, artistsort="Toten Hosen, Die")
 
-    def test_an_own_name_starting_with_a_dot_takes_an_underscore_and_the_hash_letter(self):
-        # Criterion 21 on the artist's own name: credited without the dot,
-        # the folder still takes the underscore, and the tag keeps the credit.
+    def test_a_credited_name_starting_with_a_dot_takes_an_underscore_and_the_hash_letter(self):
+        # Criterion 21 on the credited name: credited without the dot,
+        # the folder has no dot to replace either.
         special = artist("1a0b0c0d-0000-4000-8000-0000000000c8", ".38 Special", ".38 Special")
-        plan = self.plan_credit(credit(("38 Special", "", special)), [special])
-        self.assertPlanned(plan, "#/_38 Special/(2010) Disintegration",
-                           artist="38 Special", albumartist="38 Special", artistsort=".38 Special")
+        cases = {".38 Special": "#/_38 Special/(2010) Disintegration", "38 Special": "#/38 Special/(2010) Disintegration"}
+        for credited, destination in cases.items():
+            with self.subTest(credited):
+                plan = self.plan_credit(credit((credited, "", special)), [special])
+                self.assertPlanned(plan, destination,
+                                   artist=credited, albumartist=credited, artistsort=".38 Special")
 
     def test_a_compilation_stays_under_various_artists_and_its_tracks_keep_their_own_artist(self):
         # The tracks' artist is replaced by its English alias like any other
@@ -211,19 +220,21 @@ class AnEnglishAliasForANameNotInLatin(_ArtistPlanning):
         self.assertPlanned(plan, f"#/{OBLOMOV_RU}/(2010) Disintegration",
                            artist=OBLOMOV_RU, albumartist=OBLOMOV_RU, artistsort=OBLOMOV["sort-name"])
 
-    def test_billie_eilish_credited_in_katakana_goes_under_her_own_name(self):
-        # Her own name is Latin, so the folder is that by criterion 51
-        # whatever her aliases. The katakana credit becomes her English
-        # alias where she has one, and stays where she has none.
+    def test_billie_eilish_credited_in_katakana_goes_under_what_her_tags_say(self):
+        # The katakana credit becomes her English alias where she has one,
+        # and stays where she has none, in the tags and in the folder: her
+        # own name, which is Latin, names neither.
         cases = {
             "with an English alias": (artist(BILLIE_ID, "Billie Eilish", "Eilish, Billie",
-                                             aliases=(("Billie Eilish", "en", True),)), "Billie Eilish"),
-            "without one": (artist(BILLIE_ID, "Billie Eilish", "Eilish, Billie"), BILLIE_KATAKANA),
+                                             aliases=(("Billie Eilish", "en", True),)),
+                                      "Billie Eilish", "B/Billie Eilish"),
+            "without one": (artist(BILLIE_ID, "Billie Eilish", "Eilish, Billie"),
+                            BILLIE_KATAKANA, f"#/{BILLIE_KATAKANA}"),
         }
-        for case, (billie, tag) in cases.items():
+        for case, (billie, tag, folder) in cases.items():
             with self.subTest(case):
                 plan = self.plan_credit(credit((BILLIE_KATAKANA, "", billie)), [billie])
-                self.assertPlanned(plan, "B/Billie Eilish/(2010) Disintegration",
+                self.assertPlanned(plan, f"{folder}/(2010) Disintegration",
                                    artist=tag, albumartist=tag, artistsort="Eilish, Billie")
 
     def test_two_artists_are_replaced_one_by_one_and_the_join_phrase_is_kept(self):
@@ -297,19 +308,18 @@ HOSEN = artist("1a0b0c0d-0000-4000-8000-0000000000c7", "Die Toten Hosen", "Toten
 class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
     """After an owner's edit, the folder takes the sort name the files will carry.
 
-    An edit to `albumartistsort` alone builds the folder from the artist's
-    current name, never from `ALBUMARTIST`, which holds
-    the credited name, and reads the edited sort name by the article rule.
-    An edit to `albumartist` builds it from what the owner typed.
+    An edit to `albumartistsort` alone builds the folder from the credited
+    name, as `ALBUMARTIST` holds it, and reads the edited sort name by the
+    article rule. An edit to `albumartist` builds it from what the owner typed.
     """
 
-    def test_an_edit_to_anything_but_the_album_artist_keeps_the_artists_own_name(self):
+    def test_an_edit_to_anything_but_the_album_artist_keeps_the_credited_name(self):
         # The sort name is edited to one that moves no article, so the
         # folder has no reason to take it either way.
         cases = {
-            "albumartistsort": ({"albumartistsort": ["Germanotta, Stefani"]}, "L/Lady Gaga/(2006) [EP] Red and Blue"),
-            "album": ({"album": ["Red & Blue"]}, "L/Lady Gaga/(2006) [EP] Red & Blue"),
-            "date": ({"date": ["2007"]}, "L/Lady Gaga/(2007) [EP] Red and Blue"),
+            "albumartistsort": ({"albumartistsort": ["Germanotta, Stefani"]}, "S/Stefani/(2006) [EP] Red and Blue"),
+            "album": ({"album": ["Red & Blue"]}, "S/Stefani/(2006) [EP] Red & Blue"),
+            "date": ({"date": ["2007"]}, "S/Stefani/(2007) [EP] Red and Blue"),
         }
         for field, (edit, destination) in cases.items():
             with self.subTest(field):
@@ -317,15 +327,15 @@ class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
                 self.assertEqual((plan.destination, plan.problems), (destination, []))
                 self.assertEqual(plan.files[0].target["albumartist"], ["Stefani"])
 
-    def test_a_sort_edit_is_read_by_the_article_rule_against_the_artists_own_name(self):
-        # `Lady` is not an article, so `Gaga, Lady` has nothing to move.
+    def test_a_sort_edit_is_read_by_the_article_rule_against_the_credited_name(self):
+        # `Gaga, Lady` moves no word of `Stefani`, so it has nothing to move.
         # The last case is the one only a rebuilt folder passes: MusicBrainz
         # does not move the article there, so the plan starts under `T/`
         # and only the owner's sort name sends it to `S/`.
         strokes_unmoved = artist(STROKES["id"], "The Strokes", "The Strokes")
         cases = {
             "Red and Blue, sort edited to Gaga, Lady": (
-                credit(("Stefani", "", GAGA)), GAGA, "Gaga, Lady", "L/Lady Gaga/(2006) [EP] Red and Blue",
+                credit(("Stefani", "", GAGA)), GAGA, "Gaga, Lady", "S/Stefani/(2006) [EP] Red and Blue",
                 RED_AND_BLUE),
             "The Strokes, sort edited to The Strokes": (
                 credit(("The Strokes", "", STROKES)), STROKES, "The Strokes", "T/The Strokes/(2010) Disintegration",
@@ -344,27 +354,27 @@ class AnOwnersEditThatMovesTheAlbum(_ArtistPlanning):
                 self.assertEqual({str(Path(f.destination).parent) for f in plan.files}, {destination})
                 self.assertEqual(plan.files[0].target["albumartistsort"], [sort_name])
 
-    def test_a_sort_edit_builds_the_folder_from_the_artists_own_name_not_the_credited_one(self):
+    def test_a_sort_edit_builds_the_folder_from_the_credited_name_not_the_artists_own(self):
         # Credited without the article, so the article rule read against
-        # `ALBUMARTIST` gives `T/Toten Hosen`, and a folder kept as planned
-        # gives `T/Toten Hosen, Die`. Only the band's own name gives `D/`.
+        # `ALBUMARTIST` gives `T/Toten Hosen`. The band's own name would
+        # give `D/Die Toten Hosen`.
         plan = self.plan_credit(credit(("Toten Hosen", "", HOSEN)), [HOSEN],
                                 edit={"albumartistsort": ["Die Toten Hosen"]})
-        self.assertEqual((plan.destination, plan.problems), ("D/Die Toten Hosen/(2010) Disintegration", []))
+        self.assertEqual((plan.destination, plan.problems), ("T/Toten Hosen/(2010) Disintegration", []))
         self.assertEqual(plan.files[0].target["albumartist"], ["Toten Hosen"])
 
-    def test_a_sort_edit_keeps_the_folder_a_name_not_in_latin_was_given_whatever_the_sort(self):
-        # The folder is rebuilt from the artist's own name, and in both
-        # cases `ALBUMARTIST` is something else. Her own name is Latin and
-        # the katakana credit has no English alias to take, so the tag keeps
-        # the katakana. His own name gives way to his English alias, and the
-        # credit is Latin, so the tag keeps it.
+    def test_a_sort_edit_keeps_the_folder_the_album_artist_tag_names_whatever_the_sort(self):
+        # The folder is rebuilt from what `ALBUMARTIST` holds, and in both
+        # cases the artist's own name is something else. The katakana
+        # credit has no English alias to take, so the tag and the folder
+        # keep the katakana. The other credit is Latin, so both keep it,
+        # though his own name would give way to his English alias.
         billie = artist(BILLIE_ID, "Billie Eilish", "Eilish, Billie")
         cases = {
             "katakana credit with no English alias": (
-                credit((BILLIE_KATAKANA, "", billie)), [billie], "B/Billie Eilish/(2010) Disintegration"),
+                credit((BILLIE_KATAKANA, "", billie)), [billie], f"#/{BILLIE_KATAKANA}/(2010) Disintegration"),
             "Latin credit of an artist with an English alias": (
-                credit(("Uematsu", "", UEMATSU)), [UEMATSU], "N/Nobuo Uematsu/(2010) Disintegration"),
+                credit(("Uematsu", "", UEMATSU)), [UEMATSU], "U/Uematsu/(2010) Disintegration"),
         }
         for case, (release_credit, artists, destination) in cases.items():
             for sort_name in ("Owner, Sort", "Eilish, Billie", "Billie Eilish", "Uematsu, Nobuo"):

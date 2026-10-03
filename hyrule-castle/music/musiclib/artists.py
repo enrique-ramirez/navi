@@ -105,12 +105,7 @@ def romanized(name: str, artist_id: str | None, client: MusicBrainz) -> str:
 
 
 def credited_name(credit: list[dict], client: MusicBrainz) -> str:
-    """The credit as joined for `ARTIST` and `ALBUMARTIST`: each credited name, in its English alias where not Latin."""
+    """The credit as joined for `ARTIST`, `ALBUMARTIST` and the artist folder: each credited name, in its English alias where not Latin."""
     return "".join(romanized(part["name"], part.get("artist", {}).get("id"), client) + part.get("joinphrase", "")
                    for part in credit)
 
-
-def own_name(credit: list[dict], client: MusicBrainz) -> str:
-    """The credit as joined for the artist folder: each artist's own name, in its English alias where not Latin."""
-    return "".join(romanized(part["artist"]["name"], part["artist"].get("id"), client) + part.get("joinphrase", "")
-                   for part in credit)
