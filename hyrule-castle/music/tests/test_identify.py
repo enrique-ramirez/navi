@@ -260,6 +260,20 @@ class ExistingReleaseId(IdentifyTestCase):
         self.assertEqual(server.searches(), [])
         self.assertEqual(server.fetched(), [TAGGED])
 
+    def test_the_tagged_release_says_whether_its_credit_is_the_files_artist(self) -> None:
+        # The page reads a release whose artist was never compared as one that differs.
+        server = Server(releases=(release_json(TAGGED, [[200, 180, 240]]),))
+        for artist, agrees in (("Nine Inch Nails", True), ("Nirvana", False)):
+            with self.subTest(artist=artist):
+                self.forget()
+                tracks = self.tagged([200, 180, 240])
+                for track in tracks:
+                    track.tags["albumartist"] = [artist]
+                    track.tags["artist"] = [artist]
+                result = self.identify(unit(self.album, tracks), server)
+                self.assertEqual(result.status, "certain")
+                self.assertEqual([c.artist_agrees for c in result.candidates], [agrees])
+
     def test_a_duration_20_seconds_off_is_review_still_without_a_search(self) -> None:
         # The titles agree, so the limit is 15 s, and 20 s is past it.
         server = Server(releases=(release_json(TAGGED, [[200, 180, 240]]),))
