@@ -429,5 +429,8 @@
 	"artist.hideTags": "Ocultar etiquetas",
 	"library.coverNext": "Portada al guardar",
 	"library.batchRunning": "Guardando · {done} de {of} álbumes escritos",
-	"library.batchEnded": "{done} de {of} álbumes escritos · {failed} fallaron"
+	"library.batchEnded": "{done} de {of} álbumes escritos · {failed} fallaron",
+	"library.delete": "Borrar álbum",
+	"library.deleteConfirm": "¿Borrar {path}? Sus {n} pistas ({size}), su portada y sus extras se borran para siempre y no se pueden recuperar.",
+	"library.deleteFailed": "no se pudo borrar el álbum"
 }

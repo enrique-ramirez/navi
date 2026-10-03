@@ -844,6 +844,13 @@ export interface AlbumJob {
 	state: JobState;
 }
 
+/** `POST /api/library/delete`: the album folder goes for good, with its extras and the folders it leaves empty. */
+export interface AlbumDeleted {
+	deleted: string;
+	/** Why its extras could not be deleted, where they could not; `null` otherwise. */
+	note: string | null;
+}
+
 /** `POST /api/library/match`. */
 export interface MatchRequest {
 	/** Library-relative album path. */

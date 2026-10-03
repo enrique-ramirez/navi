@@ -450,6 +450,10 @@ export const en = {
 	"library.coverNext": "Cover once saved",
 	"library.batchRunning": "Saving · {done} of {of} albums written",
 	"library.batchEnded": "{done} of {of} albums written · {failed} failed",
+	"library.delete": "Delete album",
+	"library.deleteConfirm":
+		"Delete {path}? Its {n} tracks ({size}), its cover and its extras are deleted for good and can't be brought back.",
+	"library.deleteFailed": "the album could not be deleted",
 } as const;
 
 export type Phrase = keyof typeof en;

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftRight, ScanSearch, Undo2 } from "lucide-react";
+import { ArrowLeftRight, ScanSearch, Trash2, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { describeEncoding } from "@/domain/album/describeEncoding";
 import {
@@ -22,13 +22,14 @@ import {
 import { applyEdits, type PanelTrack } from "@/domain/library/shared";
 import { ALBUM_TAGS, tagRows } from "@/domain/library/tagRows";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
-import { postMatch, Refused } from "@/shared/api/library";
+import { postDelete, postMatch, Refused } from "@/shared/api/library";
 import type { DraftEdit, LibraryJob } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import page from "@/shared/styles/albumPage.module.css";
 import bar from "@/shared/styles/reviewBar.module.css";
 import detail from "@/shared/styles/trackDetail.module.css";
 import { Alert } from "@/shared/ui/Alert";
+import { Confirm } from "@/shared/ui/Confirm";
 import { FactsList } from "@/shared/ui/FactsList";
 import { SideSummary } from "@/shared/ui/SideSummary";
 import { TrackRows } from "@/shared/ui/TrackRows";
@@ -122,6 +123,27 @@ export function LibraryAlbum({
 			// The album is read-only from now on; what comes back to must not be the copy cached before.
 			await queryClient.invalidateQueries({ queryKey: albumKey, exact: true });
 			await navigate({ to: "/drops/$drop/albums/$n", params: { drop, n } });
+		},
+	});
+
+	const [asking, setAsking] = useState(false);
+	const deleting = useMutation({
+		mutationFn: postDelete,
+		onSuccess: async () => {
+			// Nothing is left to save, and nothing to ask about on the way out.
+			flow.discard();
+			const artistKey = libraryArtistQuery(letter, artist).queryKey;
+			const albums = queryClient.getQueryData<{ albums: unknown[] }>(artistKey)
+				?.albums.length;
+			// The artist folder goes with its last album, so the page goes to the letter instead.
+			await (albums === 1
+				? navigate({ to: "/library/$letter", params: { letter } })
+				: navigate({
+						to: "/library/$letter/$artist",
+						params: { letter, artist },
+					}));
+			queryClient.removeQueries({ queryKey: albumKey });
+			await queryClient.invalidateQueries({ queryKey: ["library"] });
 		},
 	});
 
@@ -243,6 +265,18 @@ export function LibraryAlbum({
 						</button>
 						<button
 							type="button"
+							className={bar.danger}
+							disabled={readOnly || deleting.isPending}
+							onClick={() => {
+								deleting.reset();
+								setAsking(true);
+							}}
+						>
+							<Trash2 size={14} aria-hidden="true" />
+							{t("library.delete")}
+						</button>
+						<button
+							type="button"
 							className={bar.ghost}
 							disabled={readOnly || isEmpty(draft)}
 							onClick={flow.discard}
@@ -289,6 +323,13 @@ export function LibraryAlbum({
 						}}
 					/>
 				)}
+				{deleting.isError && (
+					<Alert>
+						{deleting.error instanceof Refused && deleting.error.sentence
+							? deleting.error.sentence
+							: t("library.deleteFailed")}
+					</Alert>
+				)}
 				{matching.isError && (
 					<Alert>
 						{matching.error instanceof Refused && matching.error.sentence
@@ -298,6 +339,24 @@ export function LibraryAlbum({
 				)}
 				<FlowNotices flow={flow} failed={genres.isError} onReload={reload} />
 			</div>
+
+			{asking && (
+				<Confirm
+					message={t("library.deleteConfirm", {
+						path: view.path,
+						n: tracks.length,
+						size: formatSize(
+							tracks.reduce((sum, track) => sum + track.size, 0),
+						),
+					})}
+					confirmLabel={t("library.delete")}
+					onCancel={() => setAsking(false)}
+					onConfirm={() => {
+						setAsking(false);
+						deleting.mutate(view.path);
+					}}
+				/>
+			)}
 
 			<div className={page.album}>
 				<SideSummary

@@ -1,5 +1,6 @@
 import { getJson } from "./getJson";
 import type {
+	AlbumDeleted,
 	CoverUpload,
 	Draft,
 	FolderRemoved,
@@ -90,6 +91,10 @@ export async function putLibraryCover(file: File): Promise<CoverUpload> {
 	if (!response.ok) throw new Refused(response.status, answer?.error ?? null);
 	return answer as CoverUpload;
 }
+
+/** Deletes a library album for good. */
+export const postDelete = (path: string) =>
+	postJson<AlbumDeleted>("/api/library/delete", { path });
 
 /** The drop album a library album is matched in: a new one, or the one already open. */
 export const postMatch = (path: string) =>

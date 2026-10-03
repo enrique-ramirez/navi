@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, NamedTuple
 from urllib.parse import unquote, urlsplit
 
-from . import approve, covers, decisions, drops, editor, library, matches, order, queue, ranges, review, saves, state
+from . import approve, covers, decisions, deletes, drops, editor, library, matches, order, queue, ranges, review, saves, state
 from .paths import climbs, names_nothing_real
 from .refusal import Refusal
 
@@ -81,6 +81,7 @@ ROUTES: list[Route] = [
     Route("POST", re.compile(r"/api/library/preview"), editor.preview),
     Route("POST", re.compile(r"/api/library/save"), saves.save),
     Route("POST", re.compile(r"/api/library/match"), matches.start),
+    Route("POST", re.compile(r"/api/library/delete"), deletes.delete),
     Route("GET", re.compile(r"/api/library/jobs/([^/]+)"), saves.show),
     Route("GET", re.compile(r"/api/library"), library.root_view),
     Route("GET", re.compile(r"/api/library/([^/]+)"), library.letter),

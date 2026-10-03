@@ -144,6 +144,8 @@ An album in the library is changed only through agitha's Library pages, never by
 
 A part whose tag did not change stays as it is. The artist folder is built from the name as written, with the fixed list of leading articles, as for an artist MusicBrainz does not know: a hand edit never looks the name up. The folder's type prefix (`[EP]`, `[Single]`, `[Mixtape]`, `[Live]`) and its edition suffix are MusicBrainz's. A hand edit keeps them as found, and a wrong release is fixed by a match. Artist and letter folders that a move leaves empty are removed, and the album's extras move to the new path.
 
+**Delete album.** The album page deletes the album for good, after asking: its folder, every file in it and its extras. Nothing is set aside, so there is no undo. The artist and letter folders it leaves empty go too. An album being saved or open in review cannot be deleted. `memory.json` is left as it was.
+
 **Empty folders.** The Library tree removes an artist or album folder only where it holds nothing at all, hidden files included. The letter folder goes with its last artist. A folder that holds anything is refused with `not empty: <path>`.
 
 **Not remembered.** `memory.json` belongs to the review alone. A hand edit, a batch, a cover or a swap leaves it as it was, so a later match plans from MusicBrainz and from what earlier reviews remembered, and shows a hand-edited value as a change like any other.

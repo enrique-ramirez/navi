@@ -24,8 +24,8 @@ if TYPE_CHECKING:
 #: A drop of one album, which is the first.
 N = "01"
 
-#: Held from the look for an open match to the album.json that makes the new one open.
-_starting = threading.Lock()
+#: Held from the look for an open match to the album.json that makes the new one open, and while an album is deleted.
+starting = threading.Lock()
 
 
 def start(request: Handler, match: re.Match[str], config: Config) -> None:
@@ -34,7 +34,7 @@ def start(request: Handler, match: re.Match[str], config: Config) -> None:
         raise Refusal(400, 'The body must be an object with the "path" of a library album.')
     path = body["path"]
     folder = library.open_album(config, path)
-    with _starting:
+    with starting:
         if request.server.queue.busy_library(path):
             raise Refusal(409, BEING_SAVED)
         found = drops.open_match(config, path)

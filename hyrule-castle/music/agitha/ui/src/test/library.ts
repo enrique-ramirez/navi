@@ -121,6 +121,8 @@ export interface Writes {
 	save?: Respond;
 	/** The job `JOB` as its route answers it; with none, 404. */
 	job?: Answer<LibraryJob>;
+	/** With none, `200` naming the album posted as deleted. */
+	delete?: Respond;
 }
 
 /**
@@ -137,6 +139,10 @@ export function editingHandlers(writes: Writes = {}) {
 			writes.save
 				? writes.save()
 				: Response.json({ job: JOB }, { status: 202 }),
+		"POST /api/library/delete": async (req: Request) =>
+			writes.delete
+				? writes.delete()
+				: Response.json({ deleted: (await req.json()).path, note: null }),
 		"GET /api/library/jobs/:id": (req: Request) =>
 			respond(
 				new URL(req.url).pathname.endsWith(`/${JOB}`) ? writes.job : undefined,
