@@ -158,7 +158,6 @@ describe("LibraryArtist", () => {
 			await expand(user, "Ecliptica");
 			for (const title of TITLES)
 				expect(trackBox("Ecliptica", title)).toBeChecked();
-			// Every tag of ten tracks is a long list, so it waits to be asked for.
 			expect(queryTag("Genre")).toBeNull();
 
 			await user.click(screen.getByRole("button", { name: "Show all tags" }));
@@ -422,7 +421,6 @@ describe("LibraryArtist", () => {
 			const { user } = openArtist();
 			await shownArtist();
 
-			// Ten tracks: eight carry power metal, two rock, one each of the other two.
 			expect(namesOf()).toEqual([
 				"power metal8/10",
 				"rock2/10",
@@ -435,7 +433,6 @@ describe("LibraryArtist", () => {
 			await user.click(albumBox("For the Sake of Revenge"));
 
 			expect(namesOf()).toEqual(["power metal", "heavy metal1/4"]);
-			// The one they all carry is marked as such, and no other.
 			expect(genres().map((chip) => chip.hasAttribute("data-all"))).toEqual([
 				true,
 				false,
@@ -540,7 +537,6 @@ describe("LibraryArtist", () => {
 			await shownArtist();
 			await user.click(screen.getByRole("tab", { name: "Metadata" }));
 
-			// The row keeps the key as its name; the words are beside it.
 			expect(tag("APIC:")).toHaveTextContent("APIC: (embedded picture)");
 			expect(tag("POPM:Windows Media Player 9 Series")).toHaveTextContent(
 				"(rating)",

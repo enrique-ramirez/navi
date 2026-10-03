@@ -9,12 +9,15 @@ import { describeQuality } from "@/domain/album/summaryFacts";
 import { genresQuery, libraryArtistQuery } from "@/domain/library/libraryQuery";
 import {
 	applyEdits,
+	GENRE,
 	type PanelTrack,
 	sharedTags,
 } from "@/domain/library/shared";
 import type {
+	DraftEdit,
 	JobAlbum,
 	LibraryAlbumSummary,
+	TagNames,
 	TrackRef,
 } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -44,10 +47,7 @@ const LOCKED = [
 	"Disc subtitle",
 ];
 
-// The first tab of the tags: what says which album and which track a file is. Every other tag is under the second.
-const ALBUM_DATA = [...LOCKED, "Genre", "Media", "Compilation"];
-
-const GENRE = "Genre";
+const ALBUM_DATA = [...LOCKED, GENRE, "Media", "Compilation"];
 
 type Tab = "album" | "meta";
 
@@ -57,11 +57,7 @@ const keyOf = (track: TrackRef) => `${track.album}\n${track.path}`;
 const ended = (album: JobAlbum) =>
 	album.state === "done" || album.state === "failed";
 
-/** The genres of the tracks given, most carried first, each with how many carry it. */
-function genresOf(
-	tracks: PanelTrack[],
-	names: Parameters<typeof sharedTags>[1],
-) {
+function genresOf(tracks: PanelTrack[], names: TagNames) {
 	return (
 		sharedTags(tracks, names).find((row) => row.key === GENRE)?.values ?? []
 	);
@@ -79,7 +75,6 @@ export function LibraryArtist({
 	const queryClient = useQueryClient();
 	const artistQuery = useQuery(libraryArtistQuery(letter, artist));
 	const genres = useQuery(genresQuery());
-	// Every track is selected until it is taken out, as on an album's page.
 	const [unselected, setUnselected] = useState<string[]>([]);
 	const [open, setOpen] = useState<string[]>([]);
 	const [tagsShown, setTagsShown] = useState(false);
@@ -468,11 +463,10 @@ function AlbumRow({
 	album: LibraryAlbumSummary;
 	letter: string;
 	artist: string;
-	names: Parameters<typeof sharedTags>[1];
-	edits: Parameters<typeof applyEdits>[1];
+	names: TagNames;
+	edits: DraftEdit[];
 	isSelected: (key: string) => boolean;
 	readOnly: boolean;
-	/** Where the batch running, or the one that failed, stands on this album; left out where it does not write it. */
 	job?: JobAlbum;
 	isOpen: boolean;
 	onOpen: () => void;
@@ -488,7 +482,6 @@ function AlbumRow({
 	const after = applyEdits(own, edits, names);
 	const genres = genresOf(after, names);
 
-	// The album being written stays in sight while a long batch works down the list.
 	const row = useRef<HTMLLIElement>(null);
 	const busy = job?.state === "writing" || job?.state === "verifying";
 	useEffect(() => {

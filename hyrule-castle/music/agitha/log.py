@@ -18,7 +18,6 @@ WRITES.addHandler(logging.NullHandler())
 
 
 def configure() -> None:
-    """Sends the write log to stderr. `python -m agitha` calls it once; a test that wants the lines uses `assertLogs`."""
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(message)s"))
     WRITES.addHandler(handler)
@@ -31,11 +30,9 @@ def _one_line(value: Any) -> str:
 
 
 def write(action: str, target: Any, /, **detail: Any) -> None:
-    """Logs a change that landed; a `detail` that is `None` is left out."""
     words = [f"{key}={_one_line(value)}" for key, value in detail.items() if value is not None]
     WRITES.info(" ".join(["write", action, _one_line(target), *words]))
 
 
 def failed(action: str, target: Any, reason: Any) -> None:
-    """Logs a change that did not land, with why."""
     WRITES.warning(" ".join(["write", action, _one_line(target), "failed:", _one_line(reason)]))

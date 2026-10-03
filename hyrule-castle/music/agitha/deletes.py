@@ -1,9 +1,4 @@
-"""Delete album: a library album folder removed for good, with its extras.
-
-Nothing is kept: no copy is set aside and `memory.json` is not touched, so a
-later drop of the same release lays the edits a review remembered. The artist
-and letter folders the album leaves empty go too, as after a move.
-"""
+"""Delete album: a library album folder removed for good, with its extras."""
 
 from __future__ import annotations
 
@@ -21,7 +16,6 @@ if TYPE_CHECKING:
 
 
 def _size(folder: Path) -> tuple[int, int]:
-    """The files under `folder` and their bytes, a link counted as itself."""
     count = total = 0
     for parent, _dirs, names in os.walk(folder):
         for name in names:
@@ -35,12 +29,11 @@ def delete(request: Handler, match: re.Match[str], config: Config) -> None:
     if not (isinstance(body, dict) and isinstance(body.get("path"), str)):
         raise Refusal(400, 'The body must be an object with the "path" of a library album.')
     path = body["path"]
-    folder = library.open_album(config, path)
-    root = library.library_root(config)
-    # A folder reached through a link resolves to another name, and deleting it would delete what the link names.
-    if folder != root.joinpath(*path.split("/")):
+    parts = path.split("/")
+    if len(parts) != 3:
         raise Refusal(404, "No such folder.")
-    # Held as a match holds it, so no match begins over an album going away.
+    folder = library.open_unlinked(config, *parts)
+    root = library.library_root(config)
     with matches.starting:
         if request.server.queue.busy_library(path):
             raise Refusal(409, BEING_SAVED)

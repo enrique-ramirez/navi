@@ -44,9 +44,6 @@ const MOVED = `${SONATA}/(2008) Ecliptica`;
 const STALE = "the album changed since this page loaded";
 const NOT_READ_BACK = "02. My Land.flac did not read back as written.";
 
-// Ecliptica as the files hold it once the draft is written: every track's
-// genre is `power metal` alone, so My Land has lost `symphonic metal` and
-// Replica has gained a genre.
 function written(over: Partial<LibraryAlbum> = {}) {
 	const album = albumOf(over);
 	album.tracks[1]!.tags.genre = ["power metal"];
@@ -339,7 +336,6 @@ describe("SaveProgress", () => {
 			await vi.advanceTimersByTimeAsync(4_200);
 			expect(jobGets(page)).toBe(asked);
 			// Nothing brought the save back meanwhile.
-			// The cover's warning is a status too; the save's is the one that must be gone.
 			expect(screen.queryByText("Saving")).toBeNull();
 			expect(reviewButton()).toBeEnabled();
 		});

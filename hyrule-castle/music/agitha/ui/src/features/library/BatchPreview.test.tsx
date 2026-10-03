@@ -387,7 +387,6 @@ describe("BatchPreview", () => {
 				// Read-only is not empty: the tags of the selection stay on the page.
 				expect(tag("Genre")).toHaveTextContent("power metal 8/10");
 			}
-			// Each state is on its album's own row, and one line says how far the batch is.
 			expect(
 				within(albumBlock("Ecliptica")).getByText("done"),
 			).toBeInTheDocument();

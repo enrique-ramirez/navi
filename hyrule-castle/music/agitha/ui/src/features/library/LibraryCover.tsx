@@ -20,15 +20,9 @@ const shownOf = (check: CoverCheck, url: string): ShownCover => ({
 	problem: check.passes ? null : (check.problem ?? ""),
 });
 
-/** The address the album's cover is fetched from after `version` saves have written one over it. */
 export const versioned = (url: string, version: number) =>
 	version === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
 
-/**
- * The album's cover and the image that would replace it. The new image is
- * `cover`, the page's draft; the card keeps only its own preview address, and
- * hands it up with the draft so the review can show the image too.
- */
 export function LibraryCover({
 	current,
 	cover,

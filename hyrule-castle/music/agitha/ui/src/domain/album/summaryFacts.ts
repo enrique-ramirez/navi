@@ -10,7 +10,6 @@ import type { Fact } from "@/shared/ui/FactsList";
 
 type Translate = ReturnType<typeof useTranslate>["t"];
 
-/** `MP3 · lossy`, with the bit depth where the files share one. */
 export const describeQuality = (
 	summary: Pick<Summary, "format" | "lossless" | "bitDepth">,
 	t: Translate,
@@ -19,7 +18,6 @@ export const describeQuality = (
 		summary.bitDepth ? ` · ${t("file.bitDepth", { n: summary.bitDepth })}` : ""
 	}`;
 
-/** The rows the album's side column lists under its title. */
 export function summaryFacts(summary: Summary, t: Translate): Fact[] {
 	return [
 		{

@@ -69,7 +69,6 @@ const ICONS = {
 	failed: CircleAlert,
 };
 
-/** Where one album of a job stands, for the album's own row. */
 export function JobMark({ album }: { album: JobAlbum }) {
 	const { t } = useTranslate();
 	const Icon = ICONS[album.state];
@@ -81,7 +80,6 @@ export function JobMark({ album }: { album: JobAlbum }) {
 	);
 }
 
-/** How far the job is, in one line: each album says its own state on its row. */
 export function BatchProgress({ albums }: { albums: JobAlbum[] }) {
 	const { t } = useTranslate();
 	const done = albums.filter((album) => album.state === "done").length;

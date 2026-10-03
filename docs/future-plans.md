@@ -193,7 +193,39 @@ Two guards, because a USB dropout is the realistic failure here and it should fa
 
 **Watch heat and head parking.** The enclosure is sealed passive plastic with no fan, holding an enterprise 7200 RPM drive 24/7, which is a warmer combination than these cases are usually sold for. Stand it upright, keep it off the top of hyrule-castle, and put SMART attribute 194 on the same Kuma push monitor as the disk-usage check. Sustained above about 50 °C, add a fan. Separately, enclosures in this class spin down on idle and usually don't pass `hdparm -B`/`-S` through the bridge, so read `Load_Cycle_Count` after the first week and extrapolate against the drive's 600k rating.
 
-**Burn in every drive the week it arrives, not the week it gets used.** A SMART long test plus a `badblocks -wsv` write-verify pass is 24 to 48 hours on a 16 TB drive. Left until December, the November drive's 30-day return window closes before it is ever powered on, which is how you find a DOA disk with no recourse. The enclosure exists partly for this.
+**Burn in every drive the week it arrives, not the week it gets used.** The procedure below is about five days on a 24 TB drive. Left until December, the November drive's 30-day return window closes before it is ever powered on, which is how you find a DOA disk with no recourse. The enclosure exists partly for this.
+
+### Burn-in procedure
+
+Run it on hyrule-castle inside `tmux`. Address the disk as `/dev/disk/by-id/...` and never as `sdX`: step 5 destroys whatever it points at, and `sdX` names move between boots.
+
+1. **Inspect before powering on.** Photograph all six sides. Scratches, a scuffed label and mounting marks around the screw holes are harmless. A dent or crease in the top cover, dented corners, damage on the circuit board side, bent SATA pins or a lifted seal sticker mean return it unpowered. These are helium drives: the lid is thin and sealed with the platters close under it, and a drop is the damage no test rules out, so a dented drive goes back even if it would pass everything below. Let it reach room temperature.
+2. **Check the warranty.** Enter the serial on Seagate's or WD's warranty page. A second-hand unit from Amazon Remates de Almacén may carry no manufacturer warranty and no Seagate Rescue, in which case Amazon's 30-day return is the only recourse.
+3. **Check the bridge and take a baseline.** `lsusb`, confirm `uas` bound in `dmesg`, then save the full report:
+
+   ```sh
+   sudo smartctl -x -d sat /dev/disk/by-id/usb-... > smart-before.txt
+   ```
+
+   The serial matches the label. Attributes 5, 197 and 198 (reallocated, pending, offline uncorrectable) are zero, and so is 199 (CRC errors). Note power-on hours, and 191 (G-sense) where the drive reports it. Huge raw values on 1, 7 and 195 are normal on a Seagate. On first spin-up, clicking, grinding or repeated spin-up attempts mean stop and return.
+4. **On a Seagate, read the FARM log.** `sudo smartctl -l farm -d sat <disk>`, which needs smartmontools 7.4 or later and may not pass through every USB bridge. Used Seagates have been resold with SMART counters reset, and FARM survives the reset: power-on hours there far above the SMART figure mean return it. The helium pressure threshold field reads as not tripped.
+5. **Short self-test, then a full write and read-back.** `sudo smartctl -t short -d sat <disk>` takes two minutes. Then:
+
+   ```sh
+   sudo cryptsetup open --type plain --cipher aes-xts-plain64 --key-size 256 \
+     -d /dev/urandom <disk> burnin
+   sudo dd if=/dev/zero of=/dev/mapper/burnin bs=1M oflag=direct status=progress
+   sudo cmp /dev/zero /dev/mapper/burnin
+   sudo cryptsetup close burnin
+   ```
+
+   Zeros written through a throwaway dm-crypt key land on the platters as random data on every sector, and reading them back through the same mapping verifies all of it. `dd` ends with "No space left on device", which is the end of the disk and not an error. `cmp` passes when it prints `EOF on /dev/mapper/burnin`. Each direction is about a day and a half at 24 TB. This replaces `badblocks -wsv`, which runs four patterns, about eleven days at this size, and counts blocks in 32 bits, so with `-b 4096` it refuses anything over 16 TiB.
+6. **SMART long test.** `sudo smartctl -t long -d sat <disk>`, roughly 35 to 40 hours; `smartctl -c` prints the drive's own estimate. Enclosures in this class spin an idle drive down, which aborts the test, so poll `smartctl -a` every few minutes while it runs.
+7. **Diff against the baseline.** Save `smartctl -x` again as `smart-after.txt` and compare.
+
+Watch attribute 194 throughout; the 50 °C trigger above applies during burn-in too.
+
+Return the drive if 5, 197 or 198 is non-zero or grows, `dd` hits an I/O error, `cmp` reports a difference, either self-test fails, or FARM contradicts SMART. High but honest power-on hours on a second-hand drive are a judgment call.
 
 **The December assembly, in order, never below two copies.** Second drive into the NAS, create the pool single-disk, copy from the first drive over USB, verify with checksums, pull the first drive out of the enclosure, `zpool attach` to make it a mirror. The old external drive stays untouched as the third copy until the mirror has resilvered and scrubbed clean.
 

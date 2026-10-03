@@ -228,7 +228,6 @@ describe("LibraryAlbum", () => {
 				screen.getByRole("checkbox", { name: "Select all tracks" }),
 			).toBeChecked();
 			expect(tag("Genre")).toHaveTextContent("power metal 3/4");
-			// A tag one track alone carries is under that track, not among the album's.
 			expect(queryTag("TXXX:RIPPER")).toBeNull();
 			await user.click(
 				screen.getByRole("button", { name: /^8th Commandment/ }),

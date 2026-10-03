@@ -437,7 +437,6 @@ describe("folding the tree by hand", () => {
 describe("removing an empty folder", () => {
 	const REMOVE = "Remove the empty folder Sabaton";
 
-	// The letter S with Sabaton holding nothing, until `gone` says it was removed.
 	function withEmptySabaton(remove: () => Response) {
 		const state = { gone: false };
 		const page = openAt(

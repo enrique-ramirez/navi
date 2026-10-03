@@ -1,9 +1,5 @@
 """agitha's library, pruned: which folders read as empty, and `DELETE` of an artist or an album folder that is.
 
-Only a folder that holds nothing goes, by `os.rmdir`. A hidden file and an
-empty folder inside are both something. The letter folder goes with its last
-artist and is not removable by its own address.
-
 Each test has its own server over its own library at `<tmp>/shelf`, as
 `tests.test_agitha_save` does, since a removal changes it.
 """
@@ -29,7 +25,6 @@ MONO = "M/MONO (Jap)"
 MOGWAI = "M/Mogwai"
 #: The one artist under `N`, with nothing in it.
 NEUROSIS = "N/Neurosis"
-#: An album folder with nothing in it, beside one with a track.
 BARE = "M/Mogwai/(1997) Young Team"
 FULL = "M/Mogwai/(1999) Come On Die Young"
 
@@ -83,7 +78,6 @@ class RemoveCase(shelf_tests.LibraryCase):
         return got.status, json.loads(got.body)
 
     def refused(self, path: str, status: int, sentence: str) -> None:
-        """`DELETE` of `path` is answered `status` and `sentence`, and nothing on disk changed."""
         before = self.on_disk()
         self.assertEqual(self.delete(path), (status, {"error": sentence}))
         self.assertEqual(self.on_disk(), before)

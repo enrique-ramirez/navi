@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 #: A drop of one album, which is the first.
 N = "01"
 
-#: Held from the look for an open match to the album.json that makes the new one open, and while an album is deleted.
+#: Held from the look for an open match to the album.json that makes the new one open.
 starting = threading.Lock()
 
 

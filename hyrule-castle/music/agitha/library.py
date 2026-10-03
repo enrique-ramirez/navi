@@ -62,6 +62,13 @@ def open_folder(config: Config, *parts: str) -> Path:
     return target
 
 
+def open_unlinked(config: Config, *parts: str) -> Path:
+    folder = open_folder(config, *parts)
+    if folder != library_root(config).joinpath(*parts):
+        raise Refusal(404, "No such folder.")
+    return folder
+
+
 def open_album(config: Config, path: str) -> Path:
     """The album folder a library-relative `Letter/Artist/Album` path names; a 404 for anything else."""
     parts = path.split("/")
@@ -159,7 +166,6 @@ def root_view(request: Handler, match: re.Match[str], config: Config) -> None:
 
 
 def _is_empty(folder: Path) -> bool:
-    """Whether `folder` holds no entry at all, a hidden file included; a folder that cannot be listed is not empty."""
     try:
         with os.scandir(folder) as entries:
             return next(entries, None) is None
@@ -193,17 +199,10 @@ def artist(request: Handler, match: re.Match[str], config: Config) -> None:
 
 
 def remove(request: Handler, match: re.Match[str], config: Config) -> None:
-    """`DELETE` of an artist or an album folder that holds nothing: one `os.rmdir`, so nothing that holds a file can go.
-
-    An artist's letter folder goes with it where that was its last artist. An
-    album's artist folder stays.
-    """
+    """`DELETE` of an artist or an album folder that holds nothing: one `os.rmdir`, so nothing that holds a file can go."""
     parts = match.groups()
     path = "/".join(parts)
-    folder = library_root(config).joinpath(*parts)
-    # A folder reached through a link resolves to another name, and removing it would remove what the link names.
-    if open_folder(config, *parts) != folder:
-        raise Refusal(404, "No such folder.")
+    folder = open_unlinked(config, *parts)
     if not _is_empty(folder):
         raise Refusal(409, f"not empty: {path}")
     try:

@@ -111,7 +111,6 @@ export async function throughPolls(check: () => void, polls = 8) {
 	check();
 }
 
-/** The page once the album and the table of its tags are on it. */
 export async function shown(title = "Ecliptica") {
 	await screen.findByRole("heading", { name: new RegExp(title) });
 	await screen.findByRole("textbox", { name: "Tag key" });
@@ -139,7 +138,6 @@ const rowsOf = (name: string) =>
 		.filter((header) => header.firstChild?.textContent === name)
 		.map((header) => header.closest("tr") as HTMLElement);
 
-/** A tag's row, in the album's table or the one of the track on show. */
 export const queryTag = (name: string) => {
 	const [row, ...rest] = rowsOf(name);
 	if (rest.length > 0) throw new Error(`${name} has more than one row`);
@@ -151,18 +149,15 @@ export const tag = (name: string) => {
 	return row;
 };
 
-/** The table's mark on a tag the draft changes. */
 export const marked = (name: string) =>
 	within(tag(name)).queryByText("edited by you");
 
-/** The field a tag's new values are typed into. */
 export const newValue = (name: string) =>
 	within(tag(name)).getByRole("textbox", { name: `New ${name}` });
 
 export const reviewButton = () =>
 	screen.getByRole("button", { name: "Review changes" });
 
-/** One edit through the table, over the tracks selected: their Genre becomes `power metal` alone. */
 export async function setPowerMetal(user: ReturnType<typeof userEvent.setup>) {
 	const field = await screen.findByRole("textbox", { name: "New Genre" });
 	await user.clear(field);

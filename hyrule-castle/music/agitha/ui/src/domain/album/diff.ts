@@ -138,7 +138,6 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 		common(files.map((file) => nextOf(edits, file, key, neutralKeys))) !==
 			"differs";
 
-	// The album's row can only say the files differ now, so each track shows its own value as well.
 	const differsNow = (key: string) =>
 		common(files.map((file) => present(file.before[key]))) === "differs";
 

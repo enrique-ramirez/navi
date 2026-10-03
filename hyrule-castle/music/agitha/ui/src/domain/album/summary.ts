@@ -35,7 +35,6 @@ function audioOf(view: AlbumView) {
 
 export const summaryOf = (view: AlbumView) => summaryOfFiles(audioOf(view));
 
-/** What a set of audio files adds up to; `disc` is whatever tells one disc from another. */
 export function summaryOfFiles(
 	files: (Pick<
 		UploadedFile,

@@ -436,7 +436,6 @@ def edition_fields(release: dict) -> list[str]:
 
 
 def folder_artist_name(credit: list[dict], mb) -> str:
-    """The name the artist folder is built from: the credited one, as `ALBUMARTIST` holds it, converted to ASCII."""
     return ascii_.to_ascii(artists.credited_name(credit, mb))
 
 

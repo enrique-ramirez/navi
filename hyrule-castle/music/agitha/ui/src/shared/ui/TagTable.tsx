@@ -34,7 +34,6 @@ function ValueInput({
 }: {
 	row: TagRow;
 	label: string;
-	/** What to say where the files differ. */
 	differs: string;
 	onCommit: (values: string[]) => void;
 }) {
@@ -74,12 +73,6 @@ function ValueInput({
 	);
 }
 
-/**
- * A table of tags, each with the values the files hold and the values they
- * will hold, the second column typed into. The review of a drop and the
- * library's album page both edit through this; each brings its own rows and
- * says what an edit does.
- */
 export function TagTable({
 	rows,
 	label,
@@ -97,17 +90,13 @@ export function TagTable({
 	rows: TagRow[];
 	label: string;
 	editable: boolean;
-	/** The name a row is shown and spoken under. */
 	nameOf: (key: string) => string;
-	/** What hovering the name shows: the key as the file holds it. */
 	titleOf?: (key: string) => string;
-	/** What the table says with no rows. */
 	empty?: string;
 	/** The name of the field a new tag's key is typed into, where a page has two tables. */
 	addLabel?: string;
 	/** What a side says where the files differ on the tag; the table's own words where it answers nothing. */
 	describe?: (row: TagRow, side: "now" | "next") => string | undefined;
-	/** A refusal of the last edit, from whoever took it. */
 	error?: string | null;
 	/** The row's tag gets these values; `null` removes it. */
 	onSet: (row: TagRow, values: string[] | null) => void;

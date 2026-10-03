@@ -239,10 +239,8 @@ describe("LibraryCover", () => {
 			expect(added.getAttribute("src")).toBeTruthy();
 			expect(added).not.toHaveAttribute("src", SMALL.url);
 			expect(screen.getByText("1200 × 1200")).toBeVisible();
-			// The new image passes, so nothing warns beside it.
 			expect(warnings(SMALL.problem!)).toEqual([]);
 			expect(reviewButton()).toBeEnabled();
-			// The cover the album has is still there to look at, with its own size and warning.
 			await user.click(screen.getByRole("button", { name: "Current" }));
 			expect(current()).toHaveAttribute("src", SMALL.url);
 			expect(screen.getByText("480 × 480")).toBeVisible();
@@ -293,7 +291,6 @@ describe("LibraryCover", () => {
 			expect(uploads).toHaveLength(1);
 			expect(screen.getByText("1000 × 1400")).toBeVisible();
 			expect(warnings(TALL.problem!)).toHaveLength(1);
-			// The warning is the new image's: the current cover has none.
 			await user.click(screen.getByRole("button", { name: "Current" }));
 			expect(screen.getByText("600 × 600")).toBeVisible();
 			expect(warnings(TALL.problem!)).toEqual([]);

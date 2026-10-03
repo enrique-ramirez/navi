@@ -3,10 +3,8 @@ export type Side = string[] | null | "differs";
 
 export type Change = "same" | "changed" | "added" | "removed";
 
-/** Why a tag cannot be edited. `fixed` is one the server will not change and the page cannot say why. */
 export type Locked = "id" | "rating" | "binary" | "added" | "fixed";
 
-/** One row of the tag table. */
 export interface TagRow {
 	key: string;
 	now: Side;
@@ -20,7 +18,6 @@ export interface TagRow {
 
 export const BYTES = /\((\d+) bytes\)\s*$/;
 
-/** The size a binary frame shown as text ends with; `undefined` for any other value. */
 export const bytesOf = (value: string) => BYTES.exec(value)?.[1];
 
 export const formatValues = (values: string[]) => values.join("; ");

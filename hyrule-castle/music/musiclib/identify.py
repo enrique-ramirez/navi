@@ -437,7 +437,6 @@ def identify(
         try:
             release = mb.release(tagged_id)
             candidate = _candidate(tagged_id, release, unit, mb)
-            # The review shows whether the credit is the files' artist, as it does for a release a search found.
             _judge_artists([candidate], unit, mb)
         except MusicBrainzUnavailable:
             return Identification("unidentified", "musicbrainz unavailable", [])

@@ -92,7 +92,6 @@ export async function putLibraryCover(file: File): Promise<CoverUpload> {
 	return answer as CoverUpload;
 }
 
-/** Deletes a library album for good. */
 export const postDelete = (path: string) =>
 	postJson<AlbumDeleted>("/api/library/delete", { path });
 
@@ -100,7 +99,6 @@ export const postDelete = (path: string) =>
 export const postMatch = (path: string) =>
 	postJson<MatchRef>("/api/library/match", { path });
 
-/** Removes an empty artist or album folder; the server refuses one that holds anything, with its sentence. */
 export async function deleteLibraryFolder(
 	parts: string[],
 ): Promise<FolderRemoved> {

@@ -624,7 +624,6 @@ export interface LibraryLetter {
 
 export interface LibraryFolder {
 	name: string;
-	/** Whether the folder holds nothing at all, which is the only kind the page may remove. */
 	empty: boolean;
 }
 
@@ -646,7 +645,6 @@ export interface LibraryAlbumSummary {
 	path: string;
 	/** The album folder's name. */
 	name: string;
-	/** As on `LibraryFolder`. */
 	empty: boolean;
 	year: string;
 	title: string;
@@ -844,7 +842,7 @@ export interface AlbumJob {
 	state: JobState;
 }
 
-/** `POST /api/library/delete`: the album folder goes for good, with its extras and the folders it leaves empty. */
+/** `POST /api/library/delete`. */
 export interface AlbumDeleted {
 	deleted: string;
 	/** Why its extras could not be deleted, where they could not; `null` otherwise. */

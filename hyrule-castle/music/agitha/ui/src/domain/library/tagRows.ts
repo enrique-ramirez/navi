@@ -9,6 +9,7 @@ import { lockedKind, PICTURE } from "@/domain/album/tagModel";
 import type { DraftEdit, TagNames, TrackRef } from "@/shared/api/types";
 import {
 	applyEdits,
+	carries,
 	changedTags,
 	displayKey,
 	isFormatsOwnKey,
@@ -45,11 +46,6 @@ const valuesOf = (track: PanelTrack, key: string, names: TagNames) => {
 	return present(raw === null ? undefined : track.tags[raw]);
 };
 
-/**
- * One row per tag of the tracks given, as the tag table takes them: what the
- * files hold, and what they hold once the edits are laid. A key of `extra` gets
- * a row though no track carries it, so a tag can be typed in.
- */
 export function tagRows(
 	tracks: PanelTrack[],
 	edits: DraftEdit[],
@@ -82,7 +78,6 @@ export function tagRows(
 		const edited = changed.has(key);
 		if (now === null && next === null && !edited && !extra.includes(key))
 			continue;
-		// The server names the keys it will not change; the page only says which kind each is.
 		const fixed = tracks.find((track) => {
 			const raw = rawKeyOf(track, key, names);
 			return raw !== null && track.readonly.includes(raw);
@@ -108,16 +103,6 @@ export function tagRows(
 	);
 }
 
-const carries = (track: PanelTrack, key: string, names: TagNames) => {
-	const raw = rawKeyOf(track, key, names);
-	return raw !== null && Object.hasOwn(track.tags, raw);
-};
-
-/**
- * The tracks of `chosen` an edit of `key` names. A key no format's table knows
- * is one format's own, and the server refuses it over tracks of several: its
- * edit names only the tracks that carry it.
- */
 export function reachOf(
 	chosen: PanelTrack[],
 	key: string,
@@ -132,7 +117,6 @@ export function reachOf(
 	}));
 }
 
-/** The edits with every change of `key` on the tracks named taken out; an edit left changing nothing is dropped. */
 export function withoutKey(
 	edits: DraftEdit[],
 	refs: TrackRef[],
@@ -159,7 +143,6 @@ export function withoutKey(
 			add: drop(edit.add),
 			remove: drop(edit.remove),
 		};
-		// The tracks not named keep the change.
 		const others: DraftEdit = {
 			tracks: edit.tracks.filter((ref) => !named(ref)),
 			set: only(edit.set),

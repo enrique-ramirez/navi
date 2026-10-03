@@ -5,12 +5,10 @@ import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./TrackRows.module.css";
 
 export interface TrackRow {
-	/** Tells the row from the others, and the player which track plays. */
 	id: string;
 	/** As shown: `05`, or `2-05` on an album of several discs. */
 	number: string;
 	title: string;
-	/** Shown under the title where the page lists it. */
 	artist?: string;
 	/** The file's name or path; `null` where the file is not known. */
 	file: string | null;
@@ -18,13 +16,10 @@ export interface TrackRow {
 	length: string;
 	/** `mime` is empty for a format no browser is told how to play. */
 	audio: { format: string; url: string; mime: string } | null;
-	/** How many of its tags change. */
 	changes: number;
-	/** Said under the title: a flag on the track, a swap it is part of. */
 	note?: ReactNode;
 }
 
-/** What makes the rows checkable: the tracks an edit over several reaches. */
 export interface Checks {
 	checked: (id: string) => boolean;
 	disabled: boolean;
@@ -34,7 +29,6 @@ export interface Checks {
 	labelOf: (row: TrackRow) => string;
 }
 
-/** What plays a track, handed in by the page: the one track playing, by its row's id. */
 export interface Player {
 	playing: string | null;
 	canPlay: (mime: string) => boolean;
@@ -88,7 +82,6 @@ function PlayButton({ row, player }: { row: TrackRow; player: Player }) {
 	);
 }
 
-/** An album's tracks, one of them selected. The review of a drop and the library's album page both list theirs with this. */
 export function TrackRows({
 	rows,
 	player,
@@ -133,7 +126,6 @@ export function TrackRows({
 			</thead>
 			<tbody>
 				{rows.map((row) => (
-					// The title button takes the keyboard; its click bubbles here, so a mouse click anywhere on the row selects it too.
 					<tr
 						key={row.id}
 						aria-selected={selected === row.id}

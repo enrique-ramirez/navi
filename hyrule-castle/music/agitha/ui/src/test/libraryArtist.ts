@@ -239,11 +239,9 @@ export const findTag = (name: string) => screen.findByRole("group", { name });
 export const tag = (name: string) => screen.getByRole("group", { name });
 export const queryTag = (name: string) => screen.queryByRole("group", { name });
 
-/** The panel's mark on a tag the draft changes. */
 export const marked = (name: string) =>
 	within(tag(name)).queryByText("changed");
 
-/** One edit from the genres in the artist's header, over the tracks selected: `symphonic metal` leaves them. */
 export async function dropSymphonicMetal(user: User) {
 	await user.click(
 		await screen.findByRole("button", { name: "Remove symphonic metal" }),

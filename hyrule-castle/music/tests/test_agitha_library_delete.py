@@ -1,9 +1,4 @@
-"""Delete album: `POST /api/library/delete` removes a library album folder for good, with its extras.
-
-The artist and letter folders it leaves empty go too. An album being saved or
-open in review is refused, and so is a path that is not an album folder of
-the library. `memory.json` is never touched.
-"""
+"""Delete album: `POST /api/library/delete` removes a library album folder for good, with its extras."""
 
 from __future__ import annotations
 
@@ -21,7 +16,6 @@ class DeleteCase(match_tests.MatchCase):
         return self.post(DELETE, {"path": path})
 
     def refused(self, path: object, status: int, sentence: str) -> None:
-        """Deleting `path` is answered `status` and `sentence`, and nothing on disk changed."""
         before = self.on_disk()
         self.assertEqual(self.turned_down(self.remove(path), status), sentence)
         self.assert_as_it_was(before)

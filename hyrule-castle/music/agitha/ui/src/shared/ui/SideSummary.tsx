@@ -4,11 +4,6 @@ import { useTranslate } from "@/shared/i18n/useTranslate";
 import { type Fact, FactsList } from "./FactsList";
 import styles from "./SideSummary.module.css";
 
-/**
- * The column beside an album's tags: its cover, what it is called, and what
- * its files add up to. The review of a drop and the library's album page both
- * show this.
- */
 export function SideSummary({
 	cover,
 	title,

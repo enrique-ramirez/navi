@@ -29,7 +29,6 @@ const FRAMES: Record<string, Phrase> = {
 	USLT: "gloss.USLT",
 };
 
-/** What a raw ID3 frame is, as a phrase to put in brackets after it; `null` for a key that reads by itself. */
 export function glossOf(key: string): Phrase | null {
 	const frame = /^[A-Z0-9]{4}(?=$|:)/.exec(key)?.[0];
 	return (frame && FRAMES[frame]) || null;

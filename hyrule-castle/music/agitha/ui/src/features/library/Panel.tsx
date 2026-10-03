@@ -5,8 +5,10 @@ import { lockedKind } from "@/domain/album/tagModel";
 import { glossOf } from "@/domain/library/gloss";
 import {
 	applyEdits,
+	carries,
 	changedTags,
 	displayKey,
+	GENRE,
 	isFormatsOwnKey,
 	isTrack,
 	type PanelTrack,
@@ -17,13 +19,6 @@ import type { DraftEdit, TagNames, TrackRef } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import styles from "./Panel.module.css";
 import { TagField } from "./TagField";
-
-const GENRE = "Genre";
-
-const carries = (track: PanelTrack, key: string, names: TagNames) => {
-	const raw = rawKeyOf(track, key, names);
-	return raw !== null && Object.hasOwn(track.tags, raw);
-};
 
 const FIELDS = [
 	{ mode: "set", label: "editor.setTag", hint: "editor.setPlaceholder" },
@@ -47,7 +42,6 @@ export function Panel({
 	edits: DraftEdit[];
 	genres: string[];
 	locked?: string[];
-	/** Which tags are listed, by the name of their row; all of them where left out. */
 	shows?: (key: string) => boolean;
 	/** The tags and their values stay on show with nothing to change them by. */
 	readOnly?: boolean;

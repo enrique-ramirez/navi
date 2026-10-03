@@ -8,6 +8,8 @@ import type {
 
 export type PanelTrack = LibraryTrack & { album: string };
 
+export const GENRE = "Genre";
+
 export interface SharedTag {
 	/** The readable name where the track's own family has one, else the raw key. */
 	key: string;
@@ -39,7 +41,7 @@ const inTableOf = (family: Family, key: string, names: TagNames) => {
 	);
 };
 
-/** Whether no format's table knows the key, by raw key or readable name: only the format that holds it can say what it means. */
+/** Whether no format's table knows the key, by raw key or readable name: only the format that holds it can say what it means, and the server refuses an edit of it over tracks of more than one format. */
 export const isFormatsOwnKey = (key: string, names: TagNames) =>
 	!(Object.keys(names) as Family[]).some((family) =>
 		inTableOf(family, key, names),
@@ -64,6 +66,11 @@ export function rawKeyOf(track: PanelTrack, key: string, names: TagNames) {
 	);
 	return elsewhere ? null : typed;
 }
+
+export const carries = (track: PanelTrack, key: string, names: TagNames) => {
+	const raw = rawKeyOf(track, key, names);
+	return raw !== null && Object.hasOwn(track.tags, raw);
+};
 
 /** Rows in the order of the first track's readable names, then the other keys alphabetically. */
 export function sortRows(

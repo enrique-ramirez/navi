@@ -37,7 +37,6 @@ export function AlbumChanges({
 	preview: PreviewAlbum;
 	/** The cover the album has now, `null` where it has none. */
 	was?: CoverCheck | null;
-	/** Where the two covers can be shown from, each left out where there is no image to show. */
 	covers?: { was?: string | null; next?: string | null };
 }) {
 	const { t } = useTranslate();
@@ -129,7 +128,6 @@ export function AlbumChanges({
 	);
 }
 
-// The sizes are in the sentence under the two; each image is named by which cover it is.
 function CoverThumb({ src, alt }: { src: string; alt: string }) {
 	return (
 		<figure className={styles.thumb}>
@@ -148,7 +146,6 @@ export function ReviewChanges({
 	preview: PreviewAlbum;
 	/** The cover the album has now, `null` where it has none. */
 	was?: CoverCheck | null;
-	/** As on `AlbumChanges`. */
 	covers?: { was?: string | null; next?: string | null };
 	onSave: () => void;
 }) {

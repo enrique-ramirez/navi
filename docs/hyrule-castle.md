@@ -8,10 +8,7 @@ navi runs the network; this box runs everything you actually use. Right now that
 
 The machine is `hyrule-castle`. The services are `music.lan`, `films.lan`, `photos.lan`, `files.lan`, and whatever comes after.
 
-This is the two-layer rule from [network.md](network.md) applied properly for the first time. Earlier drafts of these docs called the machine `ocarina`, which blurred the layers: `ocarina` is a Zelda name chosen to describe a function, and this box stopped being a music server the moment the roadmap grew a photo library and a film library. A castle holds things. That ages better.
-
-`ocarina.lan` still resolves and still means the music player. It is a service name now, an alias of `music.lan`, and nothing that points at it needs to change
-- including the TV homepage plan and the Caddy vhosts.
+The two-layer rule is in [network.md](network.md), which also says what `ocarina.lan` is now.
 
 ## Hardware
 
@@ -222,7 +219,7 @@ The symlink is what decouples the two. October's remount changes the contents of
 
 ## agitha
 
-agitha is the import page for the music library: albums are dropped on it, identified against MusicBrainz, reviewed, and approved into `/srv/music/library`. What the engine checks is in [music-library.md](music-library.md), and the address it answers on is in [network.md](network.md).
+agitha is the page for the music library: albums are dropped on it, identified against MusicBrainz, reviewed, and approved into `/srv/music/library`, and an album already there is edited, matched again or deleted on its Library pages. What the engine checks is in [music-library.md](music-library.md), and the address it answers on is in [network.md](network.md).
 
 Its unit is `agitha.service`, which runs `python3 -m agitha` as `enrique-ramirez` on port 8882, on every interface, with `Restart=on-failure`. It requires `/srv/music` to be mounted. It has no login.
 
@@ -231,7 +228,7 @@ The unit of work is a drop: one upload, named `YYYYMMDD-HHMMSS`, which can hold 
 | path | holds |
 |---|---|
 | `/srv/music/inbox/<drop>/` | `raw/` while the upload runs, then `drop.json` and one `<n>/` per album with `album.json` and `drop/album/<name>/` |
-| `/srv/music/.musiclib/jobs/agitha-<drop>-<n>/` | the engine's job for that album. Kept after the album is approved |
+| `/srv/music/.musiclib/jobs/agitha-<drop>-<n>/` | the engine's job for that album, kept after the album is approved. Also `library-covers/`, uploads waiting for a Save, and `library-summary.json`, a cache that can be deleted |
 | `/srv/music/library` | the library. An approved album arrives by one rename |
 | `/srv/music/extras` | videos, disc images and software, as in music-library.md |
 | `/usr/local/lib/agitha/agitha` | the server |
@@ -380,6 +377,5 @@ In rough order:
 - `foo_jean`, once the migration off beefweb finishes. Then `MUSIC_BACKEND` in navi's `.env` moves to `10.100.100.50:8881`. The Caddyfile is already written for it: one vhost, with no `:8881` listener and no `/jean/` prefix. The sudo rule and the test tree it needs are already in place. Registering `one` and `two` as library folders is the only step left, and it is manual. See *The foo_jean test tree*
 - WMA playback, if it proves worth it. Eleven tracks of one album; re-acquiring it in another format is probably cheaper than making Wine decode Windows Media
 - Offsite backup, covering `/srv/backup` as well as the library
-- `wine` and `xvfb` from Debian, a systemd unit for foobar2000, then the library migration. 64-bit only - see [future-plans.md](future-plans.md)
 - Docker CE, **at the Jellyfin phase and not before** - see [decisions.md](decisions.md)
 - Open the lid and settle the SATA question while the return window allows

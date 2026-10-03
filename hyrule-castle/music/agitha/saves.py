@@ -149,7 +149,6 @@ def show(request: Handler, match: re.Match[str], config: Config) -> None:
 
 
 def _logged(plan: AlbumPlan, swaps: int) -> dict[str, Any]:
-    """What a save of `plan` changes, as the write log tells it: counts and the names of the tags, never a value."""
     changed = [changes for track in plan.tracks if (changes := track.changes())]
     tags = sorted({change["key"] for changes in changed for change in changes})
     return {

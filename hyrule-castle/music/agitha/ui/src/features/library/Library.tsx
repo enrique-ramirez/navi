@@ -35,12 +35,9 @@ import styles from "./Library.module.css";
 import { LibraryAlbum } from "./LibraryAlbum";
 import { LibraryArtist } from "./LibraryArtist";
 
-/** What every folder of the tree needs from the page around it. */
 interface Tree {
 	url: Place;
-	/** The folders open, by path: `S` and `S/Sonata Arctica`. */
 	open: ReadonlySet<string>;
-	/** The one item Tab reaches; the arrows move from it. */
 	tabStop: string;
 	go: (place: Place) => void;
 	toggle: (path: string) => void;
@@ -63,7 +60,6 @@ export function Library() {
 	const letterQuery = useQuery(libraryLetterQuery(url.letter));
 	const artistQuery = useQuery(libraryArtistQuery(url.letter, url.artist));
 
-	// The tree opens to wherever the address goes, and from there the folders open and close by hand.
 	const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
 	const [followed, setFollowed] = useState<string | null>(null);
 	if (followed !== address) {
@@ -103,7 +99,6 @@ export function Library() {
 			const gone = (path: string) =>
 				removed.some((each) => path === each || path.startsWith(`${each}/`));
 			setOpen((now) => new Set([...now].filter((path) => !gone(path))));
-			// The address may name a folder that is gone: leave for the nearest one still there.
 			if (gone(address)) {
 				const [letter, artist] = address.split("/");
 				const left: Place = {};
@@ -337,7 +332,6 @@ function ArtistNode({
 }
 
 interface ItemProps {
-	/** Library-relative, which is also what tells the items apart. */
 	path: string;
 	name: string;
 	tree: Tree;
@@ -345,7 +339,6 @@ interface ItemProps {
 	/** Left out on an album, which has nothing to open. */
 	expanded?: boolean;
 	busy?: boolean;
-	/** The folder holds nothing, so it may be removed. */
 	empty?: boolean;
 	children?: ReactNode;
 }
@@ -384,7 +377,6 @@ function Item({
 			}}
 			onClick={(event) => {
 				event.stopPropagation();
-				// A click on the folder the page is at folds or unfolds it; on any other it goes there, which opens it.
 				if (current && expanded !== undefined) tree.toggle(path);
 				else tree.go(place);
 			}}
@@ -393,7 +385,6 @@ function Item({
 				{expanded === undefined ? (
 					<span className={styles.chevron} />
 				) : (
-					// A pointer's shortcut; the arrow keys fold and unfold the item.
 					<span
 						className={styles.chevron}
 						aria-hidden="true"
@@ -410,7 +401,6 @@ function Item({
 				{empty && (
 					<button
 						type="button"
-						// Delete on the item is the keyboard's way to it.
 						tabIndex={-1}
 						className={styles.remove}
 						aria-label={t("library.removeFolder", { name })}

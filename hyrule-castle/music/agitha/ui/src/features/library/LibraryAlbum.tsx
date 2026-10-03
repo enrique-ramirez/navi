@@ -65,7 +65,6 @@ export function LibraryAlbum({
 	const order = useQuery(
 		libraryOrderQuery(letter, artist, album, albumQuery.data !== undefined),
 	);
-	// The tracks an edit of the album's tags leaves out, and the one whose own tags are on show.
 	const [unselected, setUnselected] = useState<string[]>([]);
 	const [focused, setFocused] = useState<string | null>(null);
 
@@ -78,7 +77,6 @@ export function LibraryAlbum({
 	// Bumped by a done save that carried a cover: the album is then served at the same cover URL.
 	const [coverVersion, setCoverVersion] = useState(0);
 	const savedCover = useRef(false);
-	// Where the draft's cover can be shown from; the cover card owns the address.
 	const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
 	const flow = useDraftFlow({
@@ -151,7 +149,6 @@ export function LibraryAlbum({
 		() => (view?.tracks ?? []).map((track) => ({ ...track, album: path })),
 		[view, path],
 	);
-	// How many of each track's tags the draft changes, for the mark on its row.
 	const changes = useMemo(
 		() =>
 			names
@@ -175,7 +172,6 @@ export function LibraryAlbum({
 	const selected = tracks.filter((track) => !unselected.includes(track.path));
 	const shown = tracks.find((track) => track.path === focused) ?? tracks[0];
 
-	// The side column says what the album is once the draft lands, as the review's does.
 	const [first] = applyEdits(tracks.slice(0, 1), draft.edits, names);
 	const title = (first && tagOf(first, "Album", names)[0]) || lastSegment(path);
 	const heading =
@@ -188,7 +184,6 @@ export function LibraryAlbum({
 	const editEdits = (change: (now: DraftEdit[]) => DraftEdit[]) =>
 		flow.changeDraft((now) => ({ ...now, edits: change(now.edits) }));
 
-	// A tag the selected tracks agree on, or one that says what the album is, is the album's; the rest are each track's own.
 	const albumRows = new Set(
 		tagRows(selected, draft.edits, names)
 			.filter((row) => row.next !== "differs" || ALBUM_TAGS.includes(row.key))
@@ -208,7 +203,6 @@ export function LibraryAlbum({
 	};
 	const titleOf = (track: PanelTrack) =>
 		tagOf(track, "Title", names)[0] || lastSegment(track.path);
-	// A pair goes to the draft in album order, whichever way round it was named.
 	const inAlbumOrder = ([a, b]: [string, string]): [string, string] =>
 		tracks.findIndex((track) => track.path === a) <=
 		tracks.findIndex((track) => track.path === b)
@@ -484,7 +478,6 @@ export function LibraryAlbum({
 							<h4 className={detail.label}>{t("track.ownTags")}</h4>
 							{genres.data && (
 								<LibraryTags
-									// A table's own state, the rows typed in by key, is one track's.
 									key={shown.path}
 									label={t("track.ownTagsOf", { title: titleOf(shown) })}
 									addLabel={t("library.tagKeyOf", { title: titleOf(shown) })}

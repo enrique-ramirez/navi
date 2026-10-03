@@ -383,7 +383,6 @@ describe("Match to MusicBrainz on the album page", () => {
 			// 8th Commandment carries the genre and the ripper frame; Replica neither.
 			expect(tag("Genre")).toHaveTextContent("power metal 1/2");
 			expect(tag("Album")).toHaveTextContent("Ecliptica");
-			// The ripper frame is one track's own, so it is under that track, the first and the one on show.
 			expect(tag("TXXX:RIPPER")).toHaveTextContent("EAC 0.99");
 			expect(usable()).toEqual([]);
 			expect(alsoUsable()).toEqual([]);

@@ -10,14 +10,9 @@ export interface ShownCover {
 	url: string;
 	width: number;
 	height: number;
-	/** How it fails the cover test; left out or `null` where nothing is to be said. */
 	problem?: string | null;
 }
 
-/**
- * A cover in its frame, which takes a dropped or picked image to replace it,
- * and shows the cover the album has now beside the one it will get.
- */
 export function CoverPicker({
 	title,
 	next,
@@ -37,16 +32,12 @@ export function CoverPicker({
 	now: ShownCover | null;
 	/** False where the two are one cover, so there is nothing to tell apart. */
 	sides?: boolean;
-	/** What the new cover is called where it is not yet the album's; the album's cover by its title where left out. */
 	nextAlt?: string;
-	/** What the empty frame says on each side. */
 	noNext: string;
 	noNow: string;
 	pickLabel: string;
 	disabled?: boolean;
-	/** The way back from a picked image, shown beside the new cover's size. */
 	undo?: { label: string; run: () => void } | null;
-	/** Makes the cover the album has now the new one, shown beside its size; answers as `onFile` does. */
 	keep?: { label: string; run: () => Promise<string | null> } | null;
 	/** Takes the image; answers the sentence to show where it was refused, else `null`. */
 	onFile: (file: File | null | undefined) => Promise<string | null>;

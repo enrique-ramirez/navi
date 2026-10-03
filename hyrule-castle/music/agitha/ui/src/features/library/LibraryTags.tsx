@@ -6,6 +6,7 @@ import { glossOf } from "@/domain/library/gloss";
 import {
 	applyEdits,
 	displayKey,
+	GENRE,
 	isFormatsOwnKey,
 	type PanelTrack,
 	rawKeyOf,
@@ -16,14 +17,8 @@ import type { DraftEdit, TagNames } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import { TagTable } from "@/shared/ui/TagTable";
 
-const GENRE = "Genre";
-
 const joined = (values: string[]) => values.join("\u0000");
 
-/**
- * The review's tag table over tracks of the library: what the files hold, and
- * what the draft makes of it. A value typed in is set on every track given.
- */
 export function LibraryTags({
 	label,
 	addLabel,
@@ -38,23 +33,19 @@ export function LibraryTags({
 }: {
 	label: string;
 	addLabel?: string;
-	/** The tracks an edit made here names. */
 	tracks: PanelTrack[];
 	names: TagNames;
 	edits: DraftEdit[];
 	genres: string[];
 	readOnly: boolean;
-	/** Which of the tracks' tags this table lists; all of them where left out. */
 	shows?: (row: DiffRow) => boolean;
 	empty?: string;
 	onEdits: (change: (now: DraftEdit[]) => DraftEdit[]) => void;
 }) {
 	const { t } = useTranslate();
-	// Tags typed in by key that no track carries yet: each has a row to take its value.
 	const [typed, setTyped] = useState<string[]>([]);
 	const [refusal, setRefusal] = useState<string | null>(null);
 
-	// Where the tracks differ on a tag, each of its values with how many of them carry it.
 	const counts = (of: PanelTrack[]) =>
 		new Map(
 			sharedTags(of, names).map((row) => [
@@ -75,7 +66,6 @@ export function LibraryTags({
 	function set(row: DiffRow, values: string[] | null) {
 		const cleared = values === null || values.length === 0;
 		if (!cleared && row.key === GENRE) {
-			// A genre field takes names on the list only.
 			const stray = values.find((value) => !genres.includes(value));
 			if (stray !== undefined) {
 				setRefusal(t("editor.notGenre", { genre: stray }));
@@ -84,7 +74,6 @@ export function LibraryTags({
 		}
 		setRefusal(null);
 		const refs = reachOf(tracks, row.key, names);
-		// What the files hold already needs no edit.
 		const asHeld = cleared
 			? row.now === null
 			: Array.isArray(row.now) && joined(row.now) === joined(values);
@@ -117,7 +106,6 @@ export function LibraryTags({
 					track.readonly.includes(raw) || lockedKind(raw, []) !== null,
 			);
 		if (refused) return t("editor.lockedKey", { key });
-		// Each format reads such a key its own way, and the server refuses the edit over tracks of more than one.
 		if (
 			new Set(tracks.map((track) => track.family)).size > 1 &&
 			isFormatsOwnKey(key, names)

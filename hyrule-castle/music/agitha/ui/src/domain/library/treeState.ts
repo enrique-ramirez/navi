@@ -10,10 +10,8 @@ const partsOf = (place: Place) =>
 		(part) => part !== undefined,
 	);
 
-/** The place as a library-relative path, empty for the library itself. */
 export const pathOf = (place: Place) => partsOf(place).join("/");
 
-/** The folders that must be open for the place to show in the tree: its letter and its artist. */
 export function ancestorsOf(place: Place): string[] {
 	if (place.letter === undefined) return [];
 	if (place.artist === undefined) return [place.letter];
