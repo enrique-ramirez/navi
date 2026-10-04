@@ -317,7 +317,10 @@ export const en = {
 	"tags.newValue": "New {tag}",
 	"tags.undoEdit": "Undo your edit of {tag}",
 	"tags.remove": "Remove {tag}",
-	"tags.addPlaceholder": "Add a tag by key, e.g. TXXX:MOOD",
+	"tags.addPlaceholder":
+		"Add a tag: its key (TXXX:MOOD), or key: values (TXXX:MOOD: calm; warm)",
+	"tags.noValue": "none",
+	"tags.asCredited": "one act, as credited",
 	"tracks.changes": "{n} of its tags change",
 	"track.ownTags": "Tags only this track has",
 	"track.ownTagsOf": "Tags of {title}",
@@ -385,6 +388,7 @@ export const en = {
 	"suggest.title": "Suggestions",
 	"suggest.genre": "{genre}, on {albums} of {of} {artist} albums",
 	"suggest.add": "Add {genre}",
+	"suggest.genres": "Genres on other {artist} albums, click to add:",
 	"suggest.choose": "Choose {genre}",
 	"suggest.spelling":
 		"{artist} is in the library as {folders}; this album would land in {landsIn}",

@@ -1,6 +1,7 @@
 import { getJson } from "./getJson";
 import type {
 	AlbumDeleted,
+	ArtistList,
 	CoverUpload,
 	Draft,
 	FolderRemoved,
@@ -45,6 +46,9 @@ export const fetchLibraryOrder = (
 	);
 
 export const fetchGenres = () => getJson<GenreList>("/api/genres");
+
+export const fetchArtists = (name: string) =>
+	getJson<ArtistList>(`/api/artists?q=${segment(name)}`);
 
 /** A route's refusal: its status and the sentence it served, `null` where it served none. */
 export class Refused extends Error {

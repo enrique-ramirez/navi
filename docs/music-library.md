@@ -62,6 +62,8 @@ Two or more editions of one album that would share a folder each get a suffix in
 
 Where a release's titles are not in the Latin script, the album and track titles come from MusicBrainz's English tracklist for it, else from a romanized one.
 
+**Each artist of a credit.** A credit such as `Future & Marshmello` does not say whether it names one act or two. Where it names several, `ARTISTS` holds each artist as a value of its own, and `ALBUMARTISTS` does the same for the album artist: `TXXX:ARTISTS` and `TXXX:ALBUMARTISTS` on MP3, `artists` and `albumartists` on FLAC and Ogg. A player reads them to list the track under each artist. The import does not write them: MusicBrainz's artist IDs already say who a release credits, and these tags are for the artist it does not credit, a remixer for one. The owner fills them on the review page or the album page, under Artists and Album artists, where typing a name searches MusicBrainz for it. Only the names are written, and the MusicBrainz IDs stay as the release gives them.
+
 **Dates.** `DATE` is the release date of this edition. `ORIGINALDATE` is the release group's first release. There is no `YEAR` tag.
 
 **Edition.** Where several MusicBrainz releases fit the files, the library takes an Official one over any other status, and among those the oldest. A partial date counts as the last day it could be, and an undated release comes last.

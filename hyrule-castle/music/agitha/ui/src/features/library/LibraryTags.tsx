@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { DiffRow } from "@/domain/album/diff";
 import { lockedKind } from "@/domain/album/tagModel";
+import { ARTIST_LISTS, useArtistSearch } from "@/domain/library/artistSearch";
 import { glossOf } from "@/domain/library/gloss";
 import {
 	applyEdits,
@@ -12,7 +13,12 @@ import {
 	rawKeyOf,
 	sharedTags,
 } from "@/domain/library/shared";
-import { reachOf, tagRows, withoutKey } from "@/domain/library/tagRows";
+import {
+	reachOf,
+	standingRows,
+	tagRows,
+	withoutKey,
+} from "@/domain/library/tagRows";
 import type { DraftEdit, TagNames } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import { TagTable } from "@/shared/ui/TagTable";
@@ -58,9 +64,12 @@ export function LibraryTags({
 	const countsNow = counts(tracks);
 	const countsNext = counts(applyEdits(tracks, edits, names));
 
-	const rows = tagRows(tracks, edits, names, typed).filter(
-		(row) => typed.includes(row.key) || shows(row),
-	);
+	const rows = tagRows(tracks, edits, names, [
+		...standingRows(tracks, names),
+		...typed,
+	]).filter((row) => typed.includes(row.key) || shows(row));
+	const artists = useArtistSearch();
+	const listsArtists = (row: DiffRow) => ARTIST_LISTS.includes(row.key);
 	const first = tracks[0];
 
 	function set(row: DiffRow, values: string[] | null) {
@@ -92,7 +101,7 @@ export function LibraryTags({
 		});
 	}
 
-	function add(key: string) {
+	function add(key: string, values: string[]) {
 		const reached = tracks.flatMap((track) => {
 			const raw = rawKeyOf(track, key, names);
 			return raw === null ? [] : [{ track, raw }];
@@ -113,6 +122,19 @@ export function LibraryTags({
 			return t("editor.oneFormat", { key });
 		const row = displayKey(found.track, found.raw, names);
 		if (!typed.includes(row)) setTyped([...typed, row]);
+		if (values.length > 0)
+			set(
+				{
+					key: row,
+					now: null,
+					next: null,
+					change: "same",
+					locked: null,
+					edited: false,
+					removedBy: [],
+				},
+				values,
+			);
 		return null;
 	}
 
@@ -134,6 +156,20 @@ export function LibraryTags({
 			describe={(row, side) =>
 				(side === "now" ? countsNow : countsNext).get(row.key)
 			}
+			optionsOf={(row) =>
+				row.key === GENRE
+					? genres
+					: listsArtists(row)
+						? artists.names
+						: undefined
+			}
+			hintOf={(row, option) =>
+				listsArtists(row) ? artists.hintOf(option) : undefined
+			}
+			onTyped={(row, term) => {
+				if (listsArtists(row)) artists.search(term);
+			}}
+			unsetOf={(row) => (listsArtists(row) ? t("tags.asCredited") : undefined)}
 			onSet={set}
 			onUndo={(row) => {
 				setRefusal(null);

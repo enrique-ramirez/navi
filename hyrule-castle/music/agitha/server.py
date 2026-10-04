@@ -93,6 +93,7 @@ ROUTES: list[Route] = [
     Route("DELETE", re.compile(r"/api/library/([^/]+)/([^/]+)"), library.remove),
     Route("DELETE", re.compile(r"/api/library/([^/]+)/([^/]+)/([^/]+)"), library.remove),
     Route("GET", re.compile(r"/api/genres"), library.genre_list),
+    Route("GET", re.compile(r"/api/artists"), order.artists),
 ]
 
 

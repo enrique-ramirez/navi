@@ -2,6 +2,7 @@ import { Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import { useTranslate } from "@/shared/i18n/useTranslate";
+import { SuggestInput } from "./SuggestInput";
 import styles from "./TagTable.module.css";
 import { bytesOf, formatValues, type Side, type TagRow } from "./tagRow";
 
@@ -26,15 +27,28 @@ const split = (line: string) =>
 		.map((value) => value.trim())
 		.filter((value) => value !== "");
 
+// `KEY: value; value` typed into the field for a new tag: the key, and the values after the first `: `.
+const KEYED = /^(.+?):\s+(.*)$/s;
+
 function ValueInput({
 	row,
 	label,
 	differs,
+	unset,
+	options,
+	hintOf,
+	onTerm,
 	onCommit,
 }: {
 	row: TagRow;
 	label: string;
 	differs: string;
+	/** What to say where no file holds the tag and none will. */
+	unset: string;
+	/** The values the tag may take, offered while typing. */
+	options?: readonly string[];
+	hintOf?: (option: string) => string | undefined;
+	onTerm?: (term: string) => void;
 	onCommit: (values: string[]) => void;
 }) {
 	const { t } = useTranslate();
@@ -47,18 +61,37 @@ function ValueInput({
 		onCommit(split(draft));
 	};
 
+	const placeholder =
+		row.next === "differs"
+			? differs
+			: row.next === null
+				? row.now === null && !row.edited
+					? unset
+					: t("tags.removedValue")
+				: undefined;
+
+	if (options)
+		return (
+			<SuggestInput
+				className={styles.input}
+				label={label}
+				value={draft}
+				placeholder={placeholder}
+				options={options}
+				hintOf={hintOf}
+				onTerm={onTerm}
+				onChange={setDraft}
+				onCommit={commit}
+				onCancel={() => setDraft(shown)}
+			/>
+		);
+
 	return (
 		<input
 			className={styles.input}
 			aria-label={label}
 			value={draft}
-			placeholder={
-				row.next === "differs"
-					? differs
-					: row.next === null
-						? t("tags.removedValue")
-						: undefined
-			}
+			placeholder={placeholder}
 			onChange={(event) => setDraft(event.target.value)}
 			onBlur={commit}
 			onKeyDown={(event) => {
@@ -83,6 +116,10 @@ export function TagTable({
 	error = null,
 	addLabel,
 	describe,
+	unsetOf,
+	optionsOf,
+	hintOf,
+	onTyped,
 	onSet,
 	onUndo,
 	onAdd,
@@ -98,11 +135,19 @@ export function TagTable({
 	/** What a side says where the files differ on the tag; the table's own words where it answers nothing. */
 	describe?: (row: TagRow, side: "now" | "next") => string | undefined;
 	error?: string | null;
+	/** What a row says where no file holds its tag and none will; the table's own word where it answers nothing. */
+	unsetOf?: (row: TagRow) => string | undefined;
+	/** The values a row's tag may take, offered while typing; nothing where any text will do. */
+	optionsOf?: (row: TagRow) => readonly string[] | undefined;
+	/** What an offered value shows beside itself. */
+	hintOf?: (row: TagRow, option: string) => string | undefined;
+	/** The value being typed into a row that offers values, where they are looked up from it. */
+	onTyped?: (row: TagRow, term: string) => void;
 	/** The row's tag gets these values; `null` removes it. */
 	onSet: (row: TagRow, values: string[] | null) => void;
 	onUndo: (row: TagRow) => void;
-	/** A row for the key typed; answers the sentence to show where the key is refused, else `null`. */
-	onAdd: (key: string) => string | null;
+	/** A row for the key typed, holding `values` where some were typed after it; answers the sentence to show where the key is refused, else `null`. */
+	onAdd: (key: string, values: string[]) => string | null;
 }) {
 	const { t } = useTranslate();
 	const uid = useId();
@@ -118,9 +163,12 @@ export function TagTable({
 	};
 
 	function add() {
-		const key = adding.trim();
-		if (!key) return;
-		const refusal = onAdd(key);
+		const typed = adding.trim();
+		if (!typed) return;
+		const keyed = KEYED.exec(typed);
+		const refusal = keyed
+			? onAdd((keyed[1] ?? "").trim(), split(keyed[2] ?? ""))
+			: onAdd(typed, []);
 		setAddError(refusal);
 		if (refusal === null) setAdding("");
 	}
@@ -198,6 +246,8 @@ export function TagTable({
 											<Lock size={12} aria-hidden="true" />
 											{sideText("next") || "—"}
 										</span>
+									) : row.next === null && row.now === null && !editable ? (
+										<span className={styles.absent}>—</span>
 									) : row.next === null && !row.edited && !editable ? (
 										<span className={styles.removed}>
 											{nowText}
@@ -209,9 +259,13 @@ export function TagTable({
 												row={row}
 												label={t("tags.newValue", { tag: name })}
 												differs={differs("next")}
+												unset={unsetOf?.(row) ?? t("tags.noValue")}
+												options={optionsOf?.(row)}
+												hintOf={(option) => hintOf?.(row, option)}
+												onTerm={(term) => onTyped?.(row, term)}
 												onCommit={(values) => onSet(row, values)}
 											/>
-											{row.next === null && !row.edited && (
+											{row.next === null && row.now !== null && !row.edited && (
 												<span className={styles.reason}>{removedText}</span>
 											)}
 										</>

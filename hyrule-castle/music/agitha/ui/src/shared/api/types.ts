@@ -859,3 +859,16 @@ export interface MatchRequest {
 export interface GenreList {
 	genres: string[];
 }
+
+/** An artist as MusicBrainz's search lists one; the last three are empty where it says nothing. */
+export interface FoundArtist {
+	id: string;
+	name: string;
+	disambiguation: string;
+	type: string;
+	country: string;
+}
+
+export interface ArtistList {
+	artists: FoundArtist[];
+}

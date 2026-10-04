@@ -1,13 +1,17 @@
 .suggestions {
-	display: grid;
+	display: flex;
+	flex-wrap: wrap;
 	gap: var(--space-2);
+	align-items: center;
 	margin: var(--space-4) 0 0;
 	padding: 0;
 	list-style: none;
+	font-size: 0.875rem;
 }
 
-.suggestions li {
+.row {
 	display: flex;
+	flex: 1 1 100%;
 	flex-wrap: wrap;
 	gap: var(--space-2);
 	align-items: center;
@@ -15,7 +19,6 @@
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-sm);
-	font-size: 0.875rem;
 }
 
 .says {
@@ -40,4 +43,57 @@
 
 .button:hover {
 	border-color: var(--muted);
+}
+
+.lead {
+	color: var(--muted);
+}
+
+.pill {
+	display: inline-flex;
+	align-items: stretch;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+}
+
+.pill:hover {
+	border-color: var(--muted);
+}
+
+.pillAdd,
+.pillDismiss {
+	display: inline-flex;
+	gap: var(--space-2);
+	align-items: baseline;
+	background: transparent;
+	border: 0;
+	color: var(--text);
+	font: inherit;
+	cursor: pointer;
+}
+
+.pillAdd {
+	padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+	border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+}
+
+.pillDismiss {
+	align-items: center;
+	padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+	border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+	color: var(--faint);
+}
+
+.pillAdd:hover {
+	background: var(--accent-quiet);
+}
+
+.pillDismiss:hover {
+	color: var(--text);
+}
+
+.count {
+	color: var(--faint);
+	font-size: 0.75rem;
 }

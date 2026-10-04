@@ -112,6 +112,47 @@ describe("diffOf", () => {
 		);
 	});
 
+	it("keeps a genre row to type into where no file and no plan holds a genre", () => {
+		const view = albumView();
+		for (const file of view.preview?.files ?? []) delete file.after.TCON;
+		const diff = diffOf(view, {});
+
+		expect(rowOf(diff.album, "TCON")).toMatchObject({
+			now: null,
+			next: null,
+			change: "same",
+			edited: false,
+		});
+		expect(
+			rowOf(diffOf(view, onAll("genre", ["rock"])).album, "TCON"),
+		).toMatchObject({ next: ["rock"], change: "added", edited: true });
+	});
+
+	it("keeps a row for each artist list the format has a name for, under the album while the tracks agree and under the tracks once they differ", () => {
+		const view = albumView();
+		view.names.id3 = { ...view.names.id3, "TXXX:ARTISTS": "Artists" };
+
+		const diff = diffOf(view, {});
+		expect(rowOf(diff.album, "TXXX:ARTISTS")).toMatchObject({
+			now: null,
+			next: null,
+			change: "same",
+			locked: null,
+		});
+		expect(diff.tracks["1-1"]?.map((row) => row.key)).not.toContain(
+			"TXXX:ARTISTS",
+		);
+
+		const one = diffOf(view, {
+			"1-1": { "TXXX:ARTISTS": ["Future", "Marshmello"] },
+		});
+		expect(one.album.map((row) => row.key)).not.toContain("TXXX:ARTISTS");
+		expect(rowOf(one.tracks["1-1"] ?? [], "TXXX:ARTISTS")).toMatchObject({
+			next: ["Future", "Marshmello"],
+			edited: true,
+		});
+	});
+
 	it("orders rows by the family's names, then the unknown keys, and the locked ones last", () => {
 		const rows = diffOf(albumView(), {}).album;
 		const keys = rows.map((row) => row.key);

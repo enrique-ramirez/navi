@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import threading
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from typing import TYPE_CHECKING, Any
 
 from musiclib import identify, units
@@ -59,6 +60,15 @@ class Lookup:
         with self._lock:
             return self._client.release(release_id)
 
+    def artists(self, name: str) -> list[dict[str, Any]]:
+        """The artists MusicBrainz finds for `name`; a search already made is answered from the cache."""
+        try:
+            return self._cached.search_artists(name)
+        except _Cold:
+            pass
+        with self._lock:
+            return self._client.search_artists(name)
+
 
 def _unchecked(reason: str, retry: bool = False) -> dict[str, Any]:
     return {"checked": False, "reason": reason, "retry": retry}
@@ -105,6 +115,25 @@ def _verdict(lookup: Lookup, folder: Path, unit: units.Unit) -> dict[str, Any]:
     if pairs is None:
         return _unchecked(NO_FIT)
     return {"checked": True, "flags": flags(folder, pairs)}
+
+
+def artists(request: Handler, match: re.Match[str], config: Config) -> None:
+    """`GET /api/artists?q=<name>`: the artists MusicBrainz knows by that name, for a field that names one.
+
+    An answer MusicBrainz does not give is an empty list: the field takes
+    any name typed, and the search only saves the typing.
+    """
+    name = parse_qs(urlsplit(request.path).query).get("q", [""])[0].strip()
+    found: list[dict[str, Any]] = []
+    if len(name) >= 2:
+        try:
+            found = request.server.release_lookup.artists(name)
+        except (MusicBrainzError, ValueError, OSError):
+            found = []
+    request.send_json(200, {"artists": [
+        {"id": artist.get("id"), "name": artist.get("name"), "disambiguation": artist.get("disambiguation") or "",
+         "type": artist.get("type") or "", "country": artist.get("country") or ""}
+        for artist in found if artist.get("name")]})
 
 
 def show(request: Handler, match: re.Match[str], config: Config) -> None:

@@ -20,7 +20,7 @@ import {
 	libraryOrderQuery,
 } from "@/domain/library/libraryQuery";
 import { applyEdits, type PanelTrack } from "@/domain/library/shared";
-import { ALBUM_TAGS, tagRows } from "@/domain/library/tagRows";
+import { ALBUM_TAGS, standingRows, tagRows } from "@/domain/library/tagRows";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
 import { postDelete, postMatch, Refused } from "@/shared/api/library";
 import type { DraftEdit, LibraryJob } from "@/shared/api/types";
@@ -185,7 +185,7 @@ export function LibraryAlbum({
 		flow.changeDraft((now) => ({ ...now, edits: change(now.edits) }));
 
 	const albumRows = new Set(
-		tagRows(selected, draft.edits, names)
+		tagRows(selected, draft.edits, names, standingRows(selected, names))
 			.filter((row) => row.next !== "differs" || ALBUM_TAGS.includes(row.key))
 			.map((row) => row.key),
 	);

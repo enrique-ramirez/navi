@@ -1,6 +1,7 @@
+import { ARTIST_LISTS } from "@/domain/library/artistSearch";
 import type { AlbumView, Edits, PlanFile } from "@/shared/api/types";
 import type { Change, Side, TagRow } from "@/shared/ui/tagRow";
-import { familyOf } from "./albumTags";
+import { familyOf, genreKeyOf } from "./albumTags";
 import { GENRE, type Neutral, neutralFor } from "./neutral";
 import { lockedKind, PICTURE } from "./tagModel";
 
@@ -73,7 +74,21 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 	const add = (key: string) => {
 		if (!keys.includes(key) && !PICTURE.test(key)) keys.push(key);
 	};
+	// Every track needs a genre, and who a credit names is asked of every album: those rows are
+	// there to type into though no file and no plan holds the tag.
+	const standing = (file: PlanFile) => {
+		const table = view.names[familyOf(view, file)] ?? {};
+		return [
+			genreKeyOf(familyOf(view, file)),
+			...Object.keys(table).filter((key) =>
+				ARTIST_LISTS.includes(table[key] ?? ""),
+			),
+		];
+	};
+	const isStanding = (key: string, of: PlanFile[]) =>
+		of.every((file) => standing(file).includes(key));
 	for (const file of files) {
+		for (const key of standing(file)) add(key);
 		for (const key of Object.keys(file.before)) add(key);
 		for (const key of Object.keys(file.after)) add(key);
 		// A lower-case key on a family whose keys are not is a neutral field, already in `after`.
@@ -97,7 +112,8 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 			(file) => editOf(edits, file, key, neutralKeys) !== undefined,
 		);
 		// A removed tag the files never had keeps its row while the edit stands, so it can be undone.
-		if (now === null && next === null && !edited) return null;
+		if (now === null && next === null && !edited && !isStanding(key, of))
+			return null;
 		const sample = of.map((file) => file.after[key] ?? file.before[key]);
 		const removedBy =
 			next === null

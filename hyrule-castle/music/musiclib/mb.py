@@ -233,6 +233,12 @@ class MusicBrainz:
         url = f"{_BASE}/artist/{mbid}?inc=aliases+genres&fmt=json"
         return json.loads(self._get(url))
 
+    def search_artists(self, name: str, limit: int = 8) -> list[dict]:
+        """The artists MusicBrainz finds for `name`, best first, as its search lists them."""
+        lucene = f"artist:({_lucene_escape(name.lower())})"
+        url = f"{_BASE}/artist/?query={quote(lucene, safe='')}&fmt=json&limit={limit}"
+        return json.loads(self._get(url)).get("artists", [])
+
     def search_releases(self, title: str, artist: str | None, various_artists: bool = False) -> dict:
         # No track-count term: a search result counts data tracks and pregap
         # that the files never have, so filtering on it hides enhanced CDs.

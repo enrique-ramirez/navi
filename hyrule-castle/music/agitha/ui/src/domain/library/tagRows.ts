@@ -7,6 +7,7 @@ import {
 } from "@/domain/album/diff";
 import { lockedKind, PICTURE } from "@/domain/album/tagModel";
 import type { DraftEdit, TagNames, TrackRef } from "@/shared/api/types";
+import { ARTIST_LISTS } from "./artistSearch";
 import {
 	applyEdits,
 	carries,
@@ -24,6 +25,7 @@ import {
 export const ALBUM_TAGS = [
 	"Album",
 	"Album artist",
+	"Album artists",
 	"Album artist sort order",
 	"Date",
 	"Original release date",
@@ -40,6 +42,16 @@ export const ALBUM_TAGS = [
 	"Script",
 	"Compilation",
 ];
+
+const STANDING = ["Genre", ...ARTIST_LISTS];
+
+/** The rows that are there to type into though no track holds the tag: those of `STANDING` the tracks' format has a key for. */
+export function standingRows(tracks: PanelTrack[], names: TagNames): string[] {
+	const [first] = tracks;
+	if (!first) return [];
+	const known = Object.values(names[first.family] ?? {});
+	return STANDING.filter((key) => known.includes(key));
+}
 
 const valuesOf = (track: PanelTrack, key: string, names: TagNames) => {
 	const raw = rawKeyOf(track, key, names);

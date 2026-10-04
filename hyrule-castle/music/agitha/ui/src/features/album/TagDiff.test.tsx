@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { diffOf } from "@/domain/album/diff";
 import type { AlbumView } from "@/shared/api/types";
 import { albumView } from "@/test/albumView";
+import { fakeFetch } from "@/test/fakeFetch";
+import genres from "@/test/fixtures/library/genres.json";
 import { renderWithProviders, screen, userEvent, within } from "@/test/render";
 
 import { type Pending, usePending } from "./pending";
@@ -292,6 +294,130 @@ describe("TagDiff", () => {
 
 		expect(sent("TXXX:MOOD")).toEqual([["calm"], ["calm"], ["calm"]]);
 		expect(input("TXXX:MOOD")).toHaveValue("calm");
+	});
+
+	describe("the genre of an album that has none", () => {
+		let fake: ReturnType<typeof fakeFetch> | undefined;
+
+		afterEach(() => fake?.restore());
+
+		// No file and no plan holds a genre, as MusicBrainz knows none for the release.
+		async function renderGenreless() {
+			fake = fakeFetch({ "GET /api/genres": () => Response.json(genres) });
+			const view = albumView();
+			for (const file of view.preview!.files) delete file.after.TCON;
+			await renderTags(view);
+			return userEvent.setup();
+		}
+
+		it("is typed into its own row, and goes out under the neutral name on every track", async () => {
+			const user = await renderGenreless();
+
+			await user.type(input("Genre"), "jazz{Enter}");
+
+			expect(sent("genre")).toEqual([["jazz"], ["jazz"], ["jazz"]]);
+			expect(input("Genre")).toHaveValue("jazz");
+		});
+
+		it("offers the list's genres for the value being typed, and a picked one makes way for the next", async () => {
+			const user = await renderGenreless();
+
+			await user.type(input("Genre"), "pow");
+			await user.click(
+				await screen.findByRole("option", { name: "power metal" }),
+			);
+			expect(input("Genre")).toHaveValue("power metal; ");
+
+			await user.type(input("Genre"), "sym{ArrowDown}{Enter}");
+			expect(input("Genre")).toHaveValue("power metal; symphonic metal; ");
+
+			await user.keyboard("{Enter}");
+			const both = ["power metal", "symphonic metal"];
+			expect(sent("genre")).toEqual([both, both, both]);
+		});
+
+		it("refuses a genre that is not on the list, and sends nothing", async () => {
+			const user = await renderGenreless();
+
+			await user.type(input("Genre"), "po");
+			await screen.findByRole("option", { name: "power metal" });
+			await user.type(input("Genre"), "lka{Enter}");
+
+			expect(screen.getByRole("alert")).toHaveTextContent(
+				"polka is not a genre on the list",
+			);
+			expect(sent("genre")).toEqual([undefined, undefined, undefined]);
+		});
+
+		it("takes the genre typed with its values into the field for a new tag", async () => {
+			const user = await renderGenreless();
+
+			await user.type(
+				screen.getByRole("textbox", { name: "Tag key" }),
+				"Genre: rock; jazz",
+			);
+			await user.click(screen.getByRole("button", { name: "Add tag" }));
+
+			const both = ["rock", "jazz"];
+			expect(sent("genre")).toEqual([both, both, both]);
+			expect(queryRow("Genre: rock; jazz")).toBeNull();
+		});
+	});
+
+	describe("the artists a credit names", () => {
+		let fake: ReturnType<typeof fakeFetch> | undefined;
+
+		afterEach(() => fake?.restore());
+
+		const MARSHMELLO = {
+			id: "c0c5b0b9-0000-4000-8000-0000000000a1",
+			name: "Marshmello",
+			disambiguation: "US electronic music producer and DJ",
+			type: "Person",
+			country: "US",
+		};
+
+		async function renderWithArtists() {
+			fake = fakeFetch({
+				"GET /api/genres": () => Response.json(genres),
+				"GET /api/artists": () => Response.json({ artists: [MARSHMELLO] }),
+			});
+			const view = albumView();
+			view.names.id3 = { ...view.names.id3, "TXXX:ARTISTS": "Artists" };
+			await renderTags(view);
+			return userEvent.setup();
+		}
+
+		it("have a row of their own that says the credit stands as one act until an artist is typed", async () => {
+			await renderWithArtists();
+
+			expect(input("Artists")).toHaveValue("");
+			expect(input("Artists")).toHaveAttribute(
+				"placeholder",
+				"one act, as credited",
+			);
+		});
+
+		it("are searched for on MusicBrainz by the name being typed, shown with what tells each apart, and written one value each", async () => {
+			const user = await renderWithArtists();
+
+			await user.type(input("Artists"), "Future; marsh");
+			const found = await screen.findByRole("option", { name: /^Marshmello/ });
+			expect(found).toHaveTextContent(
+				"Person \u00b7 US \u00b7 US electronic music producer and DJ",
+			);
+			expect(
+				fake!.calls.filter((call) => call.url.includes("/api/artists")).at(-1)
+					?.url,
+			).toMatch(/\?q=marsh$/);
+
+			await user.click(found);
+			expect(input("Artists")).toHaveValue("Future; Marshmello; ");
+
+			await user.keyboard("{Enter}");
+			const both = ["Future", "Marshmello"];
+			expect(sent("TXXX:ARTISTS")).toEqual([both, both, both]);
+		});
 	});
 
 	it("adds a tag by its key", async () => {

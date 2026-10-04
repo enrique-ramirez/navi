@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import {
 	genreIsEverywhere,
 	genresOnTrack,
@@ -73,7 +74,7 @@ export function Suggestions({
 		});
 
 	const chooseRow = (
-		suggestion: GenreSuggestion | SoundtrackSuggestion,
+		suggestion: SoundtrackSuggestion,
 		label: string,
 		onChoose: () => void,
 	) => (
@@ -113,25 +114,56 @@ export function Suggestions({
 		</>
 	);
 
+	// A genre is a pill: an artist with many albums brings many, and a row each buries the page.
+	const genrePill = (suggestion: GenreSuggestion) => (
+		<li key={suggestionKey(suggestion)} className={styles.pill}>
+			<button
+				type="button"
+				className={styles.pillAdd}
+				aria-label={t("suggest.add", { genre: suggestion.genre })}
+				title={says(suggestion)}
+				onClick={() => addGenre(suggestion.genre)}
+			>
+				<span aria-hidden="true">{suggestion.genre}</span>
+				<span className={styles.count} aria-hidden="true">
+					{suggestion.albums}/{suggestion.of}
+				</span>
+				<span className="visually-hidden">{says(suggestion)}</span>
+			</button>
+			<button
+				type="button"
+				className={styles.pillDismiss}
+				aria-label={`${t("suggest.dismiss")} ${suggestion.genre}`}
+				title={t("suggest.dismiss")}
+				onClick={() => dismissed.dismiss(suggestionKey(suggestion))}
+			>
+				<X size={12} aria-hidden="true" />
+			</button>
+		</li>
+	);
+
+	const genres = shown.filter((suggestion) => suggestion.kind === "genre");
+	const rows = shown.filter((suggestion) => suggestion.kind !== "genre");
+
 	return (
 		<ul className={styles.suggestions} aria-label={t("suggest.title")}>
-			{shown.map((suggestion) => (
-				<li key={suggestionKey(suggestion)}>
-					{suggestion.kind === "genre"
+			{rows.map((suggestion) => (
+				<li key={suggestionKey(suggestion)} className={styles.row}>
+					{suggestion.kind === "soundtrack"
 						? chooseRow(
 								suggestion,
-								t("suggest.add", { genre: suggestion.genre }),
-								() => addGenre(suggestion.genre),
+								t("suggest.choose", { genre: suggestion.genre }),
+								() => pending.setGame(suggestion.genre),
 							)
-						: suggestion.kind === "soundtrack"
-							? chooseRow(
-									suggestion,
-									t("suggest.choose", { genre: suggestion.genre }),
-									() => pending.setGame(suggestion.genre),
-								)
-							: spellingRow(suggestion)}
+						: spellingRow(suggestion)}
 				</li>
 			))}
+			{genres[0] && (
+				<li role="presentation" className={styles.lead}>
+					{t("suggest.genres", { artist: genres[0].artist })}
+				</li>
+			)}
+			{genres.map(genrePill)}
 		</ul>
 	);
 }
