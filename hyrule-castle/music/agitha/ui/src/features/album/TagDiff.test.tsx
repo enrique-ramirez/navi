@@ -376,11 +376,21 @@ describe("TagDiff", () => {
 			type: "Person",
 			country: "US",
 		};
+		const ARTISTS = "Artists (one value per artist)";
 
-		async function renderWithArtists() {
+		const searches = () =>
+			fake!.calls.filter((call) => call.url.includes("/api/artists"));
+
+		// `answers` are served one per search, the last one for every search after it.
+		async function renderWithArtists(
+			answers: object[] = [{ answered: true, artists: [MARSHMELLO] }],
+		) {
 			fake = fakeFetch({
 				"GET /api/genres": () => Response.json(genres),
-				"GET /api/artists": () => Response.json({ artists: [MARSHMELLO] }),
+				"GET /api/artists": () =>
+					Response.json(
+						answers[Math.min(searches().length, answers.length) - 1],
+					),
 			});
 			const view = albumView();
 			view.names.id3 = { ...view.names.id3, "TXXX:ARTISTS": "Artists" };
@@ -388,11 +398,11 @@ describe("TagDiff", () => {
 			return userEvent.setup();
 		}
 
-		it("have a row of their own that says the credit stands as one act until an artist is typed", async () => {
+		it("have a row of their own, named for what it holds, that says the credit stands as one act until an artist is typed", async () => {
 			await renderWithArtists();
 
-			expect(input("Artists")).toHaveValue("");
-			expect(input("Artists")).toHaveAttribute(
+			expect(input(ARTISTS)).toHaveValue("");
+			expect(input(ARTISTS)).toHaveAttribute(
 				"placeholder",
 				"one act, as credited",
 			);
@@ -401,22 +411,57 @@ describe("TagDiff", () => {
 		it("are searched for on MusicBrainz by the name being typed, shown with what tells each apart, and written one value each", async () => {
 			const user = await renderWithArtists();
 
-			await user.type(input("Artists"), "Future; marsh");
+			await user.type(input(ARTISTS), "Future; marsh");
+			expect(screen.getByRole("status")).toHaveTextContent(
+				"Searching MusicBrainz",
+			);
 			const found = await screen.findByRole("option", { name: /^Marshmello/ });
 			expect(found).toHaveTextContent(
 				"Person \u00b7 US \u00b7 US electronic music producer and DJ",
 			);
-			expect(
-				fake!.calls.filter((call) => call.url.includes("/api/artists")).at(-1)
-					?.url,
-			).toMatch(/\?q=marsh$/);
+			expect(screen.queryByRole("status")).toBeNull();
+			expect(searches().at(-1)?.url).toMatch(/\?q=marsh$/);
 
 			await user.click(found);
-			expect(input("Artists")).toHaveValue("Future; Marshmello; ");
+			expect(input(ARTISTS)).toHaveValue("Future; Marshmello; ");
 
 			await user.keyboard("{Enter}");
 			const both = ["Future", "Marshmello"];
 			expect(sent("TXXX:ARTISTS")).toEqual([both, both, both]);
+		});
+
+		it("says so where MusicBrainz knows nobody by the name, and Search again asks it once more", async () => {
+			const user = await renderWithArtists([
+				{ answered: true, artists: [] },
+				{ answered: true, artists: [MARSHMELLO] },
+			]);
+
+			await user.type(input(ARTISTS), "marsh");
+			const status = await screen.findByText(
+				"No artist called marsh on MusicBrainz",
+			);
+			expect(searches()).toHaveLength(1);
+
+			await user.click(
+				within(status).getByRole("button", { name: "Search again" }),
+			);
+
+			expect(
+				await screen.findByRole("option", { name: /^Marshmello/ }),
+			).toBeVisible();
+			expect(searches()).toHaveLength(2);
+			expect(input(ARTISTS)).toHaveValue("marsh");
+		});
+
+		it("says MusicBrainz did not answer where it did not, and offers to search again", async () => {
+			const user = await renderWithArtists([{ answered: false, artists: [] }]);
+
+			await user.type(input(ARTISTS), "marsh");
+
+			const status = await screen.findByText("MusicBrainz did not answer");
+			expect(
+				within(status).getByRole("button", { name: "Search again" }),
+			).toBeEnabled();
 		});
 	});
 

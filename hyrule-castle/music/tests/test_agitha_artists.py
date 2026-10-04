@@ -92,33 +92,46 @@ class SearchingForAnArtist(unittest.TestCase):
         self.server.server_close()
         self.thread.join(10)
 
-    def search(self, name: str) -> list[dict[str, Any]]:
+    def answer(self, name: str) -> dict[str, Any]:
         url = f"http://127.0.0.1:{self.server.server_address[1]}/api/artists?q={quote(name)}"
         with urllib.request.urlopen(url, timeout=10) as response:
             self.assertEqual(response.status, 200)
-            return json.load(response)["artists"]
+            return json.load(response)
+
+    def search(self, name: str) -> list[dict[str, Any]]:
+        return self.answer(name)["artists"]
+
+    def asked(self) -> str:
+        """The search MusicBrainz was last asked for, in its own query syntax."""
+        return parse_qs(urlsplit(self.mb.requests[-1]).query)["query"][0]
 
     def test_answers_each_artist_musicbrainz_finds_with_what_tells_it_apart(self) -> None:
-        self.assertEqual(self.search("marshm"), [
+        self.assertEqual(self.answer("marshm"), {"answered": True, "artists": [
             {"id": MARSHMELLO["id"], "name": "Marshmello", "disambiguation": "US electronic music producer and DJ",
              "type": "Person", "country": "US"},
             {"id": BARE["id"], "name": "Marshmellow Overcoat", "disambiguation": "", "type": "", "country": ""},
-        ])
-        asked = parse_qs(urlsplit(self.mb.requests[-1]).query)["query"]
-        self.assertEqual(asked, ["artist:(marshm)"])
+        ]})
 
-    def test_asks_musicbrainz_once_for_a_name_already_searched(self) -> None:
+    def test_searches_names_and_aliases_for_the_words_typed_the_last_one_as_far_as_it_goes(self) -> None:
+        # MusicBrainz matches whole words: `marshm` alone finds nobody.
+        self.search("marshm")
+        self.assertEqual(self.asked(), "artist:((marshm* OR marshm)) OR alias:((marshm* OR marshm))")
+        self.search("Bob Seg")
+        self.assertEqual(self.asked(), "artist:(bob AND (seg* OR seg)) OR alias:(bob AND (seg* OR seg))")
+
+    def test_asks_musicbrainz_again_for_a_name_already_searched(self) -> None:
+        # An empty or a stale answer kept for good could never be asked for again from the page.
         self.search("marshmello")
         self.search("marshmello")
-        self.assertEqual(len(self.mb.requests), 1)
+        self.assertEqual(len(self.mb.requests), 2)
 
     def test_does_not_search_for_a_name_of_one_letter(self) -> None:
-        self.assertEqual(self.search("m"), [])
+        self.assertEqual(self.answer("m"), {"answered": True, "artists": []})
         self.assertEqual(self.mb.requests, [])
 
-    def test_answers_no_artist_where_musicbrainz_does_not_answer(self) -> None:
+    def test_says_musicbrainz_did_not_answer_where_it_does_not(self) -> None:
         self.mb.fault = 503
-        self.assertEqual(self.search("marshmello"), [])
+        self.assertEqual(self.answer("marshmello"), {"answered": False, "artists": []})
 
 
 if __name__ == "__main__":

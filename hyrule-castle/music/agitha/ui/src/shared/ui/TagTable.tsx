@@ -2,7 +2,7 @@ import { Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import { useTranslate } from "@/shared/i18n/useTranslate";
-import { SuggestInput } from "./SuggestInput";
+import { type Lookup, SuggestInput } from "./SuggestInput";
 import styles from "./TagTable.module.css";
 import { bytesOf, formatValues, type Side, type TagRow } from "./tagRow";
 
@@ -36,8 +36,7 @@ function ValueInput({
 	differs,
 	unset,
 	options,
-	hintOf,
-	onTerm,
+	lookup,
 	onCommit,
 }: {
 	row: TagRow;
@@ -47,8 +46,8 @@ function ValueInput({
 	unset: string;
 	/** The values the tag may take, offered while typing. */
 	options?: readonly string[];
-	hintOf?: (option: string) => string | undefined;
-	onTerm?: (term: string) => void;
+	/** The values looked up from what is typed, where no list is known beforehand. */
+	lookup?: Lookup;
 	onCommit: (values: string[]) => void;
 }) {
 	const { t } = useTranslate();
@@ -70,16 +69,15 @@ function ValueInput({
 					: t("tags.removedValue")
 				: undefined;
 
-	if (options)
+	if (options || lookup)
 		return (
 			<SuggestInput
 				className={styles.input}
 				label={label}
 				value={draft}
 				placeholder={placeholder}
-				options={options}
-				hintOf={hintOf}
-				onTerm={onTerm}
+				options={options ?? []}
+				lookup={lookup}
 				onChange={setDraft}
 				onCommit={commit}
 				onCancel={() => setDraft(shown)}
@@ -118,8 +116,7 @@ export function TagTable({
 	describe,
 	unsetOf,
 	optionsOf,
-	hintOf,
-	onTyped,
+	lookupOf,
 	onSet,
 	onUndo,
 	onAdd,
@@ -139,10 +136,8 @@ export function TagTable({
 	unsetOf?: (row: TagRow) => string | undefined;
 	/** The values a row's tag may take, offered while typing; nothing where any text will do. */
 	optionsOf?: (row: TagRow) => readonly string[] | undefined;
-	/** What an offered value shows beside itself. */
-	hintOf?: (row: TagRow, option: string) => string | undefined;
-	/** The value being typed into a row that offers values, where they are looked up from it. */
-	onTyped?: (row: TagRow, term: string) => void;
+	/** The search a row's values are looked up by as they are typed; nothing where the row has none. */
+	lookupOf?: (row: TagRow) => Lookup | undefined;
 	/** The row's tag gets these values; `null` removes it. */
 	onSet: (row: TagRow, values: string[] | null) => void;
 	onUndo: (row: TagRow) => void;
@@ -261,8 +256,7 @@ export function TagTable({
 												differs={differs("next")}
 												unset={unsetOf?.(row) ?? t("tags.noValue")}
 												options={optionsOf?.(row)}
-												hintOf={(option) => hintOf?.(row, option)}
-												onTerm={(term) => onTyped?.(row, term)}
+												lookup={lookupOf?.(row)}
 												onCommit={(values) => onSet(row, values)}
 											/>
 											{row.next === null && row.now !== null && !row.edited && (

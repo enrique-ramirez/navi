@@ -870,5 +870,7 @@ export interface FoundArtist {
 }
 
 export interface ArtistList {
+	/** False where MusicBrainz did not answer, and the list is empty for that alone. */
+	answered: boolean;
 	artists: FoundArtist[];
 }

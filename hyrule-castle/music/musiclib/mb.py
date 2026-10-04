@@ -125,36 +125,37 @@ class MusicBrainz:
         self.transport = transport or default_transport
         self._throttle = Throttle(clock, sleep)
 
-    def _get(self, url: str) -> bytes:
-        def fetch() -> bytes:
-            attempt = 0
-            while True:
-                wait = _MIN_INTERVAL if attempt == 0 else _BACKOFF[attempt - 1]
-                self._throttle.hold(wait)
-                try:
-                    status, body = self.transport(url, {"User-Agent": USER_AGENT})
-                except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
-                    # The network itself, not MusicBrainz, said no: retried
-                    # the same as a 503, out of the same budget.
-                    status, body = None, b""
-                if status == 200:
-                    return body
-                if status == 404:
-                    # Cached like any other answer: a wrong or withdrawn MBID
-                    # would otherwise cost a request and a second of rate
-                    # limit on every warm run.
-                    return _NOT_FOUND
-                if status is None or status in _RETRYABLE_STATUSES:
-                    attempt += 1
-                    if attempt >= _MAX_ATTEMPTS:
-                        raise MusicBrainzUnavailable()
-                    continue
-                raise MusicBrainzError(f"musicbrainz: {url} -> {status}")
+    def _ask(self, url: str) -> bytes:
+        """What MusicBrainz answers for `url`, asked now: the body, or `_NOT_FOUND` for a 404."""
+        attempt = 0
+        while True:
+            wait = _MIN_INTERVAL if attempt == 0 else _BACKOFF[attempt - 1]
+            self._throttle.hold(wait)
+            try:
+                status, body = self.transport(url, {"User-Agent": USER_AGENT})
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+                # The network itself, not MusicBrainz, said no: retried
+                # the same as a 503, out of the same budget.
+                status, body = None, b""
+            if status == 200:
+                return body
+            if status == 404:
+                # Cached like any other answer: a wrong or withdrawn MBID
+                # would otherwise cost a request and a second of rate
+                # limit on every warm run.
+                return _NOT_FOUND
+            if status is None or status in _RETRYABLE_STATUSES:
+                attempt += 1
+                if attempt >= _MAX_ATTEMPTS:
+                    raise MusicBrainzUnavailable()
+                continue
+            raise MusicBrainzError(f"musicbrainz: {url} -> {status}")
 
-        # A 404 is the one answer that is remembered: `fetch` returns a
+    def _get(self, url: str) -> bytes:
+        # A 404 is the one answer that is remembered: `_ask` returns a
         # marker for it instead of raising, and it is turned back into
         # `MusicBrainzError` below.
-        body = self.cache.fetch(url, fetch)
+        body = self.cache.fetch(url, lambda: self._ask(url))
         if body == _NOT_FOUND:
             raise MusicBrainzNotFound(f"musicbrainz: {url} -> 404")
         return body
@@ -234,10 +235,20 @@ class MusicBrainz:
         return json.loads(self._get(url))
 
     def search_artists(self, name: str, limit: int = 8) -> list[dict]:
-        """The artists MusicBrainz finds for `name`, best first, as its search lists them."""
-        lucene = f"artist:({_lucene_escape(name.lower())})"
+        """The artists MusicBrainz finds for `name` as far as it is typed, best first, by name or by alias.
+
+        The search matches whole words, so the last word typed also stands
+        for any word it starts. The answer is never cached: an artist added
+        to MusicBrainz since is found by asking again.
+        """
+        words = [_lucene_escape(word) for word in name.lower().split()]
+        if not words:
+            return []
+        terms = " AND ".join([*words[:-1], f"({words[-1]}* OR {words[-1]})"])
+        lucene = f"artist:({terms}) OR alias:({terms})"
         url = f"{_BASE}/artist/?query={quote(lucene, safe='')}&fmt=json&limit={limit}"
-        return json.loads(self._get(url)).get("artists", [])
+        body = self._ask(url)
+        return [] if body == _NOT_FOUND else json.loads(body).get("artists", [])
 
     def search_releases(self, title: str, artist: str | None, various_artists: bool = False) -> dict:
         # No track-count term: a search result counts data tracks and pregap

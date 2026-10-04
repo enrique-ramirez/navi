@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import type { DiffRow } from "@/domain/album/diff";
 import { lockedKind } from "@/domain/album/tagModel";
-import { ARTIST_LISTS, useArtistSearch } from "@/domain/library/artistSearch";
+import { ARTIST_LISTS, useArtistLookup } from "@/domain/library/artistSearch";
 import { glossOf } from "@/domain/library/gloss";
 import {
 	applyEdits,
@@ -68,7 +68,7 @@ export function LibraryTags({
 		...standingRows(tracks, names),
 		...typed,
 	]).filter((row) => typed.includes(row.key) || shows(row));
-	const artists = useArtistSearch();
+	const artists = useArtistLookup();
 	const listsArtists = (row: DiffRow) => ARTIST_LISTS.includes(row.key);
 	const first = tracks[0];
 
@@ -139,6 +139,9 @@ export function LibraryTags({
 	}
 
 	const nameOf = (key: string) => {
+		// Beside `Artist`, `Artists` reads as the same tag twice without saying what it holds.
+		if (ARTIST_LISTS.includes(key))
+			return t("editor.glossed", { key, gloss: t("gloss.eachArtist") });
 		const gloss = glossOf(key);
 		return gloss ? t("editor.glossed", { key, gloss: t(gloss) }) : key;
 	};
@@ -156,19 +159,8 @@ export function LibraryTags({
 			describe={(row, side) =>
 				(side === "now" ? countsNow : countsNext).get(row.key)
 			}
-			optionsOf={(row) =>
-				row.key === GENRE
-					? genres
-					: listsArtists(row)
-						? artists.names
-						: undefined
-			}
-			hintOf={(row, option) =>
-				listsArtists(row) ? artists.hintOf(option) : undefined
-			}
-			onTyped={(row, term) => {
-				if (listsArtists(row)) artists.search(term);
-			}}
+			optionsOf={(row) => (row.key === GENRE ? genres : undefined)}
+			lookupOf={(row) => (listsArtists(row) ? artists : undefined)}
 			unsetOf={(row) => (listsArtists(row) ? t("tags.asCredited") : undefined)}
 			onSet={set}
 			onUndo={(row) => {

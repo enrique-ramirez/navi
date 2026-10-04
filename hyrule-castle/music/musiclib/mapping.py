@@ -95,8 +95,12 @@ ADDED: dict[str, str] = {"id3": "TXXX:ADDED", "vorbis": "added", "mp4": _ITUNES_
 READABLE: dict[str, dict[str, str | None]] = {
     "Title": PICARD["title"],
     "Artist": PICARD["artist"],
+    # Each artist of the credit as a value of its own, which a player reads to tell `A & B` the two acts from `A & B` the band.
+    "Artists": {"id3": "TXXX:ARTISTS", "vorbis": "artists", "mp4": _ITUNES_FREEFORM + "ARTISTS", "asf": "WM/ARTISTS"},
     "Album": PICARD["album"],
     "Album artist": PICARD["albumartist"],
+    "Album artists": {"id3": "TXXX:ALBUMARTISTS", "vorbis": "albumartists", "mp4": _ITUNES_FREEFORM + "ALBUMARTISTS",
+                      "asf": "WM/ALBUMARTISTS"},
     "Date": PICARD["date"],
     "Original release date": PICARD["originaldate"],
     "Artist sort order": PICARD["artistsort"],
@@ -109,10 +113,6 @@ READABLE: dict[str, dict[str, str | None]] = {
     "MusicBrainz track id": PICARD["release track id"],
     "MusicBrainz artist id": PICARD["artist id"],
     "MusicBrainz album artist id": PICARD["album artist id"],
-    # Each credited artist as a value of its own, which a player reads to tell `A & B` the two acts from `A & B` the band.
-    "Artists": {"id3": "TXXX:ARTISTS", "vorbis": "artists", "mp4": _ITUNES_FREEFORM + "ARTISTS", "asf": "WM/ARTISTS"},
-    "Album artists": {"id3": "TXXX:ALBUMARTISTS", "vorbis": "albumartists", "mp4": _ITUNES_FREEFORM + "ALBUMARTISTS",
-                      "asf": "WM/ALBUMARTISTS"},
     "Label": PICARD["label"],
     "Catalogue number": PICARD["catalognumber"],
     "Barcode": PICARD["barcode"],

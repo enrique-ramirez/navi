@@ -5,7 +5,7 @@ import type { DiffRow } from "@/domain/album/diff";
 import { editKeyOf } from "@/domain/album/diff";
 import { GENRE } from "@/domain/album/neutral";
 import { lockedKind } from "@/domain/album/tagModel";
-import { ARTIST_LISTS, useArtistSearch } from "@/domain/library/artistSearch";
+import { ARTIST_LISTS, useArtistLookup } from "@/domain/library/artistSearch";
 import { genresQuery } from "@/domain/library/libraryQuery";
 import type { AlbumView, Family } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -31,7 +31,7 @@ export function TagDiff({
 	const names = view.names[family] ?? {};
 	const genres = useQuery(genresQuery()).data?.genres;
 	const [refusal, setRefusal] = useState<string | null>(null);
-	const artists = useArtistSearch();
+	const artists = useArtistLookup();
 	const listsArtists = (row: DiffRow) =>
 		ARTIST_LISTS.includes(names[row.key] ?? "");
 
@@ -80,22 +80,21 @@ export function TagDiff({
 			rows={rows}
 			label={label}
 			editable={pending.draft.action === "accept"}
-			nameOf={(key) => names[key] ?? key}
+			// Beside `Artist`, `Artists` reads as the same tag twice without saying what it holds.
+			nameOf={(key) =>
+				ARTIST_LISTS.includes(names[key] ?? "")
+					? t("editor.glossed", {
+							key: names[key] ?? key,
+							gloss: t("gloss.eachArtist"),
+						})
+					: (names[key] ?? key)
+			}
 			error={refusal}
 			// A list from the start, empty until the genres arrive: the field is not swapped under the owner's typing.
 			optionsOf={(row) =>
-				editKeyOf(view, row.key) === GENRE
-					? (genres ?? [])
-					: listsArtists(row)
-						? artists.names
-						: undefined
+				editKeyOf(view, row.key) === GENRE ? (genres ?? []) : undefined
 			}
-			hintOf={(row, option) =>
-				listsArtists(row) ? artists.hintOf(option) : undefined
-			}
-			onTyped={(row, term) => {
-				if (listsArtists(row)) artists.search(term);
-			}}
+			lookupOf={(row) => (listsArtists(row) ? artists : undefined)}
 			unsetOf={(row) => (listsArtists(row) ? t("tags.asCredited") : undefined)}
 			onSet={set}
 			onUndo={(row) => {

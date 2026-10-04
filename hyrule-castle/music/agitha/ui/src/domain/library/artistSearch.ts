@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { fetchArtists } from "@/shared/api/library";
 import type { FoundArtist } from "@/shared/api/types";
+import { useTranslate } from "@/shared/i18n/useTranslate";
+import type { Lookup } from "@/shared/ui/SuggestInput";
 
 /** The readable names of the tags that hold one value per artist. */
 export const ARTIST_LISTS = ["Artists", "Album artists"];
@@ -19,20 +21,24 @@ const hintOf = (artist: FoundArtist) =>
 /**
  * The artists MusicBrainz knows by the name being typed, asked for once the
  * typing rests. The last answer stays while the next is fetched, so the list
- * does not blink between letters.
+ * does not blink between letters, and an answer is kept for the page's life:
+ * `retry` asks MusicBrainz again.
  */
-export function useArtistSearch() {
+export function useArtistLookup(): Lookup {
+	const { t } = useTranslate();
 	const [typed, setTyped] = useState("");
 	const [name, setName] = useState("");
+	const wanted = typed.trim();
 	useEffect(() => {
-		const timer = setTimeout(() => setName(typed.trim()), WAIT_MS);
+		const timer = setTimeout(() => setName(wanted), WAIT_MS);
 		return () => clearTimeout(timer);
-	}, [typed]);
+	}, [wanted]);
 
+	const asks = name.length >= SHORTEST;
 	const found = useQuery({
 		queryKey: ["artists", name.toLowerCase()],
 		queryFn: () => fetchArtists(name),
-		enabled: name.length >= SHORTEST,
+		enabled: asks,
 		staleTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		retry: false,
@@ -43,9 +49,26 @@ export function useArtistSearch() {
 	for (const artist of found.data?.artists ?? [])
 		if (!hints.has(artist.name)) hints.set(artist.name, hintOf(artist));
 
+	const retry = {
+		label: t("artists.again"),
+		run: () => void found.refetch(),
+	};
+	const busy =
+		wanted.length >= SHORTEST && (wanted !== name || found.isFetching);
+	const status = busy
+		? { text: t("artists.searching") }
+		: !asks || wanted.length < SHORTEST
+			? null
+			: found.isError || found.data?.answered === false
+				? { text: t("artists.noAnswer"), retry }
+				: hints.size === 0
+					? { text: t("artists.none", { name }), retry }
+					: null;
+
 	return {
+		options: [...hints.keys()],
+		hintOf: (artist) => hints.get(artist) || undefined,
 		search: setTyped,
-		names: [...hints.keys()],
-		hintOf: (artist: string) => hints.get(artist) || undefined,
+		status,
 	};
 }
