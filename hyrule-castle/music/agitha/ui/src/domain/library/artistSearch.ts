@@ -6,8 +6,11 @@ import type { FoundArtist } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import type { Lookup } from "@/shared/ui/SuggestInput";
 
+/** The readable name of the tag that holds each artist of a track's credit. */
+export const TRACK_ARTISTS = "Artists";
+
 /** The readable names of the tags that hold one value per artist. */
-export const ARTIST_LISTS = ["Artists", "Album artists"];
+export const ARTIST_LISTS = [TRACK_ARTISTS, "Album artists"];
 
 const WAIT_MS = 300;
 const SHORTEST = 2;

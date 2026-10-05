@@ -1,4 +1,4 @@
-import { ARTIST_LISTS } from "@/domain/library/artistSearch";
+import { ARTIST_LISTS, TRACK_ARTISTS } from "@/domain/library/artistSearch";
 import type { AlbumView, Edits, PlanFile } from "@/shared/api/types";
 import type { Change, Side, TagRow } from "@/shared/ui/tagRow";
 import { familyOf, genreKeyOf } from "./albumTags";
@@ -163,12 +163,19 @@ export function diffOf(view: AlbumView, edits: Edits): Diff {
 			.map((key) => rowFor(key, files))
 			.filter((row) => row !== null),
 	);
+	// Who a track credits is the track's own to say: a guest on one track is named there, and the
+	// album's row, which writes every track, cannot.
+	const namesItsArtists = (file: PlanFile, key: string) =>
+		view.names[familyOf(view, file)]?.[key] === TRACK_ARTISTS;
+
 	const tracks: Record<string, DiffRow[]> = {};
 	for (const file of files)
 		tracks[file.position] = order(
 			keys
 				.filter(
-					(key) => (!shared(key) || differsNow(key)) && !hidden(file, key),
+					(key) =>
+						(!shared(key) || differsNow(key) || namesItsArtists(file, key)) &&
+						!hidden(file, key),
 				)
 				.map((key) => rowFor(key, [file]))
 				.filter((row) => row !== null),

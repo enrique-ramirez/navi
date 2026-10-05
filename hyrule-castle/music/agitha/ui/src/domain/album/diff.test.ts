@@ -128,29 +128,33 @@ describe("diffOf", () => {
 		).toMatchObject({ next: ["rock"], change: "added", edited: true });
 	});
 
-	it("keeps a row for each artist list the format has a name for, under the album while the tracks agree and under the tracks once they differ", () => {
+	it("keeps a row for each artist list the format has a name for: the album's writes every track, and each track has its own for a guest", () => {
 		const view = albumView();
-		view.names.id3 = { ...view.names.id3, "TXXX:ARTISTS": "Artists" };
+		view.names.id3 = {
+			...view.names.id3,
+			"TXXX:ARTISTS": "Artists",
+			"TXXX:ALBUMARTISTS": "Album artists",
+		};
+		const unset = { now: null, next: null, change: "same", locked: null };
 
 		const diff = diffOf(view, {});
-		expect(rowOf(diff.album, "TXXX:ARTISTS")).toMatchObject({
-			now: null,
-			next: null,
-			change: "same",
-			locked: null,
-		});
-		expect(diff.tracks["1-1"]?.map((row) => row.key)).not.toContain(
-			"TXXX:ARTISTS",
-		);
+		expect(rowOf(diff.album, "TXXX:ARTISTS")).toMatchObject(unset);
+		expect(rowOf(diff.album, "TXXX:ALBUMARTISTS")).toMatchObject(unset);
+		for (const position of ALL) {
+			const own = diff.tracks[position] ?? [];
+			expect(rowOf(own, "TXXX:ARTISTS")).toMatchObject(unset);
+			expect(own.map((row) => row.key)).not.toContain("TXXX:ALBUMARTISTS");
+		}
 
 		const one = diffOf(view, {
-			"1-1": { "TXXX:ARTISTS": ["Future", "Marshmello"] },
+			"1-1": { "TXXX:ARTISTS": ["La Garfield", "Sabino"] },
 		});
 		expect(one.album.map((row) => row.key)).not.toContain("TXXX:ARTISTS");
 		expect(rowOf(one.tracks["1-1"] ?? [], "TXXX:ARTISTS")).toMatchObject({
-			next: ["Future", "Marshmello"],
+			next: ["La Garfield", "Sabino"],
 			edited: true,
 		});
+		expect(rowOf(one.tracks["1-2"] ?? [], "TXXX:ARTISTS")).toMatchObject(unset);
 	});
 
 	it("orders rows by the family's names, then the unknown keys, and the locked ones last", () => {
