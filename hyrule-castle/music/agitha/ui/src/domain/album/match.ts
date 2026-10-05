@@ -1,4 +1,4 @@
-import type { Candidate } from "@/shared/api/types";
+import type { Candidate, FailingTrack } from "@/shared/api/types";
 
 export type Level = "strong" | "possible" | "weak" | "unchecked";
 
@@ -47,3 +47,13 @@ export const trackTotal = (candidate: Candidate) =>
 
 export const releaseUrl = (releaseId: string) =>
 	`https://musicbrainz.org/release/${releaseId}`;
+
+/** The track a failing file is, as the track list numbers it: `09`, or `2-09` on an album of several discs. */
+export function failingNumber(position: string, multiDisc: boolean) {
+	const [disc = "", track = ""] = position.split("-");
+	return multiDisc ? `${disc}-${track}` : track;
+}
+
+/** The lengths of a failing track where they are what is off: more than a second apart. */
+export const lengthsApart = (track: FailingTrack) =>
+	track.wants !== null && Math.abs(track.length - track.wants) > 1;

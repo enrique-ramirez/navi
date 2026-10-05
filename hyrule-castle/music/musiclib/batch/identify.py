@@ -98,7 +98,8 @@ def _candidate_dict(candidate, owner_input: dict) -> dict:
         "country": country, "format": fmt, "track_counts": track_counts,
         "matches_counts": candidate.matches_counts, "duration_diff": candidate.duration_diff,
         "checked": candidate.release is not None, "artist_agrees": candidate.artist_agrees,
-        "failing_tracks": identify_engine.failing_tracks(candidate, owner_input), "status": status,
+        "failing_tracks": identify_engine.failing_tracks(candidate, owner_input),
+        "failing": identify_engine.failing(candidate, owner_input), "status": status,
         "thumbnail": f"https://coverartarchive.org/release/{candidate.release_id}/front-250",
     }
 

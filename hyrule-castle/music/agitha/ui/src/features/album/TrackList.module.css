@@ -1,0 +1,5 @@
+.unfit {
+	display: block;
+	color: var(--caution);
+	font-size: 0.75rem;
+}

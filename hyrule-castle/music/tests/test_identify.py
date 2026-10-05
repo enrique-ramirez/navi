@@ -508,8 +508,25 @@ class Search(IdentifyTestCase):
             "release_id": mbid("0f"), "title": "The Downward Spiral", "artist": "Nine Inch Nails",
             "date": "2001", "country": "JP", "format": "CD", "track_counts": [2], "matches_counts": False,
             "duration_diff": None, "checked": False, "artist_agrees": False, "failing_tracks": None,
-            "status": "Official",
+            "failing": None, "status": "Official",
         })
+
+    def test_a_candidate_names_each_track_that_does_not_fit_with_what_to_compare(self) -> None:
+        # The second file runs half a minute over its track and the third is another song of
+        # the right length: `1 tracks don't line up` says neither which nor why.
+        a2 = release_json(mbid("a2"), [[201.5, 180, 240]])
+        server = Server(search=search_json(a2), releases=(a2,))
+        titled = [(track["title"], length) for track, length in zip(a2["media"][0]["tracks"], (201.5, 210, 240))]
+        titled[2] = ("Another Song Entirely", 240)
+        result = self.identify(self.titled_unit(titled), server)
+        entry = _candidate_dict(result.candidates[0], {})
+        self.assertEqual(entry["failing_tracks"], 2)
+        self.assertEqual(entry["failing"], [
+            {"position": "1-2", "title": a2["media"][0]["tracks"][1]["title"],
+             "file_title": a2["media"][0]["tracks"][1]["title"], "title_agrees": True, "length": 210, "wants": 180.0},
+            {"position": "1-3", "title": a2["media"][0]["tracks"][2]["title"],
+             "file_title": "Another Song Entirely", "title_agrees": False, "length": 240, "wants": 240.0},
+        ])
 
     def test_the_same_total_split_differently_does_not_match_counts(self) -> None:
         tracks = [

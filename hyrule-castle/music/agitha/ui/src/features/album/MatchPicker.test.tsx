@@ -87,6 +87,57 @@ describe("MatchPicker", () => {
 		).toHaveAttribute("href", releaseUrl(id(1)));
 	});
 
+	it("names each track that does not line up with the chosen release, by what is off", async () => {
+		const v = view();
+		v.preview!.candidates = [
+			candidate({
+				release_id: id(1),
+				title: "Clean Album",
+				failing_tracks: 2,
+				failing: [
+					{
+						position: "1-2",
+						title: "Two",
+						file_title: "Two",
+						title_agrees: true,
+						length: 288.7,
+						wants: 260,
+					},
+					{
+						position: "1-3",
+						title: "Three",
+						file_title: "Another Song",
+						title_agrees: false,
+						length: 200,
+						wants: 200,
+					},
+				],
+			}),
+		];
+		renderWithProviders(<Picker view={v} />);
+
+		const list = await screen.findByRole("list", {
+			name: "Tracks that don't line up",
+		});
+		expect(
+			within(list)
+				.getAllByRole("listitem")
+				.map((item) => item.textContent),
+		).toEqual([
+			"Track 2, Two: 4:48 here, 4:20 on MusicBrainz",
+			"Track 3, Three: titled Another Song here, Three on MusicBrainz",
+		]);
+	});
+
+	it("says nothing of tracks for a release every file fits, or a preview made before they were listed", async () => {
+		renderWithProviders(<Picker view={view()} />);
+
+		await trigger();
+		expect(
+			screen.queryByRole("list", { name: "Tracks that don't line up" }),
+		).toBeNull();
+	});
+
 	it("lists the releases best fit first, with the unchecked ones set apart", async () => {
 		const user = userEvent.setup();
 		renderWithProviders(<Picker view={view()} />);

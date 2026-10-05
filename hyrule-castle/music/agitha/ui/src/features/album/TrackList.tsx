@@ -2,7 +2,10 @@ import { factsOf, trackTitle } from "@/domain/album/albumTags";
 import { formatLength } from "@/domain/album/format";
 import { mimeOf, usePlayer } from "@/domain/player/usePlayer";
 import type { AlbumView } from "@/shared/api/types";
+import { useTranslate } from "@/shared/i18n/useTranslate";
 import { TrackRows } from "@/shared/ui/TrackRows";
+import { failingOf, failingWords } from "./failingWords";
+import styles from "./TrackList.module.css";
 
 interface Props {
 	view: AlbumView;
@@ -18,8 +21,10 @@ function numberOf(position: string, multiDisc: boolean) {
 }
 
 export function TrackList({ view, selected, onSelect, changes }: Props) {
+	const { t } = useTranslate();
 	const player = usePlayer();
 	const files = view.preview?.files ?? [];
+	const failing = failingOf(view);
 	const discs = new Set(files.map((file) => file.position.split("-")[0]));
 
 	return (
@@ -29,6 +34,7 @@ export function TrackList({ view, selected, onSelect, changes }: Props) {
 			onSelect={onSelect}
 			rows={files.map((file) => {
 				const facts = factsOf(view, file.position);
+				const unfit = failing.get(file.position);
 				return {
 					id: file.position,
 					number: numberOf(file.position, discs.size > 1),
@@ -43,6 +49,9 @@ export function TrackList({ view, selected, onSelect, changes }: Props) {
 							}
 						: null,
 					changes: changes[file.position] ?? 0,
+					note: unfit && (
+						<span className={styles.unfit}>{failingWords(unfit, t)}</span>
+					),
 				};
 			})}
 		/>

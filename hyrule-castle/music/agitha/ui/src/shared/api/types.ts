@@ -67,10 +67,25 @@ export interface Candidate {
 	artist_agrees: boolean;
 	/** Tracks whose title or length does not fit the release; `null` where the counts do not match. */
 	failing_tracks: number | null;
+	/** Each of those tracks with what to compare; absent from a preview made before the engine listed them. */
+	failing?: FailingTrack[] | null;
 	/** MusicBrainz release status (`Official`, `Promotion`, `Bootleg`...), `null` where unknown. */
 	status: string | null;
 	/** Cover Art Archive URL, 250 px. */
 	thumbnail: string;
+}
+
+/** A file that does not fit its track of a release, and the two things that decide it. */
+export interface FailingTrack {
+	/** `<medium>-<position>`, as a planned file is named. */
+	position: string;
+	/** The track's title on MusicBrainz, and the file's own. */
+	title: string;
+	file_title: string;
+	title_agrees: boolean;
+	/** Seconds: the file's, and MusicBrainz's, `null` for a track nobody has timed. */
+	length: number;
+	wants: number | null;
 }
 
 export interface PlanFile {

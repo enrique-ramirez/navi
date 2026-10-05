@@ -119,21 +119,52 @@ def _latin_titles(p: TrackPair, latin: list[dict]) -> list[str]:
     return titles_
 
 
+def _wanted_titles(p: TrackPair, edited: dict, latin: list[dict] | None) -> list[str]:
+    """The titles `p`'s file may carry: MusicBrainz's, the owner's edit of it, and each Latin pseudo-release's."""
+    return [p.mb_track["title"], *edited.get(position_key(p), {}).get("title", [])[:1],
+            *_latin_titles(p, latin or [])]
+
+
 def _pair_fits(p: TrackPair, edited: dict, latin: list[dict] | None = None) -> bool:
-    wanted = [p.mb_track["title"], *edited.get(position_key(p), {}).get("title", [])[:1],
-              *_latin_titles(p, latin or [])]
     title = titles.file_title(p.file)
     length = mb_length(p.mb_track)
-    return any(titles.pair_passes(title, p.file.length, w, length) for w in wanted)
+    return any(titles.pair_passes(title, p.file.length, w, length) for w in _wanted_titles(p, edited, latin))
+
+
+def _edited(candidate: Candidate, owner_input: dict | None) -> dict:
+    return ((owner_input or {}).get("edits") or {}).get(candidate.release_id, {})
 
 
 def _failing_pairs(candidate: Candidate, owner_input: dict | None) -> int:
-    edited = ((owner_input or {}).get("edits") or {}).get(candidate.release_id, {})
+    edited = _edited(candidate, owner_input)
     return sum(not _pair_fits(p, edited, candidate.latin) for p in candidate.pairs or [])
 
 
 def failing_tracks(candidate: Candidate, owner_input: dict | None) -> int | None:
     return None if candidate.pairs is None else _failing_pairs(candidate, owner_input)
+
+
+def failing(candidate: Candidate, owner_input: dict | None) -> list[dict] | None:
+    """Each file that does not fit its track of `candidate`, with what a person compares to see why.
+
+    `title_agrees` is whether the file's title is one the track may carry.
+    `length` is the file's and `wants` MusicBrainz's, in seconds, `None` for
+    a track nobody has timed. `None` where the track counts do not match.
+    """
+    if candidate.pairs is None:
+        return None
+    edited = _edited(candidate, owner_input)
+    found = []
+    for p in candidate.pairs:
+        if _pair_fits(p, edited, candidate.latin):
+            continue
+        title = titles.file_title(p.file)
+        found.append({
+            "position": position_key(p), "title": p.mb_track["title"], "file_title": title,
+            "title_agrees": any(titles.agree(title, w) for w in _wanted_titles(p, edited, candidate.latin)),
+            "length": p.file.length, "wants": mb_length(p.mb_track),
+        })
+    return found
 
 
 def _fits(candidate: Candidate, owner_input: dict | None = None) -> bool:

@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { formatLength } from "@/domain/album/format";
 import {
 	byLevel,
+	failingNumber,
 	type Level,
 	levelOf,
 	releaseUrl,
@@ -18,6 +19,7 @@ import {
 } from "@/domain/album/match";
 import type { AlbumView, Candidate } from "@/shared/api/types";
 import { useTranslate } from "@/shared/i18n/useTranslate";
+import { failingWords } from "./failingWords";
 import styles from "./MatchPicker.module.css";
 import type { Pending } from "./pending";
 
@@ -129,6 +131,9 @@ export function MatchPicker({
 
 	const candidates = view.preview?.candidates ?? [];
 	const folder = view.preview?.files.length ?? 0;
+	const multiDisc =
+		new Set(view.preview?.files.map((file) => file.position.split("-")[0]))
+			.size > 1;
 	const draft = pending.draft;
 	const chosenId = draft.action === "accept" ? draft.release_id : null;
 	const chosen = candidates.find((each) => each.release_id === chosenId);
@@ -306,6 +311,20 @@ export function MatchPicker({
 						</a>
 					)}
 				</div>
+
+				{draft.action === "accept" && (chosen?.failing?.length ?? 0) > 0 && (
+					<ul className={styles.failing} aria-label={t("match.failing.list")}>
+						{chosen?.failing?.map((track) => (
+							<li key={track.position}>
+								{t("match.failing.track", {
+									n: failingNumber(track.position, multiDisc),
+									title: track.title,
+									why: failingWords(track, t),
+								})}
+							</li>
+						))}
+					</ul>
+				)}
 
 				{open && (
 					<div id={panelId} className={styles.panel}>
