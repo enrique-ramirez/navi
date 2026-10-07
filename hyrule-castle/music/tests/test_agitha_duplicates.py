@@ -946,6 +946,53 @@ class Keeping(unittest.TestCase):
         self.assertLibraryAsBefore()
         self.assertEqual(set(hashes(self.setting.finished)), set(self.expected))
 
+    def keep(self, side: str | None) -> tuple[int, dict]:
+        return self.served.request("POST", f"/api/drops/{DROP}/albums/{N}/keep", {"keep": side})
+
+    def test_keep_the_new_one_is_recorded_and_approve_then_needs_no_keep(self) -> None:
+        self.lay_library("(2010) Chrono Cross")
+        status, body = self.keep("new")
+        self.assertEqual(status, 200, body)
+        status, view = self.served.view()
+        self.assertEqual(view["keep"], "new")
+        self.assertEqual(view["state"], "ready")
+        self.assertIsNotNone(view["duplicate"], "the comparison stays, for the page to say what was chosen")
+        self.assertEqual(self.setting.calls_made(), [])
+
+        status, body = self.served.approve({})
+        self.assertTrue(200 <= status < 300, (status, body))
+        view = self.served.settle()
+        self.assertLanded(view)
+        self.assertEqual(hashes(self.setting.library / DESTINATION), self.expected)
+        self.assertFalse(self.setting.album_root.exists())
+
+    def test_the_recorded_keep_is_taken_back_with_null_and_approve_asks_again(self) -> None:
+        self.lay_library()
+        self.keep("new")
+        status, body = self.keep(None)
+        self.assertEqual(status, 200, body)
+        status, view = self.served.view()
+        self.assertIsNone(view["keep"])
+        status, body = self.served.approve({})
+        self.assertEqual(status, 409, body)
+        self.assertEqual(self.setting.calls_made(), [])
+        self.assertLibraryAsBefore()
+
+    def test_keep_the_new_one_is_refused_without_a_copy_in_the_library(self) -> None:
+        self.before = builders.tree(self.setting.library)
+        status, body = self.keep("new")
+        self.assertEqual(status, 409, body)
+        status, view = self.served.view()
+        self.assertIsNone(view["keep"])
+        self.assertLibraryAsBefore()
+
+    def test_keep_takes_only_new_or_null(self) -> None:
+        self.lay_library()
+        status, body = self.keep("library")
+        self.assertEqual(status, 400, body)
+        status, view = self.served.view()
+        self.assertIsNone(view["keep"])
+
     def test_keep_the_new_one_replaces_another_edition_with_the_applied_album(self) -> None:
         old = self.lay_library("(1999) Chrono Cross")
         view = self.keep_new()

@@ -179,6 +179,8 @@
 	"duplicate.theNew": "la nueva",
 	"duplicate.theLibrary": "la de la biblioteca",
 	"duplicate.keepNew": "Quedarse con la nueva",
+	"duplicate.keepingNew": "Te quedas con la nueva. Sustituye la copia de la biblioteca en {folder}, que se borra una vez verificada la nueva. Revisa y aprueba como siempre.",
+	"duplicate.chooseAgain": "Elegir de nuevo",
 	"duplicate.keepLibrary": "Quedarse con la de la biblioteca",
 	"duplicate.folder": "Carpeta",
 	"duplicate.lossless": "Sin pérdida",

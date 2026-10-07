@@ -1,13 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ThumbsUp } from "lucide-react";
+import { ThumbsUp, Undo2 } from "lucide-react";
 
 import { albumQuery } from "@/domain/album/albumQuery";
 import type { AlbumView, Comparison, CopySide } from "@/shared/api/types";
 import type { Phrase } from "@/shared/i18n/en";
 import { useTranslate } from "@/shared/i18n/useTranslate";
 import { Alert } from "@/shared/ui/Alert";
-import { approveReason } from "./approveReason";
 import styles from "./Duplicate.module.css";
 import { copyFacts } from "./duplicateFacts";
 import { Outcome } from "./Outcome";
@@ -36,47 +35,64 @@ export function Duplicate({
 		...albumQuery(view.drop, view.n),
 		initialData: view,
 	});
-	const { refusal, changed, awaiting, busy, send, approve } = useDecision(
+	const { refusal, changed, busy, submit, approve, refresh } = useDecision(
 		current,
 		pending,
 	);
 	const { duplicate } = current;
 
 	// Keeping the library's copy discards the upload and needs no accepted preview. Keeping the
-	// new one approves it, so a preview not accepted yet is accepted first, as Approve does.
+	// new one is recorded on the album and approved later, as any other album is, so the tags can
+	// still be edited and the choice taken back before anything is written.
 	async function keep(side: CopySide) {
 		if (side === "library") {
 			if (await approve("library")) await navigate({ to: "/" });
-		} else if (current.approvable.code === "not-accepted") {
-			await send({ kind: "approve", keep: "new" });
-		} else {
-			await approve("new");
+		} else if (await submit("keep", { keep: "new" })) {
+			await refresh();
 		}
 	}
 
-	const stopped = current.busy
-		? t("duplicate.running")
-		: pending.dirty
-			? t("actions.updateFirst")
-			: null;
-	const why: Record<CopySide, string | null> = {
-		library: stopped,
-		new:
-			stopped ??
-			(current.approvable.code === "not-accepted"
-				? null
-				: approveReason(current, t)),
-	};
+	async function chooseAgain() {
+		if (await submit("keep", { keep: null })) await refresh();
+	}
+
+	const stopped = current.busy ? t("duplicate.running") : null;
 	const label = (side: CopySide) => {
 		const phrase =
 			side === "new" ? "duplicate.keepNew" : "duplicate.keepLibrary";
-		if (awaiting?.then.kind === "approve" && side === "new")
-			return t("review.approving");
-		const reason = why[side];
-		return reason === null
+		return stopped === null
 			? t(phrase)
-			: t("duplicate.keepWhy", { action: t(phrase), why: reason });
+			: t("duplicate.keepWhy", { action: t(phrase), why: stopped });
 	};
+
+	if (current.keep === "new") {
+		return (
+			<section className={styles.duplicate} aria-labelledby="duplicate-title">
+				<header className={styles.header}>
+					<h2 id="duplicate-title">{t("duplicate.title")}</h2>
+				</header>
+				<p role="status" className={styles.recommendation}>
+					<ThumbsUp size={18} aria-hidden="true" />
+					<span>
+						{t("duplicate.keepingNew", {
+							folder: duplicate?.library.folder ?? "",
+						})}
+					</span>
+					<button
+						type="button"
+						className={styles.again}
+						disabled={busy}
+						onClick={() => void chooseAgain()}
+					>
+						<Undo2 size={14} aria-hidden="true" />
+						{t("duplicate.chooseAgain")}
+					</button>
+				</p>
+				<Outcome view={current} />
+				{refusal && <Alert>{refusal}</Alert>}
+			</section>
+		);
+	}
 
 	const facts = copyFacts(t);
 	const sides = ["new", "library"] as const;
@@ -209,7 +225,7 @@ export function Duplicate({
 											type="button"
 											className={styles.button}
 											data-recommended={flagRecommended(side)}
-											disabled={busy || why[side] !== null}
+											disabled={busy}
 											onClick={() => void keep(side)}
 										>
 											{label(side)}

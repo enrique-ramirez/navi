@@ -56,6 +56,7 @@ function view(
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		replaces: null,
 		suggestions: [],
+		keep: null,
 		...over,
 	};
 }

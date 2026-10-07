@@ -296,7 +296,7 @@ def _landed(config: Config, drop: str, n: str) -> dict[str, Any] | None:
         "state": "in the library", "stderr": "", "error": None, "step": None, "file": None, "busy": False,
         "preview": entry, "files": [], "uploaded": [], "names": names(), "library_path": landed.get("path"),
         "tree": [], "extras_to": [], "decision": None, "cover": None, "cover_now": None, "duplicate": None,
-        "replaces": None, "suggestions": [],
+        "replaces": None, "suggestions": [], "keep": None,
         "approvable": {"ok": False, "reason": "in the library", "code": "in-library", "hold": None},
     }
 
@@ -355,6 +355,8 @@ def album(config: Config, drop: str, n: str, queue: Queue | None = None) -> dict
         "cover_now": _checked(current_cover(config, drop, n, entry), f"/api/drops/{drop}/albums/{n}/cover/now"),
         "replaces": summary["replaces"],
         "duplicate": None if summary["replaces"] else _duplicate(config, drop, n, entry, summary["busy"]),
+        # Keep's record, `new` or null, so the page shows the choice made rather than asking again.
+        "keep": "new" if record.get("keep") == "new" else None,
         "suggestions": suggest.suggestions(config, entry, drops.replaces_of(record)),
         "approvable": offered,
     }

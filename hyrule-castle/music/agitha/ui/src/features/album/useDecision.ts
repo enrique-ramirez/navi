@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { albumKey, isRunning } from "@/domain/album/albumQuery";
-import { hasKeepChoice } from "@/domain/album/keepChoice";
+import { awaitsKeepChoice } from "@/domain/album/keepChoice";
 import { albumUrl, post } from "@/shared/api/album";
 import type { AlbumView, CopySide } from "@/shared/api/types";
 import type { Pending } from "./pending";
@@ -83,7 +83,7 @@ export function useDecision(view: AlbumView, pending: Pending) {
 			setChanged(true);
 			return;
 		}
-		if (view.approvable.ok && (!hasKeepChoice(view) || then.keep))
+		if (view.approvable.ok && (!awaitsKeepChoice(view) || then.keep))
 			void approve(then.keep);
 	}, [awaiting, running, view]);
 

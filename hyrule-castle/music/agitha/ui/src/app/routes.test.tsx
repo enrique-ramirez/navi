@@ -62,6 +62,7 @@ const album: AlbumView = {
 	approvable: { ok: false, reason: null, code: "busy", hold: null },
 	replaces: null,
 	suggestions: [],
+	keep: null,
 };
 
 let server: ReturnType<typeof fakeFetch> | undefined;

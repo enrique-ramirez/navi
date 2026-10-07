@@ -10,7 +10,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { isRunning } from "@/domain/album/albumQuery";
 import { albumTags } from "@/domain/album/albumTags";
-import { hasKeepChoice } from "@/domain/album/keepChoice";
+import { awaitsKeepChoice } from "@/domain/album/keepChoice";
 import type { AlbumView } from "@/shared/api/types";
 import { albumStatePhrase } from "@/shared/i18n/albumState";
 import { useTranslate } from "@/shared/i18n/useTranslate";
@@ -73,7 +73,7 @@ export function ReviewBar({
 	const tags = albumTags(view);
 	const title = tags.title || view.name;
 
-	const duplicateChoice = hasKeepChoice(view) && view.state === "ready";
+	const duplicateChoice = awaitsKeepChoice(view) && view.state === "ready";
 	const primary: Primary =
 		awaiting !== null
 			? awaiting.then.kind === "approve"

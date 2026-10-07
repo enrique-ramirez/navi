@@ -41,6 +41,28 @@
 	color: var(--accent);
 }
 
+.again {
+	display: inline-flex;
+	gap: var(--space-1);
+	align-items: center;
+	margin-left: auto;
+	padding: var(--space-1) var(--space-3);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.again:hover:not(:disabled) {
+	background: var(--accent-quiet);
+}
+
+.again:disabled {
+	color: var(--faint);
+	cursor: not-allowed;
+}
+
 .table {
 	width: 100%;
 	table-layout: fixed;

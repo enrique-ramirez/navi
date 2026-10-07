@@ -73,6 +73,7 @@ ROUTES: list[Route] = [
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/reidentify"), queue.reidentify),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/decision"), decisions.decide),
     Route("PUT", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/cover"), decisions.upload_cover),
+    Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/keep"), approve.keep),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/approve"), approve.approve),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/move"), approve.move),
     Route("POST", re.compile(r"/api/drops/([^/]+)/albums/([^/]+)/discard"), approve.discard_album),

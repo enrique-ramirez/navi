@@ -186,6 +186,9 @@ export const en = {
 	"duplicate.theNew": "the new one",
 	"duplicate.theLibrary": "the one in the library",
 	"duplicate.keepNew": "Keep the new one",
+	"duplicate.keepingNew":
+		"Keeping the new one. It replaces the library's copy at {folder}, which is deleted once the new one is verified. Review and approve as usual.",
+	"duplicate.chooseAgain": "Choose again",
 	"duplicate.keepLibrary": "Keep the one in the library",
 	"duplicate.folder": "Folder",
 	"duplicate.lossless": "Lossless",

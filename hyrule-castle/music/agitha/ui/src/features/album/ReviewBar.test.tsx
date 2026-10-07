@@ -293,6 +293,28 @@ describe("ReviewBar", () => {
 			).not.toBeInTheDocument();
 		});
 
+		it("approves an album whose new copy was kept, sending no keep of its own", async () => {
+			const fake = serve(
+				accepted({
+					duplicate: {} as AlbumView["duplicate"],
+					keep: "new",
+				}),
+			);
+			restore = fake.restore;
+			const user = userEvent.setup();
+			renderBar();
+
+			await user.click(await screen.findByRole("button", { name: "Approve" }));
+
+			await waitFor(() =>
+				expect(posts(fake.calls).map(pathOf)).toEqual([`${ALBUM_URL}/approve`]),
+			);
+			expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({});
+			expect(
+				screen.queryByText("Choose which copy to keep below"),
+			).not.toBeInTheDocument();
+		});
+
 		it("shows the server's refusal and approves nothing", async () => {
 			const fake = fakeFetch({
 				[`GET ${ALBUM_URL}`]: () => Response.json(notAccepted()),

@@ -1,9 +1,10 @@
-"""What Approve, Move and Discard do to an album.
+"""What Approve, Move, Keep and Discard do to an album.
 
 The approve route refuses from `state.approvable`, the one place that says
 whether an album may be approved. Approve queues `batch apply`; the queue calls
 `land` after a good apply, and Move calls it again for an album whose rename
-failed. Where the plan's album is already in the library, Approve takes `keep`.
+failed. Where the plan's album is already in the library, Approve takes
+`keep`, in its body or as Keep recorded it on the album beforehand.
 """
 
 from __future__ import annotations
@@ -42,15 +43,44 @@ def _keep(request: Handler) -> str | None:
     return body.get("keep")
 
 
+def _recorded_keep(folder: Path) -> str | None:
+    """The side Keep recorded on the album, `new` or `None`; keeping the library's copy is never recorded, it discards."""
+    return "new" if (drops.read_album(folder) or {}).get("keep") == "new" else None
+
+
+def keep(request: Handler, match: re.Match[str], config: Config) -> None:
+    """Records which copy to keep, `new`, or `null` to choose again; the choice is taken by Approve."""
+    drop, n = match.group(1), match.group(2)
+    raw = request.read_body()
+    try:
+        body = json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        body = None
+    if not isinstance(body, dict) or body.get("keep") not in (None, "new"):
+        raise Refusal(400, 'The body must be an object whose "keep" is "new" or null.')
+    found = state.known_album(config, drop, n, request.server.queue)
+    if found["busy"]:
+        raise Refusal(409, BUSY)
+    folder = config.inbox / drop / n
+    entry = state.plan_entry(config, drop, n)
+    if body.get("keep") == "new":
+        held = duplicates.library_copy(config, entry) if entry and _replaces(folder) is None else None
+        if held is None:
+            raise Refusal(409, "There is no copy in the library to choose between.")
+    drops.write_album(folder, keep=body.get("keep"))
+    log.write("keep-copy", f"{drop}/{n}", keep=body.get("keep"))
+    request.send_json(200, {"keep": body.get("keep")})
+
+
 def approve(request: Handler, match: re.Match[str], config: Config) -> None:
     drop, n = match.group(1), match.group(2)
-    keep = _keep(request)
     queue = request.server.queue
     found = state.known_album(config, drop, n, queue)
     if found["busy"]:
         raise Refusal(409, BUSY)
     entry = state.plan_entry(config, drop, n)
     folder = config.inbox / drop / n
+    keep = _keep(request) or _recorded_keep(folder)
     # A match replaces the folder it was copied from, never one a search finds.
     replaces = _replaces(folder)
     held = duplicates.library_copy(config, entry) if entry and replaces is None else None

@@ -18,6 +18,7 @@ import { type Pending, usePending } from "./pending";
 const DROP = "20260929-210000";
 const ALBUM_URL = `/api/drops/${DROP}/albums/01`;
 const APPROVE_URL = `${ALBUM_URL}/approve`;
+const KEEP_URL = `${ALBUM_URL}/keep`;
 const ALBUM_ROUTE = `/drops/${DROP}/albums/01`;
 const LIBRARY_PATH = "/srv/music/library/C/Chrono Cross/(1999) Chrono Cross";
 
@@ -159,6 +160,7 @@ function view(over: Partial<AlbumView> = {}): AlbumView {
 		approvable: { ok: true, reason: null, code: null, hold: null },
 		replaces: null,
 		suggestions: [],
+		keep: null,
 		...over,
 	};
 }
@@ -167,37 +169,6 @@ const json = (body: unknown) =>
 	new Response(JSON.stringify(body), {
 		headers: { "Content-Type": "application/json; charset=utf-8" },
 	});
-
-const APPLYING = {
-	state: "applying",
-	path: null,
-	error: null,
-	step: null,
-	file: null,
-};
-
-// The album answers `before` until approve is posted, then `applying` for two
-// polls, then `after`. Two applying answers keep `applying` on screen for a
-// poll whether or not the page refetches the moment the POST returns.
-function serveApproval(before: AlbumView, after: AlbumView) {
-	let approved = false;
-	let pollsSinceApprove = 0;
-	return fakeFetch({
-		[`GET ${ALBUM_URL}`]: () => {
-			if (!approved) return json(before);
-			pollsSinceApprove++;
-			return json(
-				pollsSinceApprove <= 2
-					? { ...before, state: "applying", busy: true }
-					: after,
-			);
-		},
-		[`POST ${APPROVE_URL}`]: () => {
-			approved = true;
-			return json(APPLYING);
-		},
-	});
-}
 
 const CELL_ROLES = ["cell", "gridcell", "rowheader", "columnheader"];
 
@@ -288,19 +259,6 @@ function renderDuplicate(v: AlbumView) {
 const posts = (calls: Call[]) => calls.filter((c) => c.method === "POST");
 const gets = (calls: Call[]) => calls.filter((c) => c.method === "GET");
 const pathOf = (call: Call) => new URL(call.url).pathname;
-
-// Advances the clock a poll at a time until `check` passes.
-async function throughPolls(check: () => void, polls = 6) {
-	for (let i = 0; i < polls; i++) {
-		try {
-			check();
-			return;
-		} catch {
-			await vi.advanceTimersByTimeAsync(2_100);
-		}
-	}
-	check();
-}
 
 describe("Duplicate", () => {
 	let restore: (() => void) | undefined;
@@ -515,10 +473,9 @@ describe("Duplicate", () => {
 			expect(posts(fake.calls)).toEqual([]);
 		});
 
-		it("disables both buttons while the draft has a change the preview does not reflect", async () => {
+		it("keeps both on offer while the draft has a change the preview does not reflect", async () => {
 			const fake = fakeFetch({ [`GET ${ALBUM_URL}`]: () => json(view()) });
 			restore = fake.restore;
-			const user = userEvent.setup();
 			renderDuplicate(view());
 
 			expect(
@@ -526,20 +483,6 @@ describe("Duplicate", () => {
 			).toBeEnabled();
 			act(() => latest!.setGame("neither"));
 
-			const keepNew = await screen.findByRole("button", {
-				name: "Keep the new one: update the preview first",
-			});
-			const keepLibrary = screen.getByRole("button", {
-				name: "Keep the one in the library: update the preview first",
-			});
-			expect(keepNew).toBeDisabled();
-			expect(keepLibrary).toBeDisabled();
-			await user.click(keepNew);
-			await user.click(keepLibrary);
-			expect(posts(fake.calls)).toEqual([]);
-
-			// Back to what the preview reflects: both are on offer again.
-			act(() => latest!.reset());
 			expect(
 				await screen.findByRole("button", { name: "Keep the new one" }),
 			).toBeEnabled();
@@ -548,8 +491,8 @@ describe("Duplicate", () => {
 			).toBeEnabled();
 		});
 
-		// The server's `reason` is SERVER TEXT; the name is built from `code` and `hold`.
-		it("stops only Keep the new one while a collision holds the album, naming it from its code", async () => {
+		// A hold stops Approve in the review bar, not the choice: the choice is recorded, not written.
+		it("offers Keep the new one while a collision holds the album, and names no server text", async () => {
 			const v = view({
 				approvable: {
 					ok: false,
@@ -567,19 +510,14 @@ describe("Duplicate", () => {
 			renderDuplicate(v);
 
 			expect(
-				await screen.findByRole("button", {
-					name: "Keep the new one: held: collision: C/Chrono Cross/(1999) Chrono Cross is planned by album 02 too",
-				}),
-			).toBeDisabled();
-			expect(
-				screen.getByRole("button", { name: "Keep the one in the library" }),
+				await screen.findByRole("button", { name: "Keep the new one" }),
 			).toBeEnabled();
 			for (const button of screen.getAllByRole("button")) {
 				expect(button).not.toHaveAccessibleName(new RegExp(SERVER_TEXT));
 			}
 		});
 
-		it("accepts a preview not accepted yet before keeping the new one", async () => {
+		it("records keep new without touching the decision, whether or not the preview was accepted", async () => {
 			const v = view({
 				approvable: {
 					ok: false,
@@ -590,7 +528,7 @@ describe("Duplicate", () => {
 			});
 			const fake = fakeFetch({
 				[`GET ${ALBUM_URL}`]: () => json(v),
-				[`POST ${ALBUM_URL}/decision`]: () => json({ state: "queued" }),
+				[`POST ${KEEP_URL}`]: () => json({ keep: "new" }),
 			});
 			restore = fake.restore;
 			const user = userEvent.setup();
@@ -602,15 +540,15 @@ describe("Duplicate", () => {
 
 			await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
 			const [post] = posts(fake.calls);
-			expect(pathOf(post!)).toBe(`${ALBUM_URL}/decision`);
-			expect(JSON.parse(post!.body)).toMatchObject({ action: "accept" });
+			expect(pathOf(post!)).toBe(KEEP_URL);
+			expect(JSON.parse(post!.body)).toEqual({ keep: "new" });
 		});
 
 		it("can be reached and pressed from the keyboard", async () => {
-			const fake = serveApproval(
-				view(),
-				view({ state: "in the library", duplicate: null }),
-			);
+			const fake = fakeFetch({
+				[`GET ${ALBUM_URL}`]: () => json(view()),
+				[`POST ${KEEP_URL}`]: () => json({ keep: "new" }),
+			});
 			restore = fake.restore;
 			const user = userEvent.setup();
 			renderDuplicate(view());
@@ -630,20 +568,23 @@ describe("Duplicate", () => {
 	});
 
 	describe("Keep the new one (criterion 49)", () => {
-		it("posts keep new to the album's approve, then polls until the album is in the library and shows where", async () => {
-			vi.useFakeTimers({ shouldAdvanceTime: true });
-			const fake = serveApproval(
-				view(),
-				view({
-					state: "in the library",
-					library_path: LIBRARY_PATH,
-					duplicate: null,
-				}),
-			);
-			restore = fake.restore;
-			const user = userEvent.setup({
-				advanceTimers: vi.advanceTimersByTime,
+		// The album answers with the choice open until keep is posted, then with it recorded.
+		function serveKeep(start: AlbumView) {
+			let current = start;
+			return fakeFetch({
+				[`GET ${ALBUM_URL}`]: () => json(current),
+				[`POST ${KEEP_URL}`]: async (req) => {
+					const { keep } = (await req.json()) as { keep: "new" | null };
+					current = { ...current, keep };
+					return json({ keep });
+				},
 			});
+		}
+
+		it("records the choice, then says what was chosen in place of the chooser and leaves the approval to the review bar", async () => {
+			const fake = serveKeep(view());
+			restore = fake.restore;
+			const user = userEvent.setup();
 			renderDuplicate(view());
 
 			await user.click(
@@ -651,64 +592,79 @@ describe("Duplicate", () => {
 			);
 
 			await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
-			const [post] = posts(fake.calls);
-			expect(pathOf(post!)).toBe(APPROVE_URL);
-			expect(JSON.parse(post!.body)).toEqual({ keep: "new" });
+			expect(pathOf(posts(fake.calls)[0]!)).toBe(KEEP_URL);
+			expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({ keep: "new" });
 
-			// While apply runs both choices wait; the running state itself is the review bar's to show.
-			await throughPolls(() =>
+			const region = await screen.findByRole("region", {
+				name: "Already in the library",
+			});
+			await waitFor(() =>
 				expect(
-					screen.getByRole("button", {
-						name: "Keep the new one: a process is running",
-					}),
-				).toBeDisabled(),
+					within(region).getAllByRole("status").map(text).join(" "),
+				).toContain(
+					`Keeping the new one. It replaces the library's copy at ${LIBRARY_PATH}`,
+				),
 			);
-			const statusText = () => screen.queryAllByRole("status").map(text);
-			await throughPolls(() =>
-				expect(
-					statusText().some(
-						(s) => s.includes("in the library") && s.includes(LIBRARY_PATH),
-					),
-				).toBe(true),
-			);
+			expect(
+				within(region).queryByRole("table", { name: "Comparison" }),
+			).not.toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "Keep the new one" }),
+			).not.toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: /approve/i }),
+			).not.toBeInTheDocument();
 			for (const get of gets(fake.calls)) {
 				expect(pathOf(get)).toBe(ALBUM_URL);
 			}
-
-			// Once the album is in the library nothing runs, so the polling stops.
-			const settled = gets(fake.calls).length;
-			await vi.advanceTimersByTimeAsync(10_000);
-			expect(gets(fake.calls)).toHaveLength(settled);
 		});
 
-		// Whether Move is offered here is left to the review bar (criterion 41).
-		it("shows which step failed on which file when the move is not verified", async () => {
-			vi.useFakeTimers({ shouldAdvanceTime: true });
-			const error =
-				"the SHA-256 of 03. Track.flac in the library differs from the one recorded";
-			const fake = serveApproval(
-				view(),
-				view({
-					state: "written, not moved",
-					error,
-					step: 4,
-					file: "03. Track.flac",
-				}),
-			);
+		it("Choose again takes the choice back and brings the chooser back", async () => {
+			const fake = serveKeep(view({ keep: "new" }));
 			restore = fake.restore;
-			const user = userEvent.setup({
-				advanceTimers: vi.advanceTimersByTime,
+			const user = userEvent.setup();
+			renderDuplicate(view({ keep: "new" }));
+
+			await user.click(
+				await screen.findByRole("button", { name: "Choose again" }),
+			);
+
+			await waitFor(() => expect(posts(fake.calls)).toHaveLength(1));
+			expect(pathOf(posts(fake.calls)[0]!)).toBe(KEEP_URL);
+			expect(JSON.parse(posts(fake.calls)[0]!.body)).toEqual({ keep: null });
+			expect(
+				await screen.findByRole("button", { name: "Keep the new one" }),
+			).toBeEnabled();
+			expect(
+				screen.getByRole("table", { name: "Comparison" }),
+			).toBeInTheDocument();
+		});
+
+		it("shows the server's refusal of the choice and keeps the chooser", async () => {
+			const fake = fakeFetch({
+				[`GET ${ALBUM_URL}`]: () => json(view()),
+				[`POST ${KEEP_URL}`]: () =>
+					new Response(
+						JSON.stringify({
+							error: "There is no copy in the library to choose between.",
+						}),
+						{ status: 409, headers: { "Content-Type": "application/json" } },
+					),
 			});
+			restore = fake.restore;
+			const user = userEvent.setup();
 			renderDuplicate(view());
 
 			await user.click(
 				await screen.findByRole("button", { name: "Keep the new one" }),
 			);
 
-			await throughPolls(() => screen.getByRole("alert"));
-			const alert = screen.getByRole("alert");
-			expect(text(alert)).toContain(error);
-			expect(text(alert)).toContain("step 4 failed on 03. Track.flac");
+			expect(await screen.findByRole("alert")).toHaveTextContent(
+				"There is no copy in the library to choose between.",
+			);
+			expect(
+				screen.getByRole("button", { name: "Keep the new one" }),
+			).toBeEnabled();
 		});
 	});
 

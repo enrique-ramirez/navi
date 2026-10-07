@@ -557,6 +557,8 @@ export interface AlbumView {
 	replaces: string | null;
 	/** Tags and folders the plan could take from the rest of the library; empty with none. */
 	suggestions: Suggestion[];
+	/** The copy Keep recorded while `duplicate` is set: `new`, or `null` while the choice is open. */
+	keep: CopySide | null;
 }
 
 /** An artist's other albums carry one genre, and this album's tags give another or none. */
@@ -599,8 +601,13 @@ export type Suggestion =
 export type DecisionRequest = Decision;
 
 export interface ApproveRequest {
-	/** Required where `duplicate` is set. */
+	/** Required where `duplicate` is set and Keep recorded nothing. */
 	keep?: CopySide;
+}
+
+/** `POST .../keep`: the copy to keep, or `null` to choose again. Keeping the library's copy goes through approve. */
+export interface KeepRequest {
+	keep: "new" | null;
 }
 
 /** The answer of approve, move and keep-the-new-one. */
