@@ -121,6 +121,11 @@ function serve(
 			return Response.json({ state: "in the library" });
 		},
 		[`POST ${ALBUM_URL}/discard`]: () => Response.json({ state: "discarded" }),
+		[`POST ${ALBUM_URL}/reidentify`]: () => {
+			current = identified;
+			running = ["queued", "identifying"];
+			return Response.json({ state: "queued" });
+		},
 	});
 }
 
@@ -688,6 +693,34 @@ describe("ReviewBar", () => {
 		await waitFor(() =>
 			expect(posts(fake.calls).map(pathOf)).toEqual([`${ALBUM_URL}/move`]),
 		);
+	});
+
+	it("offers to identify an album again where its apply failed", async () => {
+		const fake = serve(
+			accepted({
+				state: "apply failed",
+				error: "apply exited with status 1",
+				stderr: "its plan has changed since identify; refused",
+			}),
+		);
+		restore = fake.restore;
+		const user = userEvent.setup();
+		renderBar();
+
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"its plan has changed since identify",
+		);
+		expect(
+			screen.queryByRole("button", { name: "Approve" }),
+		).not.toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Identify again" }));
+
+		await waitFor(() =>
+			expect(posts(fake.calls).map(pathOf)).toEqual([
+				`${ALBUM_URL}/reidentify`,
+			]),
+		);
+		expect(await screen.findByText("queued")).toBeInTheDocument();
 	});
 
 	it.each<[string, Partial<AlbumView>]>([

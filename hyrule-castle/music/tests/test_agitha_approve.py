@@ -421,7 +421,7 @@ class Approving(ApproveCase):
         self.assertTrue((self.job("01") / "plan.json").is_file())
         self.assertTrue((self.job("02") / "plan.json").is_file())
 
-    def test_a_failing_apply_moves_nothing_and_shows_its_stderr_with_only_discard(self) -> None:
+    def test_a_failing_apply_moves_nothing_and_shows_its_stderr_with_identify_again_and_discard(self) -> None:
         self.stage("01", "Clean Album", CLEAN, accept=True)
         (self.control / "fail").write_text("apply")
 
@@ -432,11 +432,27 @@ class Approving(ApproveCase):
         self.assertIsNotNone(album, self.seen)
         self.assertEqual(album["state"], "apply failed")
         self.assertEqual(album["stderr"].splitlines(), STUB_FAILURE)
-        self.assertEqual(album["actions"], ["discard"])
+        self.assertEqual(album["actions"], ["reidentify", "discard"])
         self.assertFalse(album["busy"])
         self.assert_one_apply("01")
         self.assert_library_empty()
         self.assertTrue((self.inbox / DROP / "01" / "drop" / "album" / "Clean Album" / "01 one.mp3").is_file())
+
+    def test_identify_again_after_a_failed_apply_plans_the_album_anew(self) -> None:
+        self.stage("01", "Clean Album", CLEAN, accept=True)
+        (self.control / "fail").write_text("apply")
+        self.approve("01")
+        self.watch((DROP, "01"), lambda album: album is not None and album["state"] == "apply failed")
+
+        status, body = self.request("POST", f"/api/drops/{DROP}/albums/01/reidentify")
+        self.assertEqual(status, 202, body)
+        album = self.watch((DROP, "01"), lambda album: album is None or album["state"] not in ("queued", "identifying"))
+
+        self.assertIsNotNone(album, self.seen)
+        self.assertEqual(album["state"], "ready")
+        self.assertEqual(album["error"], None)
+        self.assertIn("approve", album["actions"])
+        self.assert_library_empty()
 
     def test_a_rename_refused_across_filesystems_leaves_it_written_not_moved_and_move_retries_only_the_rename(
             self) -> None:

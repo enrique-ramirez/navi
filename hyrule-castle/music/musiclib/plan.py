@@ -100,7 +100,8 @@ class Plan:
         carried whole, since Pillow and libjpeg differ across machines
         (`plan.md`, *Cannot be verified here*) and a plan is not the place to
         settle that; the digest is still enough to catch a plan that changed
-        which bytes it would write.
+        which bytes it would write. The archive hold is compared without
+        the requests it names, see `_comparable`.
         """
 
         def digest(data: bytes) -> dict:
@@ -125,13 +126,27 @@ class Plan:
             "extras": list(self.extras),
             "kept": list(self.kept),
             "consumed": self.consumed,
-            "holds": list(self.holds),
+            "holds": [_comparable(hold) for hold in self.holds],
             "suggestions": dict(self.suggestions),
             "problems": list(self.problems),
             "strays": [stray.to_json() for stray in self.strays],
             "moved": dict(self.moved),
         }
         return json.dumps(doc, sort_keys=True, ensure_ascii=False).encode("utf-8")
+
+
+def _comparable(hold: str) -> str:
+    """`hold` as two plans compare it: the archive hold keeps only the fallback it names.
+
+    Which request the archive failed and with what status is the story of one
+    run, not of the plan: a listing that answered 500 at identify and an image
+    that answered 503 at apply leave the same cover and the same files, and
+    `batch apply` must not refuse that album as changed. The hold itself still
+    names every failure, for the owner.
+    """
+    if hold.startswith(f"{_CAA_UNAVAILABLE}: "):
+        return f"{_CAA_UNAVAILABLE}; {hold.rsplit('; ', 1)[1]}"
+    return hold
 
 
 def _dedupe(items) -> list:

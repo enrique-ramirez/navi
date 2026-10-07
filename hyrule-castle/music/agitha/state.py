@@ -31,6 +31,8 @@ ACTIONS = {
     "identify failed": ["retry", "discard"],
     "identify interrupted": ["retry", "discard"],
     "written, not moved": ["move", "discard"],
+    # Apply refused the plan or could not write it; a new plan is the way back to Approve.
+    "apply failed": ["reidentify", "discard"],
     "in the library": [],
 }
 

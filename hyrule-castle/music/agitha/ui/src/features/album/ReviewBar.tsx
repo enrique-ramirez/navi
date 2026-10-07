@@ -182,21 +182,23 @@ export function ReviewBar({
 									{t("review.repreview")}
 								</button>
 							)}
-						{!busy && view.state === "ready" && !pending.dirty && (
-							<button
-								type="button"
-								className={styles.ghost}
-								title={t("review.reidentifyWhy")}
-								onClick={() =>
-									void submit("reidentify", {}).then(async (ok) => {
-										if (ok) await refresh();
-									})
-								}
-							>
-								<ScanSearch size={14} aria-hidden="true" />
-								{t("review.reidentify")}
-							</button>
-						)}
+						{!busy &&
+							(view.state === "ready" || view.state === "apply failed") &&
+							!pending.dirty && (
+								<button
+									type="button"
+									className={styles.ghost}
+									title={t("review.reidentifyWhy")}
+									onClick={() =>
+										void submit("reidentify", {}).then(async (ok) => {
+											if (ok) await refresh();
+										})
+									}
+								>
+									<ScanSearch size={14} aria-hidden="true" />
+									{t("review.reidentify")}
+								</button>
+							)}
 						{primary !== null && (
 							<button
 								type="button"

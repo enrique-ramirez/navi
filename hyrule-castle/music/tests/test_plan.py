@@ -724,5 +724,32 @@ class AFrontThatIsNotAnImage(_Fallback):
         self.assertRefused(plan, NO_COVER_ARCHIVE_FAILED, root, before)
 
 
+class TheArchiveHoldInTheDigest(_Fallback):
+    """Which request the archive failed, and how, is not in a plan's canonical bytes; the fallback it names is."""
+
+    FOLDER_ONLY = Failure({}, {}, "the folder's folder.jpg", {"cover.jpg": FOLDER}, folder=("folder.jpg", FOLDER))
+
+    def test_the_listing_failing_and_every_image_failing_make_the_same_plan(self):
+        listing = self.plan_failure(self.FOLDER_ONLY, archive=dict(listing=500))
+        images = self.plan_failure(self.FOLDER_ONLY, archive=dict(statuses={FRONT_URL: 502, BACK_URL: 500}))
+
+        self.assertNotEqual(self.the_archive_hold(listing), self.the_archive_hold(images))
+        self.assertEqual(_shown(listing.images), _shown(images.images))
+        self.assertEqual(listing.to_json(), images.to_json())
+
+    def test_the_status_the_archive_answered_is_not_compared(self):
+        first = self.plan_failure(self.FOLDER_ONLY, archive=dict(listing=500))
+        second = self.plan_failure(self.FOLDER_ONLY, archive=dict(listing=503))
+
+        self.assertNotEqual(self.the_archive_hold(first), self.the_archive_hold(second))
+        self.assertEqual(first.to_json(), second.to_json())
+
+    def test_the_hold_itself_still_names_each_failure(self):
+        plan = self.plan_failure(self.FOLDER_ONLY, archive=dict(statuses={FRONT_URL: 502, BACK_URL: 500}))
+        hold = self.the_archive_hold(plan)
+        for url, status in ((FRONT_URL, "502"), (BACK_URL, "500")):
+            self.assertRegex(hold, _naming(url, status))
+
+
 if __name__ == "__main__":
     unittest.main()

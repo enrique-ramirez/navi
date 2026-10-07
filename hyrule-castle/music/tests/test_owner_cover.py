@@ -475,6 +475,26 @@ class ApplyAfterTheArchiveAnswersAgain(_Case):
         self.assertRefused(job, before, self.CHANGED)
 
 
+class ApplyAfterTheArchiveFailsAgain(_Case):
+    """Identify saw the front fail, and at apply it fails with another status: the same cover, so written."""
+
+    def test_apply_writes_the_album_where_the_archive_fails_again_with_another_status(self):
+        job = Job(self, PASSING_FRONT)
+        job.statuses = {job.front_url(): 500}
+        job.identify()
+        job.accept(None)
+        held = [hold["detail"] for hold in job.entry()["holds"] if hold["detail"].startswith(UNAVAILABLE)]
+        self.assertEqual(len(held), 1, job.entry()["holds"])
+        self.assertIn("500", held[0])
+
+        job.statuses = {job.front_url(): 503}
+        code, _out, err = job.apply()
+
+        self.assertEqual(code, 0, err)
+        self.assertEqual([(line["source"], line["outcome"]) for line in job.lib.log()], [(KEY, "applied")])
+        self.assertEqual((job.destination() / "cover.jpg").read_bytes(), FOLDER)
+
+
 class AnAcceptWithNoCoverAnywhere(_Case):
     """No owner cover, no archive front, no embedded picture and no folder cover."""
 

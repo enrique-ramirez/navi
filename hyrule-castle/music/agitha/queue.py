@@ -274,8 +274,12 @@ def retry(request: Handler, match: re.Match[str], config: Config) -> None:
 
 
 def reidentify(request: Handler, match: re.Match[str], config: Config) -> None:
-    """Identify a ready album again under its own decision, or none, so a changed engine or MusicBrainz shows."""
-    _identify_again(request, match, config, ("ready",), "identified again", "reidentify")
+    """Identify a ready album again under its own decision, or none, so a changed engine or MusicBrainz shows.
+
+    An album whose apply failed is identified again the same way: a plan
+    apply refused as changed is replaced by one made now.
+    """
+    _identify_again(request, match, config, ("ready", "apply failed"), "identified again", "reidentify")
 
 
 def _identify_again(request: Handler, match: re.Match[str], config: Config,
