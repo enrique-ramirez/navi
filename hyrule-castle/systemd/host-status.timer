@@ -1,0 +1,14 @@
+[Unit]
+Description=Sample the vitals every 28 seconds
+[Timer]
+# 28 s against the page's 30 s poll, so the offset between them drifts. Two
+# clocks on one period can lock into a phase where every read lands just before
+# a write and the page always shows 30-second-old numbers.
+#
+# AccuracySec must stay small: its default of 1 min lets systemd defer a run by
+# more than the 2 s offset.
+OnBootSec=90s
+OnUnitActiveSec=28s
+AccuracySec=1s
+[Install]
+WantedBy=timers.target

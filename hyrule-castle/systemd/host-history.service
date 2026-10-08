@@ -1,0 +1,9 @@
+[Unit]
+Description=Roll the vitals history up into charts for the vitals page
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/vitals/host-history.sh
+Nice=15
+IOSchedulingClass=idle

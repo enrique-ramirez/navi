@@ -11,6 +11,11 @@
 # hyrule-castle/scripts/fb2k-backup.sh for what protects them. The page build
 # writes only under the checkout's agitha/ui/node_modules and agitha/ui/dist,
 # and installs under /usr/local/lib/agitha.
+#
+# It also installs the vitals kit under /usr/local/lib/vitals and the box file
+# at /etc/vitals.conf, and creates the vitals user and /srv/data/{www,history,
+# logs}. It writes no samples there; the one rollup it runs creates the history
+# JSON and deletes day CSVs older than 90 days under /srv/data/history.
 set -euo pipefail
 
 # One repo, two machines, two deploy scripts, and the paths differ by one
@@ -67,6 +72,32 @@ for f in "$REPO"/hyrule-castle/music/agitha/*; do
 done
 find /usr/local/lib/agitha -depth -name __pycache__ -exec rm -rf {} +
 
+echo "==> vitals"
+getent passwd vitals >/dev/null ||
+    useradd --system --no-create-home --shell /usr/sbin/nologin vitals
+rm -rf /usr/local/lib/vitals.new
+cp -a "$REPO/vitals" /usr/local/lib/vitals.new
+find /usr/local/lib/vitals.new -depth \( -name __pycache__ -o -name tests \) -exec rm -rf {} +
+chmod 755 /usr/local/lib/vitals.new/host-status.sh /usr/local/lib/vitals.new/host-history.sh
+# The sampler's bash parser and config.py differ at the edges, so the deploy
+# checks the file with config.py, the stricter one on meaning.
+if ! PYTHONDONTWRITEBYTECODE=1 python3 -c '
+import sys
+from pathlib import Path
+sys.path.insert(0, "/usr/local/lib/vitals.new")
+import config
+try:
+    config.load(Path("/usr/local/lib/vitals.new/defaults.conf"), Path(sys.argv[1]))
+except config.ConfigError as error:
+    sys.exit(error)
+' "$REPO/hyrule-castle/vitals.conf"; then
+    rm -rf /usr/local/lib/vitals.new
+    echo "    hyrule-castle/vitals.conf FAILED validation, vitals not installed"; exit 1
+fi
+rm -rf /usr/local/lib/vitals
+mv /usr/local/lib/vitals.new /usr/local/lib/vitals
+install -m 644 "$REPO/hyrule-castle/vitals.conf" /etc/vitals.conf
+
 echo "==> scripts"
 install -m 700 "$REPO/hyrule-castle/scripts/fb2k-backup.sh" /usr/local/bin/fb2k-backup.sh
 install -m 755 "$REPO/hyrule-castle/scripts/musiclib" /usr/local/bin/musiclib
@@ -93,6 +124,10 @@ echo "==> directories"
 mkdir -p /srv/fb2k /srv/backup
 chown "$USER_NAME": /srv/fb2k
 chmod 700 /srv/backup
+
+mkdir -p /srv/data/www/history /srv/data/history /srv/data/logs
+chmod 755 /srv/data /srv/data/www /srv/data/www/history /srv/data/history
+chmod 700 /srv/data/logs
 
 # foo_jean's tag-write tests write to copies of fixture files in here, never to
 # /srv/music. 'one' and 'two' get registered as library folders, and 'loose'
@@ -135,8 +170,9 @@ done
 
 if [ "$changed" = 1 ]; then
     systemctl daemon-reload
-    systemctl enable xvfb.service openbox.service foobar2000.service fb2k-backup.timer >/dev/null
-    systemctl start fb2k-backup.timer
+    systemctl enable xvfb.service openbox.service foobar2000.service fb2k-backup.timer \
+        host-status.timer host-history.timer host-page.service >/dev/null
+    systemctl start fb2k-backup.timer host-status.timer host-history.timer host-page.service
 fi
 
 if [ "$display" = 1 ]; then
@@ -158,8 +194,18 @@ echo "==> agitha"
 systemctl enable agitha.service >/dev/null
 systemctl restart agitha.service
 
+# The kit under /usr/local/lib/vitals may have changed with no unit changing,
+# and the server only reads its code at start, so restart it every deploy.
+echo "==> vitals server"
+systemctl restart host-page.service
+/usr/local/lib/vitals/host-history.sh ||
+    echo "    host-history.sh failed; the timer will retry in 5 min"
+
 echo "==> state"
-for s in xvfb openbox foobar2000 agitha; do
-    printf "    %-12s %s\n" "$s" "$(systemctl is-active $s.service)"
+for s in xvfb openbox foobar2000 agitha host-page; do
+    printf "    %-18s %s\n" "$s" "$(systemctl is-active $s.service)"
+done
+for t in host-status host-history; do
+    printf "    %-18s %s\n" "$t.timer" "$(systemctl is-active $t.timer)"
 done
 echo "==> done"

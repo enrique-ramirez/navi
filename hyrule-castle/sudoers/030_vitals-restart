@@ -1,0 +1,11 @@
+# Installed to /etc/sudoers.d/ by hyrule-castle/scripts/deploy.sh, which runs
+# visudo -c on it first. A broken file here breaks sudo for everything.
+#
+# --no-block is part of each line because sudo compares arguments as literal
+# strings, so a restart without it is a different command and is refused.
+#
+# The name has no dot in it because sudo skips any file in sudoers.d whose name
+# contains one.
+vitals ALL=(root) NOPASSWD: \
+    /usr/bin/systemctl --no-block restart foobar2000.service, \
+    /usr/bin/systemctl --no-block restart agitha.service

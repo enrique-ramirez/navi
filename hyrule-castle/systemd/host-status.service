@@ -1,0 +1,7 @@
+[Unit]
+Description=Write the vitals samples for the vitals page
+Documentation=file:///srv/navi/docs/hyrule-castle.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/vitals/host-status.sh

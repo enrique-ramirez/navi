@@ -159,7 +159,12 @@ Verified from the MacBook after the restart rather than assumed: key auth succee
 
 `sudo` asks for a password here. navi has it passwordless via `/etc/sudoers.d/010_enrique-nopasswd`; this box does not, which is a small inconsistency to settle deliberately rather than drift into.
 
-**The one exception is the player.** `/etc/sudoers.d/020_foobar2000-restart`, installed by `deploy.sh` from [../hyrule-castle/sudoers/](../hyrule-castle/sudoers/), allows `systemctl stop|start|restart foobar2000` without a password, and nothing else. It exists so a `foo_jean` deploy can swap the component DLL over SSH without anyone typing a password. It is scoped this narrowly on purpose, because allowing all of `systemctl` would amount to root access. `deploy.sh` runs `visudo -c` on the file before installing it: a broken sudoers file breaks sudo entirely, and with root SSH disabled, fixing it means a keyboard at the box.
+**Two narrow exceptions.** Both files are installed by `deploy.sh` from [../hyrule-castle/sudoers/](../hyrule-castle/sudoers/).
+
+- `/etc/sudoers.d/020_foobar2000-restart` lets `enrique-ramirez` run `systemctl stop|start|restart foobar2000` without a password, and nothing else. It exists so a `foo_jean` deploy can swap the component DLL over SSH without anyone typing a password.
+- `/etc/sudoers.d/030_vitals-restart` lets the system user `vitals` run `systemctl --no-block restart` on `foobar2000.service` and `agitha.service`, and nothing else. It exists for the vitals page's Restart button, described in *The vitals page* below.
+
+Both are scoped this narrowly on purpose, because allowing all of `systemctl` would amount to root access. `deploy.sh` runs `visudo -c` on each file before installing it: a broken sudoers file breaks sudo entirely, and with root SSH disabled, fixing it means a keyboard at the box.
 
 The console keyboard is **US Dvorak**. Set through `dpkg-reconfigure keyboard-configuration` rather than by editing `/etc/default/keyboard`, for the reason in [gotchas.md](gotchas.md). This only affects someone physically at the machine, which is exactly the break-glass case - so anyone helping debug it at 3am needs to know before they touch the keys.
 
@@ -245,6 +250,37 @@ journalctl -u agitha -g ' failed: '    # the changes that did not land
 ```
 
 agitha never stops or restarts foobar2000. A new album reaches foobar2000's index through library-folder monitoring, or at its next start. foobar2000's media library does not pick up an album folder that is removed and re-created at the same path within a second; the files stay out of the library until foobar2000 restarts.
+
+## The vitals page
+
+`hyrule-castle.lan` and `10.100.100.50` answer on port 80 with a page about this box: temperature, load, memory, disk, the network, the units, the backup, the last SSH login, and a section each for foobar2000 and agitha with their logs and a Restart button. The page and its scripts are in [../vitals/](../vitals/), and this box's config is [../hyrule-castle/vitals.conf](../hyrule-castle/vitals.conf).
+
+`host-page.service` runs `/usr/local/lib/vitals/server.py` as the system user `vitals`, which has no shell and no home. Its only root access is the `030_vitals-restart` rule (see *Access*). The server serves files from `/usr/local/lib/vitals/page` and `/srv/data/www`. One route changes anything, `POST /api/restart/<service>`. It needs a JSON content type and an `Origin` that matches the page, restarts only `foobar2000` and `agitha`, once a minute each, and writes `restart <service> from <address>` to its journal.
+
+`xvfb` and `openbox` are not in `RESTARTABLE`. Restarting Xvfb under a running foobar2000 kills the player abnormally, and its next start hangs on a dialog nobody can see (`deploy.sh` says so in the comment on its ordered display-stack restart).
+
+Samples:
+
+- `host-status.timer` runs `/usr/local/lib/vitals/host-status.sh` as root every 28 s. It writes `/srv/data/www/host.json`, `log-foobar2000.json`, `log-agitha.json` and `log-box.json`, and appends one line to the day's CSV under `/srv/data/history/`. Its journal cursors and byte offsets are in `/srv/data/logs/`, mode 700.
+- `host-history.timer` runs `host-history.sh` every 5 min. It rolls the CSV into `/srv/data/www/history/day.json`, `week.json` and `quarter.json`, and deletes days past 90.
+
+The config is `/etc/vitals.conf`, a copy of `hyrule-castle/vitals.conf`, read over `defaults.conf` in the kit. The temperature thresholds are raised from the defaults, which are navi's. This box has no fan and the chip is rated to 105 °C, so navi's 65 °C would sit amber under any sustained load.
+
+### What reaches the page
+
+The page shows the lines raw, so what is in them is on the page for anyone on the LAN. The page has no login.
+
+- **agitha:** its whole journal. `write` lines carry library paths, counts and tag names, never a tag's value. Request lines carry the requesting device's address and the full path, artist and album names included. Tracebacks carry file paths.
+- **foobar2000:** the newest file in its console log folder. Playback errors with the file's path, and messages from the components (scrobbling, lyrics lookups).
+- **the box:** every line at `err` priority from any unit. sshd's `err` lines are among them, with the address and the user name.
+
+foobar2000 writes no console log until told to. Once, over VNC (see *Seeing the GUI* below): Preferences → Advanced → Logging → Console log folder, set to `F:\foobar2000\profile\console-log`, which is `/srv/fb2k/foobar2000/profile/console-log` under Wine. Until then the foobar2000 section says console logging is off.
+
+### If the page is down
+
+The page lives on the box it watches, so a dead box takes it along. Kuma monitor 14 is the alarm for that. With the box up, `systemctl status host-page host-status.timer host-history.timer` and `journalctl -u host-page` are where to look.
+
+navi's own page links to it from the Services grid. The name already resolves to the box (*What navi knows about it*).
 
 ## The music player
 
@@ -349,7 +385,7 @@ Then `vnc://localhost:5900` from the Mac. Bound to localhost and tunnelled, so n
 
 ## What is in git, and what is not
 
-Config is in the repo at [../hyrule-castle/](../hyrule-castle/) - units, a deploy script, the profile backup, and the engine and page source. No secrets. Applied the same way navi is, by a human:
+Config is in the repo at [../hyrule-castle/](../hyrule-castle/) - units, a deploy script, the profile backup, and the engine and page source. The vitals page is in [../vitals/](../vitals/). No secrets. Applied the same way navi is, by a human:
 
 ```sh
 cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh

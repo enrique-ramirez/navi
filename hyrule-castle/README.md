@@ -5,11 +5,13 @@ Config for the mini PC. The machine itself is described in [../docs/hyrule-castl
 ## What's here
 
 ```
-systemd/   xvfb, openbox, foobar2000, agitha, and the profile backup timer
-scripts/   deploy.sh, fb2k-backup.sh
-sudoers/   passwordless systemctl stop/start/restart foobar2000, for foo_jean deploys
-music/     musiclib, the engine that identifies, tags and names releases against docs/music-library.md
-           agitha/, the import page in front of it: a Python server and a React page (agitha/ui/)
+systemd/      xvfb, openbox, foobar2000, agitha, the profile backup timer, and the vitals page's units
+scripts/      deploy.sh, fb2k-backup.sh
+sudoers/      passwordless systemctl stop/start/restart foobar2000, for foo_jean deploys, and the
+              two restart commands the vitals page may run
+vitals.conf   this box's file for the vitals kit in ../vitals/, installed as /etc/vitals.conf
+music/        musiclib, the engine that identifies, tags and names releases against docs/music-library.md
+              agitha/, the import page in front of it: a Python server and a React page (agitha/ui/)
 ```
 
 ## Applying it
@@ -44,9 +46,11 @@ cd /srv/navi && git pull && sudo ./hyrule-castle/scripts/deploy.sh
 
 **Both deploy scripts check `hostname` and refuse to run on the wrong machine.** That guard exists because this one was run on navi by mistake, which installed a Wine and Xvfb stack on the flat's DNS server.
 
-`deploy.sh` installs the units and the sudoers drop-in, which it checks with `visudo` first. It creates `/srv/fb2k`, the `Musica` symlink, and the empty `foo_jean-test/` tree if any of them are missing, and restarts the display stack **only when one of its own three units changed**. When it does restart, it stops foobar2000 before touching Xvfb - the order is load-bearing and the script says why.
+`deploy.sh` installs the units and the sudoers drop-ins, which it checks with `visudo` first. It creates `/srv/fb2k`, the `Musica` symlink, and the empty `foo_jean-test/` tree if any of them are missing, and restarts the display stack **only when one of its own three units changed**. When it does restart, it stops foobar2000 before touching Xvfb - the order is load-bearing and the script says why.
 
 For agitha it also installs Debian's `nodejs`, `npm` and `libarchive-tools`, builds the page with a pinned pnpm run through `npx`, and copies the server, `musiclib` and the built page into `/usr/local/lib/agitha` and `/usr/local/lib/musiclib`. The page is installed only after a good build. `agitha.service` is enabled and restarted on every run.
+
+For the vitals page it creates the `vitals` system user (no shell, no home), copies `../vitals/` to `/usr/local/lib/vitals` without its tests, and installs `vitals.conf` as `/etc/vitals.conf` after checking that it parses (a file that fails stops the deploy there and leaves the old install in place). It makes `/srv/data/{www,history,logs}`. It restarts `host-page.service` on every run and runs `host-history.sh` once, so the history files exist before the first timer fires. It writes no samples. [../docs/hyrule-castle.md](../docs/hyrule-castle.md) has what the page does.
 
 ## Config vs. state, and why almost nothing is in git
 
@@ -60,6 +64,7 @@ The same split the top-level README makes for navi. Config lives here; state liv
 | `profile/library-v2.0` | regenerable by rescanning |
 | `~/fb2k-wine/` | the Wine prefix, disposable by design |
 | `/srv/music/` | the library |
+| `/srv/data/` | state: 90 days of vitals samples, their rollups and the sampler's cursors |
 
 So this directory is units, shell, the engine and the page source, and holds no secret.
 

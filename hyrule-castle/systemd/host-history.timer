@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild the vitals history charts every 5 minutes
+[Timer]
+# The week view's bucket is 5 minutes, so rebuilding more often only redraws
+# the day view, and the page shows the live tile for "right now" anyway.
+OnBootSec=4min
+OnUnitActiveSec=5min
+AccuracySec=30s
+[Install]
+WantedBy=timers.target

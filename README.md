@@ -9,7 +9,7 @@ It exists because a Telmex outage went unnoticed for two weeks. There are two IS
 | Service | Reachable at | Does |
 |---|---|---|
 | Pi-hole | `dns.lan` | DNS for the flat, ad blocking, local names |
-| Uptime Kuma | `status.lan` | 13 monitors, alerts to ntfy on the phone |
+| Uptime Kuma | `status.lan` | 14 monitors, alerts to ntfy on the phone |
 | Caddy | port 80 | reverse proxy, so everything has a name instead of a port |
 | `wan-check.timer` | every 5 min | the checks Kuma can't make itself |
 | `host-status.timer` | every 28 sec | samples this box's own vitals for the page |
@@ -24,11 +24,12 @@ scripts/        wan-check, backup, deploy
 systemd/        timers and units
 www/            the help.lan landing page
 hyrule-castle/  the mini PC's units and scripts, applied on that box
+vitals/         the mini PC's vitals page and its sampler, installed by that box's deploy
 docs/           everything below
 .env.example    every value you need; the real .env is gitignored
 ```
 
-Everything at the top level belongs to navi. `hyrule-castle/` is the second machine, deployed separately on that box - see [hyrule-castle/README.md](hyrule-castle/README.md). The docs cover both.
+Everything at the top level belongs to navi except `vitals/`, which hyrule-castle's deploy copies onto that box. `hyrule-castle/` is the second machine, deployed separately on that box - see [hyrule-castle/README.md](hyrule-castle/README.md). The docs cover both.
 
 ## Changing something
 
@@ -71,7 +72,7 @@ Config lives here. State lives in `/srv/data` on navi and never enters the repo:
 | [wifi.md](docs/wifi.md) | The Decos, roaming, and what's still unsolved |
 | [er605.md](docs/er605.md) | The router, written out so it can be rebuilt |
 | [navi.md](docs/navi.md) | The box. Hardware, boot, services, updates |
-| [hyrule-castle.md](docs/hyrule-castle.md) | The mini PC. Hardware, BIOS, network, what's left |
+| [hyrule-castle.md](docs/hyrule-castle.md) | The mini PC. Hardware, BIOS, network, the vitals page, what's left |
 | [music-library.md](docs/music-library.md) | The rules every album follows: layout, names, tags, images |
 | [https.md](docs/https.md) | Certificates, why they exist, installing the root |
 | [monitoring.md](docs/monitoring.md) | What's watched, and why each check exists |
