@@ -436,8 +436,8 @@ days. This is a view, not an alarm, <code>status.lan</code> is what wakes you.
     });
     if (lg.source === 'off') {
       o.sw.hidden = true;
-      log.appendChild(h('p', 'Console logging is off in ' + o.name + '. Turn it on once in Preferences > Advanced > ' +
-        'Logging > Console log folder, set to F:\\foobar2000\\profile\\console-log.'));
+      log.appendChild(h('p', 'Console logging is off in ' + o.name + '. Turn it on once: View > Console, ' +
+        'then Write Log, and pick the folder the box config names for this service.'));
       return;
     }
     var rows = (hasW && o.mode === 'writes' ? lg.writes : lg.lines) || [];

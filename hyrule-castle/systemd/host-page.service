@@ -13,6 +13,11 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 # NoNewPrivileges and CapabilityBoundingSet stay unset: sudo is setuid and
 # needs CAP_SETUID and CAP_SETGID, so with either set the restart button fails.
 
+# The access log and the restart line go to stderr, which Python buffers when
+# it is a pipe to journald rather than a terminal, so nothing reached the
+# journal until the process exited.
+Environment=PYTHONUNBUFFERED=1
+
 ExecStart=/usr/bin/python3 /usr/local/lib/vitals/server.py \
     --port 80 \
     --page /usr/local/lib/vitals/page \

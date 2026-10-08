@@ -264,6 +264,8 @@ Samples:
 - `host-status.timer` runs `/usr/local/lib/vitals/host-status.sh` as root every 28 s. It writes `/srv/data/www/host.json`, `log-foobar2000.json`, `log-agitha.json` and `log-box.json`, and appends one line to the day's CSV under `/srv/data/history/`. Its journal cursors and byte offsets are in `/srv/data/logs/`, mode 700.
 - `host-history.timer` runs `host-history.sh` every 5 min. It rolls the CSV into `/srv/data/www/history/day.json`, `week.json` and `quarter.json`, and deletes days past 90.
 
+The package temperature comes from the hwmon named `coretemp` (`hwmon3` on this kernel, but the sampler finds it by name), at the input labelled `Package id 0`. The NVMe drive exposes its own sensor labelled `Composite`, which the page does not show. Kernel 6.12 exposes `/sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count`, which is what the Temperature tile's throttling count reads. One sample has to stay under 200 ms of CPU; if it ever does not, the first saving is one `systemctl show` for every unit instead of one per unit.
+
 The config is `/etc/vitals.conf`, a copy of `hyrule-castle/vitals.conf`, read over `defaults.conf` in the kit. The temperature thresholds are raised from the defaults, which are navi's. This box has no fan and the chip is rated to 105 °C, so navi's 65 °C would sit amber under any sustained load.
 
 ### What reaches the page
@@ -274,7 +276,7 @@ The page shows the lines raw, so what is in them is on the page for anyone on th
 - **foobar2000:** the newest file in its console log folder. Playback errors with the file's path, and messages from the components (scrobbling, lyrics lookups).
 - **the box:** every line at `err` priority from any unit. sshd's `err` lines are among them, with the address and the user name.
 
-foobar2000 writes no console log until told to. Once, over VNC (see *Seeing the GUI* below): Preferences → Advanced → Logging → Console log folder, set to `F:\foobar2000\profile\console-log`, which is `/srv/fb2k/foobar2000/profile/console-log` under Wine. Until then the foobar2000 section says console logging is off.
+foobar2000 writes no console log until told to, and the switch is not in Preferences. Once, over VNC (see *Seeing the GUI* below): View → Console, then the **Write Log** button at the bottom of the console window, which asks for a folder. Make `/srv/fb2k/foobar2000/profile/console-log` first, because the picker cannot create one, then pick it under `/` → `srv` → `fb2k` → `foobar2000` → `profile`. Logging stays on from then on. Until it is set, the foobar2000 section says console logging is off.
 
 ### If the page is down
 

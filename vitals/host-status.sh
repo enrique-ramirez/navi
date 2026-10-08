@@ -371,20 +371,34 @@ fi
 # jread CURSORFILE ARGS... : the new lines of `journalctl ARGS` in JV, only the
 # ones that begin with a unix time.
 #
+# journalctl refuses --since together with --cursor-file, so a missing cursor is
+# seeded instead of read through: the newest entry's cursor is written to the
+# file and nothing is read this sample. The lines from before the seed are not
+# wanted. If the journal has no entry for the filter yet, no cursor is written
+# and the next sample tries again. From then on every read is --cursor-file alone.
+#
 # A non-zero exit is taken to mean a stale cursor (rotation or vacuum). The
-# cursor is deleted and the last 30 s are re-read, a window that overlaps the
-# previous sample, so a recovery counts up to one sample's lines twice.
+# cursor is deleted and the next sample reseeds it, so a recovery drops the lines
+# between the stale cursor and the reseed. journalctl's stderr is left to reach
+# this script's, so a refusal shows in the journal of host-status.service.
 jread() {
     local cur=$1 out rc l ts; shift
-    local since=()
-    [ -e "$cur" ] || since=(--since=-30s)
-    out=$(journalctl "$@" -o short-unix --no-pager -q --cursor-file="$cur" ${since[@]+"${since[@]}"} 2>/dev/null)
+    JV=()
+    if [ ! -e "$cur" ]; then
+        out=$(journalctl "$@" -n 1 -q -o cat --no-pager --show-cursor)
+        while IFS= read -r l; do
+            case "$l" in
+                "-- cursor: "?*) printf '%s\n' "${l#-- cursor: }" > "$cur" ;;
+            esac
+        done <<< "$out"
+        return 0
+    fi
+    out=$(journalctl "$@" -o short-unix --no-pager -q --cursor-file="$cur")
     rc=$?
     if [ "$rc" -ne 0 ]; then
         rm -f "$cur"
-        out=$(journalctl "$@" -o short-unix --no-pager -q --cursor-file="$cur" --since=-30s 2>/dev/null) || out=""
+        return 0
     fi
-    JV=()
     while IFS= read -r l; do
         ts=${l%% *}
         [[ $ts =~ ^[0-9]+\.[0-9]+$ ]] && JV+=("$l")
